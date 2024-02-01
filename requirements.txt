@@ -1,4 +1,4 @@
 rembg
-segment_anything_fast
+segment_anything
 
 # Install Desco following https://github.com/liunian-harold-li/DesCo
