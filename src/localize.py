@@ -2,20 +2,84 @@
     Functions to localize the object region in an image.
 '''
 import numpy as np
+import torch
 from rembg import remove, new_session
 from PIL.Image import Image
 from maskrcnn_benchmark.config import cfg as BASE_CONFIG
 # from maskrcnn_benchmark.engine.predictor_FIBER import GLIPDemo
 from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
 from segment_anything import sam_model_registry, SamPredictor
+from typing import Tuple, Union
 from dataclasses import dataclass
 import logging
 
 logger = logging.getLogger(__file__)
 
-if __name__ == '__main__':
-    import coloredlogs
-    coloredlogs.install(level=logging.INFO, logger=logger)
+def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool = False) -> Union[torch.Tensor, np.ndarray]:
+    '''
+    Given a set of masks, return the bounding box coordinates and plot the bounding box with width bbox_width.
+
+    ### Arguments:
+        masks: (n,h,w)
+        use_dim_order (Optional[bool]): Use the order of the dimensions of the masks when returning points (i.e.
+            height dim, width dim, height dim, width dim). This is as opposed to XYXY, which corresponds to
+            (width dim, height dim, width dim, height dim).
+
+    ### Returns:
+        (n,4) bounding box tensor or ndarray, depending on input type. First two coordinates specify upper left
+        corner, while next two coordinates specify bottom right corner. Return format determined by value of use_dim_order.
+
+    ### Note
+    XYXY order can be visualized with:
+
+        ```python
+        import matplotlib.pyplot as plt
+        from torchvision.utils import draw_bounding_boxes
+
+        img = torch.zeros(3, 300, 500).int()
+        boxes = torch.tensor([[50, 100, 300, 275]])
+
+        plt.imshow(draw_bounding_boxes(img, boxes=boxes).permute(1, 2, 0))
+        ```
+
+    '''
+    is_np = isinstance(masks, np.ndarray)
+    if is_np:
+        masks = torch.from_numpy(masks)
+
+    # Convert masks to boolean and zero pad the masks to have regions on image edges
+    # use the edges as boundaries
+    masks = masks.bool()
+
+    # Find pixels bounding mask
+    top_inds = (
+        masks.any(dim=2) # Which rows have nonzero values; (n,h)
+             .int() # Argmax not implemented for bool, so convert back to int
+             .argmax(dim=1) # Get the first row with nonzero values; (n,)
+    )
+
+    left_inds = masks.any(dim=1).int().argmax(dim=1) # Get the first column with nonzero values; (n,)
+    bottom_inds = masks.shape[1] - 1 - masks.flip(dims=(1,)).any(dim=2).int().argmax(dim=1) # Reverse rows to get last row with nonzero vals; (n,)
+    right_inds = masks.shape[2] - 1 - ( # Since reversing, subtract from total width
+        masks.flip(dims=(2,)).any(dim=1) # Reverse columns to get last column with nonzero vals; (n,h)
+             .int() # Argmax not implemented for bool, so convert back to int
+             .argmax(dim=1) # Get the first column with nonzero values; (n,)
+    )
+
+    if use_dim_order: # Specify UL, BR by order of image dimensions: (h, w, h, w)
+        upper_lefts = torch.cat([top_inds[:, None], left_inds[:, None]], dim=1) # (n,2)
+        bottom_rights = torch.cat([bottom_inds[:, None], right_inds[:, None]], dim=1) # (n,2)
+
+    else: # Specify UL, BR by order of XYXY: (w, h, w, h)
+        upper_lefts = torch.cat([left_inds[: None], top_inds[: None]], dim=1) # (n,2)
+        bottom_rights = torch.cat([right_inds[:, None], bottom_inds[:, None]], dim=1) # (n,2)
+
+    boxes = torch.cat([upper_lefts, bottom_rights], dim=1) # (n,4)
+
+    if is_np:
+        boxes = boxes.numpy()
+
+    return boxes
 
 @dataclass
 class LocalizerConfig:
@@ -62,10 +126,23 @@ class Localizer:
 
         return sam
 
-    def rembg_mask(self, img: Image):
-        return remove(img, session=self.session, post_process_mask=True, only_mask=True)
+    def rembg_ground(self, img: Image) -> Tuple[int,int,int,int]:
+        mask = self.rembg_mask(img) # (h,w)
+        bbox = bbox_from_mask(mask[None, ...])[0] # (4,)
 
-    def desco_mask(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float):
+        # Attempt to widen bounding box since rembg segments the foreground without a bbox
+        for i, coord in enumerate(bbox):
+            if i < 2 and coord > 0:
+                bbox[i] -= 1
+            elif (i == 2 and coord + 1 < mask.shape[1]) or (i == 3 and coord + 1 < mask.shape[0]):
+                bbox[i] += 1
+
+        return bbox
+
+    def rembg_mask(self, img: Image) -> np.ndarray:
+        return remove(img, session=self.session, post_process_mask=True, only_mask=True).bool()
+
+    def desco_ground(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float):
         '''
             Based on the contents of predictor_glip.py.GLIPDemo.run_on_web_image.
             This function signature must be changed if we wish to use the GLIPDemo from predictor_FIBER.py
@@ -82,22 +159,29 @@ class Localizer:
         predictions = self.desco.compute_prediction(np.array(img), caption, specified_tokens=[token_to_ground])
         top_predictions = self.desco._post_process(predictions, conf_thresh)
 
-        boxes = top_predictions.bbox.numpy() # (n_boxwes, 4)
+        bboxes = top_predictions.bbox.numpy() # (n_boxes, 4)
 
-        if len(boxes) == 0:
+        if len(bboxes) == 0:
             log_str = f'Failed to ground token with conf_thresh={conf_thresh}'
             logger.warning(log_str)
             raise RuntimeError(log_str)
 
-        logger.info(f'Detected {len(boxes)} bounding boxes; taking the first one')
+        logger.info(f'Detected {len(bboxes)} bounding boxes; taking the first one')
 
-        # SAM
+        return bboxes[0]
+
+    def desco_mask(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float):
+        '''
+            Returns (h,w) boolean array.
+        '''
+        box = self.desco_ground(img, caption, token_to_ground, conf_thresh)
+
         logger.info('Obtaining segmentation mask with SAM')
         masks, scores, logits = self.sam.predict(
-            box=boxes[0],
+            box=box,
             multimask_output=True
         )
-        mask = masks[np.argmax(scores)]
+        mask = masks[np.argmax(scores)].bool()
 
         return mask
 
@@ -120,4 +204,7 @@ class Localizer:
 
 if __name__ == '__main__':
     # TODO Test locally
+    import coloredlogs
+    coloredlogs.install(level=logging.INFO, logger=logger)
+
     pass
