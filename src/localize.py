@@ -1,3 +1,4 @@
+# %%
 '''
     Functions to localize the object region in an image.
 '''
@@ -6,10 +7,11 @@ import torch
 from rembg import remove, new_session
 from PIL.Image import Image
 from maskrcnn_benchmark.config import cfg as BASE_CONFIG
+from maskrcnn_benchmark.structures.bounding_box import BoxList
 # from maskrcnn_benchmark.engine.predictor_FIBER import GLIPDemo
 from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
 from segment_anything import sam_model_registry, SamPredictor
-from typing import Tuple, Union
+from typing import Union
 from dataclasses import dataclass
 import logging
 
@@ -71,7 +73,7 @@ def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool =
         bottom_rights = torch.cat([bottom_inds[:, None], right_inds[:, None]], dim=1) # (n,2)
 
     else: # Specify UL, BR by order of XYXY: (w, h, w, h)
-        upper_lefts = torch.cat([left_inds[: None], top_inds[: None]], dim=1) # (n,2)
+        upper_lefts = torch.cat([left_inds[:, None], top_inds[:, None]], dim=1) # (n,2)
         bottom_rights = torch.cat([right_inds[:, None], bottom_inds[:, None]], dim=1) # (n,2)
 
     boxes = torch.cat([upper_lefts, bottom_rights], dim=1) # (n,4)
@@ -94,6 +96,7 @@ class LocalizerConfig:
     sam_device_rank: int = 0
 
 class Localizer:
+    # TODO Pass DesCo, SAM objects instead of constructing locally
     def __init__(self, config: LocalizerConfig):
         self.config = config
 
@@ -126,8 +129,10 @@ class Localizer:
 
         return sam
 
-    def rembg_ground(self, img: Image) -> Tuple[int,int,int,int]:
+    def rembg_ground(self, img: Image) -> torch.Tensor:
         mask = self.rembg_mask(img) # (h,w)
+
+        logger.info('Obtaining bounding box from rembg mask')
         bbox = bbox_from_mask(mask[None, ...])[0] # (4,)
 
         # Attempt to widen bounding box since rembg segments the foreground without a bbox
@@ -139,10 +144,14 @@ class Localizer:
 
         return bbox
 
-    def rembg_mask(self, img: Image) -> np.ndarray:
-        return remove(img, session=self.session, post_process_mask=True, only_mask=True).bool()
+    def rembg_mask(self, img: Image) -> torch.BoolTensor:
+        logger.info('Obtaining rembg mask')
+        mask = remove(img, session=self.rembg_session, post_process_mask=True, only_mask=True)
+        mask = torch.from_numpy(np.array(mask)).bool()
 
-    def desco_ground(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float):
+        return mask
+
+    def desco_ground(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float = .4) -> torch.Tensor:
         '''
             Based on the contents of predictor_glip.py.GLIPDemo.run_on_web_image.
             This function signature must be changed if we wish to use the GLIPDemo from predictor_FIBER.py
@@ -157,9 +166,9 @@ class Localizer:
         token_to_ground = token_to_ground.lower()
 
         predictions = self.desco.compute_prediction(np.array(img), caption, specified_tokens=[token_to_ground])
-        top_predictions = self.desco._post_process(predictions, conf_thresh)
+        top_predictions: BoxList = self.desco._post_process(predictions, conf_thresh)
 
-        bboxes = top_predictions.bbox.numpy() # (n_boxes, 4)
+        bboxes = top_predictions.bbox.cpu() # (n_boxes, 4)
 
         if len(bboxes) == 0:
             log_str = f'Failed to ground token with conf_thresh={conf_thresh}'
@@ -170,18 +179,17 @@ class Localizer:
 
         return bboxes[0]
 
-    def desco_mask(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float):
+    def desco_mask(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float = .4) -> torch.BoolTensor:
         '''
             Returns (h,w) boolean array.
         '''
-        box = self.desco_ground(img, caption, token_to_ground, conf_thresh)
+        box = self.desco_ground(img, caption, token_to_ground, conf_thresh).numpy() # SAM takes numpy bbox
 
         logger.info('Obtaining segmentation mask with SAM')
-        masks, scores, logits = self.sam.predict(
-            box=box,
-            multimask_output=True
-        )
-        mask = masks[np.argmax(scores)].bool()
+        self.sam.set_image(np.array(img))
+        masks, scores, logits = self.sam.predict(box=box, multimask_output=True)
+
+        mask = torch.from_numpy(masks[np.argmax(scores)]).bool()
 
         return mask
 
@@ -202,9 +210,42 @@ class Localizer:
 
         return mask
 
+# %%
 if __name__ == '__main__':
-    # TODO Test locally
+    # Imports
+    import PIL
+    from vis_utils import show, image_from_masks
+    from torchvision.utils import draw_bounding_boxes
+    from torchvision.transforms.functional import pil_to_tensor
+    import matplotlib.pyplot as plt
     import coloredlogs
+
     coloredlogs.install(level=logging.INFO, logger=logger)
 
-    pass
+    # %% Construct localizer
+    cfg = LocalizerConfig()
+    localizer = Localizer(cfg)
+
+    # %% Test
+    img_path = '/shared/nas2/blume5/fa23/ecole/data/inaturalist2021/images/train_mini/00029_Animalia_Arthropoda_Arachnida_Araneae_Araneidae_Gasteracantha_kuhli/4f84deea-bca0-4f4b-ac94-828828e089da.jpg'
+    caption = token = 'animal'
+
+    img = PIL.Image.open(img_path).convert('RGB')
+    img_tensor = pil_to_tensor(img)
+
+    desco_bbox = localizer.desco_ground(img, caption, token)
+    desco_mask = localizer.desco_mask(img, caption, token)
+
+    show([
+        draw_bounding_boxes(img_tensor, boxes=desco_bbox.unsqueeze(0), colors='red'),
+        image_from_masks(desco_mask.unsqueeze(0), superimpose_on_image=img_tensor)
+    ], title='DesCo')
+
+    rembg_bbox = localizer.rembg_ground(img)
+    rembg_mask = localizer.rembg_mask(img)
+
+    show([
+        draw_bounding_boxes(img_tensor, boxes=rembg_bbox.unsqueeze(0), colors='red'),
+        image_from_masks(rembg_mask.unsqueeze(0), superimpose_on_image=img_tensor)
+    ], title='Rembg')
+# %%
