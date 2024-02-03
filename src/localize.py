@@ -14,7 +14,7 @@ import logging
 
 logger = logging.getLogger(__file__)
 
-def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool = False) -> Union[torch.Tensor, np.ndarray]:
+def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool = False) -> Union[torch.IntTensor, np.ndarray]:
     '''
         Given a set of masks, return the bounding box coordinates and plot the bounding box with width bbox_width.
 
@@ -75,7 +75,7 @@ def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool =
         upper_lefts = torch.cat([left_inds[:, None], top_inds[:, None]], dim=1) # (n,2)
         bottom_rights = torch.cat([right_inds[:, None], bottom_inds[:, None]], dim=1) # (n,2)
 
-    boxes = torch.cat([upper_lefts, bottom_rights], dim=1) # (n,4)
+    boxes = torch.cat([upper_lefts, bottom_rights], dim=1).int() # (n,4)
 
     if is_np:
         boxes = boxes.numpy()
@@ -143,8 +143,9 @@ class Localizer:
             raise RuntimeError(log_str)
 
         logger.info(f'Detected {len(bboxes)} bounding boxes; taking the first one')
+        bbox = bboxes[0].round().int() # (4,); DesCo returns fractional bbox predictions
 
-        return bboxes[0]
+        return bbox
 
     def desco_mask(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float = .4) -> torch.BoolTensor:
         '''
