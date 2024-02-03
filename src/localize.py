@@ -6,44 +6,43 @@ import numpy as np
 import torch
 from rembg import remove, new_session
 from PIL.Image import Image
-from maskrcnn_benchmark.config import cfg as BASE_CONFIG
 from maskrcnn_benchmark.structures.bounding_box import BoxList
-# from maskrcnn_benchmark.engine.predictor_FIBER import GLIPDemo
 from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
-from segment_anything import sam_model_registry, SamPredictor
+from segment_anything import SamPredictor
 from typing import Union
-from dataclasses import dataclass
 import logging
 
 logger = logging.getLogger(__file__)
 
 def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool = False) -> Union[torch.Tensor, np.ndarray]:
     '''
-    Given a set of masks, return the bounding box coordinates and plot the bounding box with width bbox_width.
+        Given a set of masks, return the bounding box coordinates and plot the bounding box with width bbox_width.
 
-    ### Arguments:
-        masks: (n,h,w)
-        use_dim_order (Optional[bool]): Use the order of the dimensions of the masks when returning points (i.e.
-            height dim, width dim, height dim, width dim). This is as opposed to XYXY, which corresponds to
-            (width dim, height dim, width dim, height dim).
+        ### Arguments:
+            masks: (n,h,w)
+            use_dim_order (Optional[bool]): Use the order of the dimensions of the masks when returning points (i.e.
+                height dim, width dim, height dim, width dim). This is as opposed to XYXY, which corresponds to
+                (width dim, height dim, width dim, height dim).
 
-    ### Returns:
-        (n,4) bounding box tensor or ndarray, depending on input type. First two coordinates specify upper left
-        corner, while next two coordinates specify bottom right corner. Return format determined by value of use_dim_order.
+        ### Returns:
+            (n,4) bounding box tensor or ndarray, depending on input type. First two coordinates specify upper left
+            corner, while next two coordinates specify bottom right corner. Return format determined by value of use_dim_order.
 
-    ### Note
-    XYXY order can be visualized with:
+        ### Note
+        XYXY order can be visualized with:
 
-        ```python
-        import matplotlib.pyplot as plt
-        from torchvision.utils import draw_bounding_boxes
+            ```python
+            import matplotlib.pyplot as plt
+            from torchvision.utils import draw_bounding_boxes
 
-        img = torch.zeros(3, 300, 500).int()
-        boxes = torch.tensor([[50, 100, 300, 275]])
+            img = torch.zeros(3, 300, 500).int()
+            boxes = torch.tensor([[50, 100, 300, 275]])
 
-        plt.imshow(draw_bounding_boxes(img, boxes=boxes).permute(1, 2, 0))
-        ```
+            plt.imshow(draw_bounding_boxes(img, boxes=boxes).permute(1, 2, 0))
+            ```
 
+        NOTE: This is also implemented in torchvision.ops.masks_to_boxes, but their implementation is not vectorized wrt
+        number of masks.
     '''
     is_np = isinstance(masks, np.ndarray)
     if is_np:
@@ -83,51 +82,11 @@ def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool =
 
     return boxes
 
-@dataclass
-class LocalizerConfig:
-    rembg_model_name: str = 'sam_prompt'
-
-    desco_cfg_path: str = '/shared/nas2/blume5/fa23/ecole/src/patch_mining/DesCo/configs/pretrain_new/desco_glip.yaml'
-    desco_ckpt_path: str = '/shared/nas2/blume5/fa23/ecole/checkpoints/desco/desco_glip_tiny.pth'
-    desco_device_rank: int = 0
-
-    sam_model_type: str = 'vit_h'
-    sam_ckpt_path: str = '/shared/nas2/blume5/fa23/ecole/checkpoints/sam/sam_vit_h_4b8939.pth'
-    sam_device_rank: int = 0
-
 class Localizer:
-    # TODO Pass DesCo, SAM objects instead of constructing locally
-    def __init__(self, config: LocalizerConfig):
-        self.config = config
-
-        self.rembg_session = new_session(model_name=config.rembg_model_name)
-        self.desco = self._init_desco()
-        self.sam = self._init_sam()
-
-    def _init_desco(self):
-        '''
-            Configuration based on DesCo repo's run_demo.py.
-        '''
-        if 'fiber' in (self.config.desco_cfg_path + self.config.desco_ckpt_path).lower():
-            raise NotImplementedError('FIBER GLIPDemo not supported')
-
-        cfg = BASE_CONFIG.clone()
-
-        cfg.merge_from_file(self.config.desco_cfg_path)
-        cfg.merge_from_list(['MODEL.WEIGHT', self.config.desco_ckpt_path])
-        cfg.local_rank = self.config.desco_device_rank
-        cfg.num_gpus = 1
-
-        desco = GLIPDemo(cfg, min_image_size=800)
-
-        return desco
-
-    def _init_sam(self):
-        sam_model = sam_model_registry[self.config.sam_model_type](checkpoint=self.config.sam_ckpt_path)
-        sam_model.to(f'cuda:{self.config.sam_device_rank}')
-        sam = SamPredictor(sam_model)
-
-        return sam
+    def __init__(self, sam: SamPredictor, desco: GLIPDemo, rembg_model_name: str = 'sam_prompt'):
+        self.rembg_session = new_session(model_name=rembg_model_name)
+        self.desco = desco
+        self.sam = sam
 
     def rembg_ground(self, img: Image) -> torch.Tensor:
         mask = self.rembg_mask(img) # (h,w)
@@ -217,14 +176,15 @@ if __name__ == '__main__':
     from vis_utils import show, image_from_masks
     from torchvision.utils import draw_bounding_boxes
     from torchvision.transforms.functional import pil_to_tensor
-    import matplotlib.pyplot as plt
+    from models import build_sam_predictor, build_desco
     import coloredlogs
 
     coloredlogs.install(level=logging.INFO, logger=logger)
 
     # %% Construct localizer
-    cfg = LocalizerConfig()
-    localizer = Localizer(cfg)
+    sam = build_sam_predictor()
+    desco = build_desco()
+    localizer = Localizer(sam, desco)
 
     # %% Test
     img_path = '/shared/nas2/blume5/fa23/ecole/data/inaturalist2021/images/train_mini/00029_Animalia_Arthropoda_Arachnida_Araneae_Araneidae_Gasteracantha_kuhli/4f84deea-bca0-4f4b-ac94-828828e089da.jpg'
