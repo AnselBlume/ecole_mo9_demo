@@ -4,9 +4,10 @@ import torch
 from torchvision.transforms.functional import to_pil_image
 from torchvision.utils import draw_segmentation_masks
 from typing import Union, List
+from PIL.Image import Image
 
 def show(
-    imgs: Union[torch.Tensor,List[torch.Tensor]],
+    imgs: Union[torch.Tensor, List[torch.Tensor], np.ndarray, List[np.ndarray], Image, List[Image]],
     title: str = None,
     title_y: float = 1,
     subplot_titles: List[str] = None,
@@ -24,11 +25,11 @@ def show(
         if i < len(imgs):
             img = imgs[i]
 
-            if isinstance(img, np.ndarray): # Handle numpy arrays too
-                img = torch.from_numpy(img)
+            # If np.ndarray or PIL.Image, don't need to do anything, assuming ndarray is in (h,w,c)
+            if isinstance(img, torch.Tensor):
+                img = to_pil_image(img.detach().cpu())
 
-            img = to_pil_image(img.detach().cpu())
-            ax.imshow(np.asarray(img))
+            ax.imshow(img)
             ax.set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
 
             # Set titles for each individual subplot
