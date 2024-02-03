@@ -29,7 +29,19 @@ class Segmenter:
         '''
         return remove(image, session=self.rembg_session, post_process_mask=True)
 
-    def crop(self, image: Image, bbox: torch.Tensor, remove_background=False) -> Image:
+    def foreground_mask(self, image: Image)-> torch.BoolTensor:
+        '''
+            Determines the foreground mask of the image using rembg.
+
+            Arguments:
+                image (PIL.Image.Image): Image to extract foreground mask from
+        '''
+        mask: Image = remove(image, session=self.rembg_session, post_process_mask=True, only_mask=True) # bw image
+        mask = np.array(mask) > 0
+
+        return torch.tensor(mask)
+
+    def crop(self, image: Image, bbox: torch.IntTensor, remove_background=False) -> Image:
         '''
             Crops the region specified by bbox from the image.
 
@@ -38,15 +50,10 @@ class Segmenter:
                 bbox (torch.Tensor): Bounding box of object to crop in XYXY
                 remove_background (bool): Whether to remove background from object after cropping
         '''
+        assert isinstance(bbox, torch.IntTensor), 'bbox tensor must use ints'
         left, top, width, height = box_convert(bbox[None, ...], 'xyxy', 'xywh')[0]
 
-        # As it turns out, the bounding boxes returned by DesCo can be floats
-        left = round(left.item())
-        top = round(top.item())
-        width = round(width.item())
-        height = round(height.item())
-
-        cropped = crop(image, top, left, height, width)
+        cropped = crop(image, top.item(), left.item(), height.item(), width.item())
 
         if remove_background:
             cropped = self.remove_background(cropped).convert('RGB')
@@ -69,6 +76,10 @@ class Segmenter:
 
         masks: list[dict] = self.sam_amg.generate(np.array(image))
         masks = torch.stack([torch.from_numpy(mask_d['segmentation']) for mask_d in masks]).bool()
+
+        if remove_background: # Remove masks segmenting the background
+            masks = masks & self.foreground_mask(image)
+            masks = torch.stack([m for m in masks if m.sum() > 0])
 
         return masks
 
