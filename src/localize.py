@@ -88,7 +88,10 @@ class Localizer:
         self.desco = desco
         self.sam = sam
 
-    def rembg_ground(self, img: Image) -> torch.Tensor:
+    def rembg_ground(self, img: Image) -> torch.IntTensor:
+        '''
+            Returns (x1, y1, x2, y2) bounding box IntTensor.
+        '''
         mask = self.rembg_mask(img) # (h,w)
 
         logger.info('Obtaining bounding box from rembg mask')
@@ -104,19 +107,24 @@ class Localizer:
         return bbox
 
     def rembg_mask(self, img: Image) -> torch.BoolTensor:
+        '''
+            Returns (h,w) boolean array.
+        '''
         logger.info('Obtaining rembg mask')
         mask = remove(img, session=self.rembg_session, post_process_mask=True, only_mask=True)
         mask = torch.from_numpy(np.array(mask)).bool()
 
         return mask
 
-    def desco_ground(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float = .4) -> torch.Tensor:
+    def desco_ground(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float = .4) -> torch.IntTensor:
         '''
             Based on the contents of predictor_glip.py.GLIPDemo.run_on_web_image.
             This function signature must be changed if we wish to use the GLIPDemo from predictor_FIBER.py
 
             XXX The load method of run_demo.py maps the image to BGR, but this seems to conflict with
             GLIPDemo.build_transform's to_bgr_transform. We therefore ignore run_demo.py and don't load in BGR.
+
+            Returns (x1, y1, x2, y2) bounding box IntTensor.
         '''
         # Get bounding box with DesCo
         logger.info('Obtaining bounding box with DesCo')
@@ -152,7 +160,7 @@ class Localizer:
 
         return mask
 
-    def localize(self, img: Image, caption='', token_to_ground: str = '', conf_thresh: float = .4):
+    def localize(self, img: Image, caption='', token_to_ground: str = '', conf_thresh: float = .4) -> torch.IntTensor:
         '''
             Returns boolean array of shape (h, w)
         '''
@@ -161,13 +169,13 @@ class Localizer:
         if caption:
             assert token_to_ground and token_to_ground in caption
             logger.info(f'Localizing with DesCo to ground "{token_to_ground}" with caption "{caption}"')
-            mask = self.desco_mask(img, caption, token_to_ground, conf_thresh)
+            bbox = self.desco_ground(img, caption, token_to_ground, conf_thresh)
 
         else: # rembg
             logger.info('Localizing with rembg')
-            mask = self.rembg_mask(img)
+            bbox = self.rembg_ground(img)
 
-        return mask
+        return bbox
 
 # %%
 if __name__ == '__main__':
