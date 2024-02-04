@@ -14,6 +14,7 @@ from rembg import remove, new_session
 from torchvision.transforms.functional import crop
 from torchvision.ops import box_convert
 import numpy as np
+from localize import bbox_from_mask
 
 class Segmenter:
     def __init__(self, sam: Sam, rembg_model_name: str = 'sam_prompt'):
@@ -59,6 +60,10 @@ class Segmenter:
             cropped = self.remove_background(cropped).convert('RGB')
 
         return cropped
+
+    def crops_from_masks(self, image: Image, masks: torch.BoolTensor, remove_background=False) -> list[Image]:
+        bboxes = bbox_from_mask(masks)
+        return [self.crop(image, bbox, remove_background) for bbox in bboxes]
 
     def segment(self, image: Image, bbox: torch.Tensor, remove_background=False) -> torch.BoolTensor:
         '''
@@ -120,5 +125,10 @@ if __name__ == '__main__':
     show(
         image_from_masks(segmenter.segment(img, bbox, remove_background=True)),
         title='Segmented Parts with Background Removed'
+    )
+
+    show(
+        segmenter.crops_from_masks(img, segmenter.segment(img, bbox, remove_background=True), remove_background=True),
+        title='Cropped Segmented Parts'
     )
 # %%
