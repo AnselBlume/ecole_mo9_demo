@@ -67,3 +67,6 @@ class ConceptSet:
 
     def get_concepts(self) -> list[Concept]:
         return sorted(list(self.concepts.values()), key=lambda x: x.name)
+
+    def __iter__(self):
+        return iter(self.get_concepts())
