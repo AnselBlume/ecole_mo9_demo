@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import bisect
 
 @dataclass
 class Attribute:
@@ -25,27 +26,31 @@ class Concept:
     learned_attr_weights: list[float] = []
     learned_attr_score_weight: float = .5
 
-    def add_zs_attr(self, attr: ZeroShotAttribute, weight: float = 1.0):
-        self.zs_attrs.append(attr)
-        self.zs_attr_weights.append(weight)
+    def add_zs_attr(self, zs_attr: ZeroShotAttribute, weight: float):
+        # Add in sorted order based on name
+        idx = bisect.bisect_left([attr.name for attr in self.zs_attrs], zs_attr.name)
 
-    def add_learned_attr(self, attr: LearnedAttribute, weight: float = 1.0):
-        self.learned_attrs.append(attr)
-        self.learned_attr_weights.append(weight)
+        self.zs_attrs.insert(idx, zs_attr)
+        self.zs_attr_weights.insert(idx, weight)
 
     def remove_zs_attr(self, name: str):
-        for i, attr in enumerate(self.zs_attrs):
-            if attr.name == name:
-                self.zs_attrs.pop(i)
-                self.zs_attr_weights.pop(i)
-                break
+        idx = bisect.bisect_left([attr.name for attr in self.zs_attrs], name)
+
+        self.zs_attrs.pop(idx)
+        self.zs_attr_weights.pop(idx)
+
+    def add_learned_attr(self, learned_attr: LearnedAttribute, weight: float):
+        # Add in sorted order based on name
+        idx = bisect.bisect_left([attr.name for attr in self.learned_attrs], learned_attr.name)
+
+        self.learned_attrs.insert(idx, learned_attr)
+        self.learned_attr_weights.insert(idx, weight)
 
     def remove_learned_attr(self, name: str):
-        for i, attr in enumerate(self.learned_attrs):
-            if attr.name == name:
-                self.learned_attrs.pop(i)
-                self.learned_attr_weights.pop(i)
-                break
+        idx = bisect.bisect_left([attr.name for attr in self.learned_attrs], name)
+
+        self.learned_attrs.pop(idx)
+        self.learned_attr_weights.pop(idx)
 
 @dataclass
 class ConceptSet:
@@ -59,3 +64,6 @@ class ConceptSet:
 
     def get_concept(self, name: str) -> Concept:
         return self.concepts[name]
+
+    def get_concepts(self) -> list[Concept]:
+        return sorted(list(self.concepts.values()), key=lambda x: x.name)
