@@ -17,14 +17,27 @@ class LearnedAttribute(Attribute):
 class Concept:
     name: str = ''
 
+    # TODO Make these all torch.Parameters
+
+    # All attributes
     zs_attrs: list[ZeroShotAttribute] = []
     learned_attrs: list[LearnedAttribute] = []
 
-    zs_attr_weights: list[float] = []
-    zs_attr_score_weight: float = .5
+    # Individual weights for necessary attributes
+    nec_zs_attr_weights: list[float] = [] # Zero shot, necessary attribute weights
+    nec_learned_attr_weights: list[float] = [] # Learned, necessary attribute weights
 
-    learned_attr_weights: list[float] = []
-    learned_attr_score_weight: float = .5
+    # Aggregate weights for necessary attributes
+    nec_zs_attr_score_weight: float = .5
+    nec_learned_attr_score_weight: float = .5
+
+    # Individual weights for descriptive attributes
+    descr_zs_attr_weights: list[float] = []
+    descr_learned_attr_weights: list[float] = []
+
+    # Aggregate weights for descriptive attributes
+    descr_zs_attr_score_weight: float = .5
+    descr_learned_attr_score_weight: float = .5
 
     def add_zs_attr(self, zs_attr: ZeroShotAttribute, weight: float):
         # Add in sorted order based on name
