@@ -22,6 +22,10 @@ class Scorer:
              this would necessitate checking the concept's sibling concepts, and if the scores are similar enough, then not incorporating
              the score
 
+             TODO Handle unnamed visual attributes
+
+             TODO Possibly do something with occlusion generation?
+
         '''
         zs_scores = self.zs_attr_scores(img, concept_set)
         learned_scores = self.learned_attr_scores(img, concept_set)

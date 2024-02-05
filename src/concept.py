@@ -48,6 +48,8 @@ class Concept:
     descr_zs_attr_score_weight: float = .5
     descr_learned_attr_score_weight: float = .5
 
+    # TODO incorporate unnamed visual features
+
     def _get_insertion_index(self, name: str, names: list[Attribute]) -> int:
         i = 0
         for i, n in enumerate(names):
