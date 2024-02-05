@@ -13,6 +13,15 @@ class Scorer:
     def score(self, img: Image, concept_set: ConceptSet) -> torch.Tensor:
         '''
             Returns: torch.Tensor of shape (n_concepts,), image scores for each concept in the concept set.
+
+             TODO Handle necessary vs descriptive attributes
+
+             TODO Handle component concepts
+
+             TODO Handle direct detection of concepts. This can occur with a learned binary detector, or with a zero-shot detector,
+             this would necessitate checking the concept's sibling concepts, and if the scores are similar enough, then not incorporating
+             the score
+
         '''
         zs_scores = self.zs_attr_scores(img, concept_set)
         learned_scores = self.learned_attr_scores(img, concept_set)

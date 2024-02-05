@@ -28,6 +28,8 @@ class Controller:
     def add_concept(self, concept: Concept):
         # Get zero shot attributes (query LLM)
 
+        # Determine if it has any obvious parent or child concepts
+
         # Get likely learned attributes
 
         # Add concept

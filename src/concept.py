@@ -1,5 +1,5 @@
+from __future__ import annotations
 from dataclasses import dataclass
-import bisect
 
 @dataclass
 class Attribute:
@@ -16,8 +16,14 @@ class LearnedAttribute(Attribute):
 @dataclass
 class Concept:
     name: str = ''
+    parent_concepts: list[Concept] = []
+    child_concepts: list[Concept] = []
 
     # TODO Make these all torch.Parameters
+    component_concepts: list[Concept] = []
+
+    component_concept_weights: list[float] = []
+    component_concept_score_weight: float = .5
 
     # All attributes
     necsry_zs_attrs: list[ZeroShotAttribute] = []
@@ -42,12 +48,22 @@ class Concept:
     descr_zs_attr_score_weight: float = .5
     descr_learned_attr_score_weight: float = .5
 
+    def _get_insertion_index(self, name: str, names: list[Attribute]) -> int:
+        i = 0
+        for i, n in enumerate(names):
+            if name < n:
+                return i
+            elif name == n:
+                raise ValueError(f'Name {name} already exists.')
+
+        return len(names)
+
     def add_zs_attr(self, attr: ZeroShotAttribute, weight: float):
         zs_attrs = self.necsry_zs_attrs if attr.is_necessary else self.descr_zs_attrs
         zs_attr_weights = self.necsry_zs_attr_weights if attr.is_necessary else self.descr_zs_attr_weights
 
         # Add in sorted order based on name
-        idx = bisect.bisect_left([attr.name for attr in zs_attrs], attr.name)
+        idx = self._get_insertion_index(attr.name, [a.name for a in zs_attrs])
 
         zs_attrs.insert(idx, attr)
         zs_attr_weights.insert(idx, weight)
@@ -71,7 +87,7 @@ class Concept:
         learned_attr_weights = self.necsry_learned_attr_weights if attr.is_necessary else self.descr_learned_attr_weights
 
         # Add in sorted order based on name
-        idx = bisect.bisect_left([attr.name for attr in learned_attrs], attr.name)
+        idx = self._get_insertion_index(attr.name, [a.name for a in learned_attrs])
 
         learned_attrs.insert(idx, attr)
         learned_attr_weights.insert(idx, weight)
@@ -95,6 +111,18 @@ class Concept:
 
     def get_learned_attrs(self) -> list[LearnedAttribute]:
         return sorted(self.necsry_learned_attrs + self.descr_learned_attrs, key=lambda x: x.name)
+
+    def add_component_concept(self, concept: Concept, weight: float):
+        idx = self._get_insertion_index(concept.name, [c.name for c in self.component_concepts])
+
+        self.component_concepts.insert(idx, concept)
+        self.component_concept_weights.insert(idx, weight)
+
+    def remove_component_concept(self, name: str):
+        idx = [c.name for c in self.component_concepts].index(name)
+
+        self.component_concepts.pop(idx)
+        self.component_concept_weights.pop(idx)
 
 @dataclass
 class ConceptSet:
