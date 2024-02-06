@@ -17,14 +17,15 @@ import os.path as osp
 from vaw_dataset import VAW 
 import argparse
 import wandb 
-
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 def initialize_classifiers(attribute_name, clip_model, args):
     classifier = nn.Linear(args.enc_dim, 1, bias=False).to(args.device)
     attribute_vec = clip.tokenize([attribute_name])
     attribute_vec = attribute_vec.to(args.device)
     weight = clip_model.encode_text(attribute_vec).float()
     classifier.weight.data = weight 
-    logging.info('Initialized clip weights')
+    logger.info('Initialized clip weights')
     return classifier 
 def eval_classifier(classifier,dataloader,weights_for_loss,args):
     # compute validation loss 
@@ -53,7 +54,7 @@ def train_classifier(classifier, train_dataloader, weights_for_loss, args,val_da
     loss_did_not_decrease = 0
     for i,epoch in enumerate(range(args.n_epochs)):
         average_loss = []
-        logging.info(f'Epoch:{i}')
+        logger.info(f'Epoch:{i}')
         for batch in tqdm(train_dataloader):
             image = batch["image"].to(args.device)
             labels = batch["label"].to(args.device )
@@ -76,15 +77,14 @@ def train_classifier(classifier, train_dataloader, weights_for_loss, args,val_da
         
         val_loss  = eval_classifier(classifier,val_dataloader,weights_for_loss,args)
         wandb.log({"val_loss":val_loss})
+        logger.info(f'Train Loss: {np.mean(average_loss)}')
+        logger.info(f'Val Loss:{val_loss}')
 
-
-        if i%args.log_every ==0:
-            logging.info(f'Train Loss: {np.mean(average_loss)}')
-            logging.info(f'Val Loss:{val_loss}')
+        if i%args.save_every ==0:
             save_path = args.save_path
             if not os.path.exists(save_path):
                 os.makedirs(save_path, exist_ok=True)
-            torch.save(classifier, osp.join(save_path, f"classifier_{args.class_index}.pth"))
+            torch.save(classifier, osp.join(save_path, f"classifier_{args.class_id}.pth"))
 
         if loss_did_not_decrease>args.stop_after:
             # stop if loss is not decreasing 
@@ -108,7 +108,7 @@ if __name__ == '__main__':
     parser.add_argument("--save_path", type=str, default="/scratch/bcgp/michal5/ecole_mo9_demo/classifiers")
     parser.add_argument("--weight_for_positive", type=float, default=1.0)
     parser.add_argument("--weight_for_negative", type=float, default=1.0)
-    parser.add_argument("--log_every", type=int, default=5)
+    parser.add_argument("--save_every", type=int, default=5)
     parser.add_argument("--stop_after", type=int, default=10)
     parser.add_argument("--data_dir", type=str, default='/scratch/bcgp/datasets')
     parser.add_argument("--class_id",type=int,help="value from 0 to 619")
@@ -143,6 +143,6 @@ if __name__ == '__main__':
     save_path = args.save_path
     if not os.path.exists(save_path):
         os.makedirs(save_path, exist_ok=True)
-    torch.save(classifier, osp.join(save_path, f"classifier_{args.class_index}.pth"))
+    torch.save(classifier, osp.join(save_path, f"classifier_{arg.class_id}.pth"))
 
 

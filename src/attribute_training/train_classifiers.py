@@ -17,6 +17,8 @@ from vaw_dataset import VAW
 import wandb 
 from tqdm import tqdm 
 import logging 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 def initialize_classifiers(attribute_dict, clip_model, args):
     num_attributes = len(attribute_dict)
     classifiers = nn.ModuleList([nn.Linear(args.enc_dim, 1, bias=False) for _ in range(num_attributes)])
@@ -26,7 +28,7 @@ def initialize_classifiers(attribute_dict, clip_model, args):
         weight = clip_model.encode_text(attribute_vec).float()
         classifier.weight.data = weight
     classifiers = classifiers.to(args.device)
-    logging.info('Initialized CLIP classifiers')
+    logger.info('Initialized CLIP classifiers')
     return classifiers
 def eval_classifier(classifier,dataloader,weights_for_loss,args):
     # compute validation loss 
@@ -83,9 +85,10 @@ def train_classifier(classifiers, train_dataloader, weights_for_loss, args,val_d
         if args.use_wandb:
             wandb.log({"val_loss":val_loss})
             wandb.log({"epoch_loss":epoch_loss})
-        if i%args.log_every ==0:
-            logging.info(f'Train Loss: {np.mean(average_loss)}')
-            logging.info(f'Val Loss:{val_loss}')
+        logger.info(f'Train Loss: {np.mean(average_loss)}')
+        logger.info(f'Val Loss:{val_loss}')
+
+        if i%args.save_every ==0:
             save_path = args.save_path
             if not os.path.exists(save_path):
                 os.makedirs(save_path, exist_ok=True)
@@ -115,7 +118,7 @@ if __name__ == '__main__':
     parser.add_argument("--weight_for_positive", type=float, default=2.0)
     parser.add_argument("--weight_for_negative", type=float, default=2.0)
     parser.add_argument("--use_wandb", action='store_true')
-    parser.add_argument("--log_every", type=int, default=5)
+    parser.add_argument("--save_every", type=int, default=5)
     parser.add_argument("--stop_after", type=int, default=10)
     parser.add_argument("--data_dir", type=str, default='/scratch/bcgp/datasets')
 
