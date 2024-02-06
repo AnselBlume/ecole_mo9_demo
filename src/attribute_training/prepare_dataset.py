@@ -1,6 +1,7 @@
 """
-Segment and crop VAW dataset. Save output to new folder
+Preparations for VAW dataset including formatting annotations, segmenting and cropping images.
 """
+import numpy as np
 import sys
 import os 
 from tqdm import tqdm 
@@ -32,14 +33,17 @@ def prepare_images(json_file:str,image_dir:str,save_dir:str):
             except:
                 print('wrong')
                 continue 
-def open_file(filename,json=True):
-        if json:
+def open_file(filename,use_json=True):
+        if use_json:
             with open(filename) as fopen:
                 contents = json.load(fopen)
         else:
             with open(filename,'rb') as fopen:
                 contents = pickle.load(fopen)
         return contents 
+def save_file(filename,contents):
+    with open(filename,'w+') as fwrite:
+        json.dump(contents,fwrite)
 def convert_annotations(old_annotation_name,new_annotation_name):
     """
     Convert annotations from list to dictionary where key is instance id
@@ -51,22 +55,18 @@ def convert_annotations(old_annotation_name,new_annotation_name):
         instance_id = entry['instance_id']
         new_annotations[instance_id] = entry 
     with open(new_annotation_name,'w+') as fwrite:
-        json.dump(fwrite,new_annotation_name)
-def count_samples_per_annotation(annotation_file,attribute_to_id):
+        json.dump(new_annotations,fwrite)
+def count_samples_per_annotation(annotation_file,attribute_to_index):
     samples = np.zeros(620)
-    annotations = json.load(annotation_file)
-
-    with open(annotation_file,'r+') as fopen:
-        annotations = json.load(fopen)
+    annotations = open_file(annotation_file)
+    attribute_to_id = open_file(attribute_to_index)
     
     for entry in tqdm(annotations):
         positive_attributes = entry['positive_attributes']
-
-convert_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/all_train_old.json','/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/train.json')
-convert_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/old_val.json','/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/val.json')
-convert_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/old_test.json','/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/test.json')
-
-#prepare_images('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/val.json','/scratch/bcgp/datasets/visual_genome/images','/scratch/bcgp/datasets/vaw_cropped/val')
-
-
+        for attribute in positive_attributes:
+            attribute_id = attribute_to_id[attribute]
+            samples[attribute_id]+=1 
+    save_file('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/num_samples_per_attribute_val.json',samples.tolist())
     
+
+count_samples_per_annotation('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/old_val.json','/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/attribute_index.json')

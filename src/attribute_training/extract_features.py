@@ -69,8 +69,8 @@ if __name__ == '__main__':
         help="CLIP base model version"
     )
     args = parser.parse_args([
-        '--image_dir','/scratch/bcgp/datasets/vaw_cropped/train',
-        '--feature_dir','/scratch/bcgp/datasets/vaw_cropped/features/train',
+        '--image_dir','/scratch/bcgp/datasets/vaw_cropped/val',
+        '--feature_dir','/scratch/bcgp/datasets/vaw_cropped/features/val',
         '--clip_model','ViT-L/14'
     ])
     device = "cuda" if torch.cuda.is_available() else "cpu"
