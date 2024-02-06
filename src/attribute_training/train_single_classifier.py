@@ -17,13 +17,14 @@ import os.path as osp
 from vaw_dataset import VAW 
 import argparse
 import wandb 
-logger = logging.getLogger(__name__)
+
 def initialize_classifiers(attribute_name, clip_model, args):
     classifier = nn.Linear(args.enc_dim, 1, bias=False).to(args.device)
     attribute_vec = clip.tokenize([attribute_name])
     attribute_vec = attribute_vec.to(args.device)
     weight = clip_model.encode_text(attribute_vec).float()
     classifier.weight.data = weight 
+    logging.info('Initialized clip weights')
     return classifier 
 def eval_classifier(classifier,dataloader,weights_for_loss,args):
     # compute validation loss 
@@ -34,10 +35,9 @@ def eval_classifier(classifier,dataloader,weights_for_loss,args):
             labels = batch["label"].to(args.device )
  
             # we get the union of the positive and negative attributes and they should be weighted more heavily compared to other attributes
-            weight = torch.tensor(weights_for_loss).repeat(image.shape[0], 1).to(args.device)
-            optim.zero_grad()
+            weight = torch.tensor(weights_for_loss).repeat(image.shape[0], 1).squeeze(-1).to(args.device)
             preds = classifier(image).squeeze(-1).squeeze(-1)
-            logger.info(preds)
+            logging.info(preds)
             # weight here is used to incorporate with negative attributes which is a crucial annotation
             loss = F.binary_cross_entropy_with_logits(preds, labels.float(), weight=weight)
             total_loss.append(loss.item())
@@ -53,7 +53,7 @@ def train_classifier(classifier, train_dataloader, weights_for_loss, args,val_da
     loss_did_not_decrease = 0
     for i,epoch in enumerate(range(args.n_epochs)):
         average_loss = []
-        logger.info(f'Epoch:{i}')
+        logging.info(f'Epoch:{i}')
         for batch in tqdm(train_dataloader):
             image = batch["image"].to(args.device)
             labels = batch["label"].to(args.device )
@@ -79,12 +79,12 @@ def train_classifier(classifier, train_dataloader, weights_for_loss, args,val_da
 
 
         if i%args.log_every ==0:
-            logger.info(f'Train Loss: {np.mean(average_loss)}')
-            logger.info(f'Val Loss:{val_loss}')
+            logging.info(f'Train Loss: {np.mean(average_loss)}')
+            logging.info(f'Val Loss:{val_loss}')
             save_path = args.save_path
             if not os.path.exists(save_path):
                 os.makedirs(save_path, exist_ok=True)
-            torch.save(classifiers, osp.join(save_path, f"classifier_{args.class_index}.pth"))
+            torch.save(classifier, osp.join(save_path, f"classifier_{args.class_index}.pth"))
 
         if loss_did_not_decrease>args.stop_after:
             # stop if loss is not decreasing 
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda")
