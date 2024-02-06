@@ -1,18 +1,33 @@
 import torch
 import torch.nn as nn
 from typing import Callable, Any
-from attribute import Attribute
-from concept import Concept
+from image_input import ImageInput
+from dataclasses import dataclass
+
+@dataclass
+class WeightedPredictorOutput:
+    raw_scores: torch.Tensor
+    weighted_scores: torch.Tensor
+    final_score: torch.Tensor
 
 class WeightedPredictor(nn.Module):
     def __init__(self, predictors: list, weights: torch.Tensor, name: str = ''):
+        super().__init__()
         self.predictors = predictors
         self.weights = nn.Parameter(weights)
         self.name = name
 
-    def forward(self, input) -> torch.Tensor:
-        scores = self.get_scores(input)
-        return scores * self.weights
+    def forward(self, input: ImageInput, scores: torch.Tensor = None) -> torch.Tensor:
+        if scores is None:
+            scores = self.get_scores(input)
+
+        weighted_scores = scores * self.weights
+
+        return WeightedPredictorOutput(
+            raw_scores=scores,
+            weighted_scores=weighted_scores,
+            final_score=weighted_scores.sum()
+        )
 
     def get_scores(self, input):
         raise NotImplementedError()
@@ -37,11 +52,3 @@ class WeightedPredictor(nn.Module):
                 if filter_fn(p):
                     remove_at_index(i)
                     return
-
-class AttributeGroup(nn.Module):
-    def __init__(self, attrs: list[Attribute], weights: torch.Tensor, name: str = ''):
-        super().__init__(attrs, weights, name)
-
-class ConceptGroup(nn.Module):
-    def __init__(self, concepts: list[Concept], weights: torch.Tensor, name: str = ''):
-        super().__init__(concepts, weights, name)
