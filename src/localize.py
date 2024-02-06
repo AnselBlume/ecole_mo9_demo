@@ -90,7 +90,8 @@ class Localizer:
 
     def rembg_ground(self, img: Image) -> torch.IntTensor:
         '''
-            Returns (x1, y1, x2, y2) bounding box IntTensor.
+            Returns tensor of shape (1, 4), where the last dim specifies (x1, y1, x2, y2),
+            the bounding box IntTensor.
         '''
         mask = self.rembg_mask(img) # (h,w)
 
@@ -104,19 +105,19 @@ class Localizer:
             elif (i == 2 and coord + 1 < mask.shape[1]) or (i == 3 and coord + 1 < mask.shape[0]):
                 bbox[i] += 1
 
-        return bbox
+        return bbox.unsqueeze(0)
 
     def rembg_mask(self, img: Image) -> torch.BoolTensor:
         '''
-            Returns (h,w) boolean array.
+            Returns (1, h, w) boolean array.
         '''
         logger.info('Obtaining rembg mask')
         mask = remove(img, session=self.rembg_session, post_process_mask=True, only_mask=True)
         mask = torch.from_numpy(np.array(mask)).bool()
 
-        return mask
+        return mask.unsqueeze(0)
 
-    def desco_ground(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float = .4) -> torch.IntTensor:
+    def desco_ground(self, img: Image, caption: str, tokens_to_ground: Union[str,list[str]], conf_thresh: float = .4) -> torch.IntTensor:
         '''
             Based on the contents of predictor_glip.py.GLIPDemo.run_on_web_image.
             This function signature must be changed if we wish to use the GLIPDemo from predictor_FIBER.py
@@ -124,15 +125,20 @@ class Localizer:
             XXX The load method of run_demo.py maps the image to BGR, but this seems to conflict with
             GLIPDemo.build_transform's to_bgr_transform. We therefore ignore run_demo.py and don't load in BGR.
 
-            Returns (x1, y1, x2, y2) bounding box IntTensor.
+            Returns a tensor of shape (n_detected, 4) where the last dimension specifies (x1, y1, x2, y2), the
+            bounding box IntTensor. If no bounding boxes detected, returns a tensor of shape (0, 4).
         '''
         # Get bounding box with DesCo
         logger.info('Obtaining bounding box with DesCo')
 
         caption = caption.lower()
-        token_to_ground = token_to_ground.lower()
 
-        predictions = self.desco.compute_prediction(np.array(img), caption, specified_tokens=[token_to_ground])
+        if isinstance(tokens_to_ground, str):
+            tokens_to_ground = [tokens_to_ground]
+
+        tokens_to_ground = [token.lower() for token in tokens_to_ground]
+
+        predictions = self.desco.compute_prediction(np.array(img), caption, specified_tokens=tokens_to_ground)
         top_predictions: BoxList = self.desco._post_process(predictions, conf_thresh)
 
         bboxes = top_predictions.bbox.cpu() # (n_boxes, 4)
@@ -140,43 +146,55 @@ class Localizer:
         if len(bboxes) == 0:
             log_str = f'Failed to ground token with conf_thresh={conf_thresh}'
             logger.warning(log_str)
-            raise RuntimeError(log_str)
+            return torch.zeros(0, 4).int()
 
-        logger.info(f'Detected {len(bboxes)} bounding boxes; taking the first one')
-        bbox = bboxes[0].round().int() # (4,); DesCo returns fractional bbox predictions
+        logger.info(f'Detected {len(bboxes)} bounding boxes')
+        bboxes.round().int() # (n_detected, 4); Desco returns fractional bbox predictions
 
-        return bbox
+        return bboxes
 
     def desco_mask(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float = .4) -> torch.BoolTensor:
         '''
-            Returns (h,w) boolean array.
+            Returns (n_detected, h, w) boolean array. If no detections are returned by DesCo, returns a
+            tensor of shape (0, h, w).
         '''
-        box = self.desco_ground(img, caption, token_to_ground, conf_thresh).numpy() # SAM takes numpy bbox
+        bboxes = self.desco_ground(img, caption, token_to_ground, conf_thresh).numpy() # SAM takes numpy bbox
+
+        if len(bboxes) == 0:
+            return torch.zeros(0, img.size[1], img.size[0]).bool() # (0, h, w); Image.Image has size (w, h)
 
         logger.info('Obtaining segmentation mask with SAM')
         self.sam.set_image(np.array(img))
-        masks, scores, logits = self.sam.predict(box=box, multimask_output=True)
 
-        mask = torch.from_numpy(masks[np.argmax(scores)]).bool()
+        grounded_masks = []
+        for bbox in  bboxes:
+            masks, scores, logits = self.sam.predict(box=bbox, multimask_output=True)
+            mask = torch.from_numpy(masks[np.argmax(scores)]).bool()
+            grounded_masks.append(mask)
 
-        return mask
+        grounded_masks = torch.stack(grounded_masks) # (n_detected, h, w)
+
+        return grounded_masks
 
     def localize(self, img: Image, caption='', token_to_ground: str = '', conf_thresh: float = .4) -> torch.IntTensor:
         '''
-            Returns boolean array of shape (h, w)
+            Returns boolean array of shape (n_detections, h, w).
+
+            If caption and token_to_ground are provided, uses DesCo to ground the token in the image.
+            Otherwise, uses rembg to perform foreground segmentation.
         '''
         img = img.convert('RGB')
 
         if caption:
             assert token_to_ground and token_to_ground in caption
             logger.info(f'Localizing with DesCo to ground "{token_to_ground}" with caption "{caption}"')
-            bbox = self.desco_ground(img, caption, token_to_ground, conf_thresh)
+            bboxes = self.desco_ground(img, caption, token_to_ground, conf_thresh)
 
         else: # rembg
             logger.info('Localizing with rembg')
-            bbox = self.rembg_ground(img)
+            bboxes = self.rembg_ground(img)
 
-        return bbox
+        return bboxes
 
 # %%
 if __name__ == '__main__':
