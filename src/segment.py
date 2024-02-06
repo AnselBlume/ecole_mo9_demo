@@ -8,7 +8,7 @@
 '''
 import torch
 from segment_anything.modeling import Sam
-from models import build_sam_amg
+from predictors import build_sam_amg
 from PIL.Image import Image
 from rembg import remove, new_session
 from torchvision.transforms.functional import crop
@@ -92,7 +92,7 @@ class Segmenter:
 if __name__ == '__main__':
     import PIL
     from vis_utils import image_from_masks, show
-    from models import build_sam, build_desco
+    from predictors import build_sam, build_desco
     from localize import Localizer
     from torchvision.utils import draw_bounding_boxes
     from torchvision.transforms.functional import pil_to_tensor

@@ -185,7 +185,7 @@ if __name__ == '__main__':
     from vis_utils import show, image_from_masks
     from torchvision.utils import draw_bounding_boxes
     from torchvision.transforms.functional import pil_to_tensor
-    from models import build_sam_predictor, build_desco
+    from predictors import build_sam_predictor, build_desco
     import coloredlogs
 
     coloredlogs.install(level=logging.INFO, logger=logger)

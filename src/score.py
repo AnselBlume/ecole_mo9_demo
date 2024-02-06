@@ -1,5 +1,5 @@
 import torch
-from concept import ConceptSet
+from mo9_demo.src.model.concept import ConceptSet
 from PIL.Image import Image
 
 class Scorer:
