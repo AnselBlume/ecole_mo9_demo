@@ -22,6 +22,7 @@ class ConceptGroup(WeightedPredictor):
     def __init__(self, concepts: list[Concept], weights: torch.Tensor, name: str = ''):
         super().__init__(concepts, weights, name)
 
+@dataclass
 class ConceptPredictorOutput:
     attr_group_results: dict[str, WeightedPredictorOutput]
     component_concept_results: WeightedPredictorOutput
