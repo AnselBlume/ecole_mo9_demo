@@ -1,5 +1,5 @@
 from score import Scorer
-from concept import ConceptSet, Concept
+from mo9_demo.src.model.concept import ConceptSet, Concept
 from PIL.Image import Image
 
 class Controller:

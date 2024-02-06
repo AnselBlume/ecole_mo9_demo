@@ -1,17 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-
-@dataclass
-class Attribute:
-    name: str = ''
-    is_necessary: bool = False
-    query: str = ''
-
-class ZeroShotAttribute(Attribute):
-    pass
-
-class LearnedAttribute(Attribute):
-    pass
+from attribute import ZeroShotAttribute, LearnedAttribute, Attribute
 
 @dataclass
 class Concept:
