@@ -11,6 +11,16 @@ Example 2: If the object is "laptop", the response could be:
 - keyboard
 - touchpad
 
+Example 3: If the object is "dog", the response could be:
+- ears
+- eyes
+- nose
+- snout
+- tail
+- legs
+- paws
+- body
+
 Provide only the bulleted list without additional commentary. If the object does not have distinct parts (e.g. a ball), repeat the specified object without any bullets (e.g. "ball", not "- ball").
 
 List the key visible parts of the following object: '''
