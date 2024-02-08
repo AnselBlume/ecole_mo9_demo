@@ -11,7 +11,7 @@ from segment_anything.modeling import Sam
 from predictors import build_sam_amg
 from PIL.Image import Image
 from rembg import remove, new_session
-from torchvision.transforms.functional import crop
+from torchvision.transforms.functional import crop, to_pil_image, pil_to_tensor
 from torchvision.ops import box_convert
 import numpy as np
 from localize import bbox_from_mask
@@ -61,11 +61,28 @@ class Segmenter:
 
         return cropped
 
-    def crops_from_masks(self, image: Image, masks: torch.BoolTensor, remove_background=False) -> list[Image]:
+    def crops_from_masks(self, image: Image, masks: torch.BoolTensor, remove_background=False, only_mask=False) -> list[Image]:
+        '''
+            Crops the regions specified by masks from the image.
+            Arguments:
+                image (PIL.Image.Image): Image to crop
+                masks (torch.BoolTensor): Boolean mask (n_masks, h, w ) of segmented parts.
+                remove_background (bool): Whether to remove background from object after cropping with rembg.
+                only_mask (bool): Whether to zero out non-masked regions in the cropped image.
+        '''
         bboxes = bbox_from_mask(masks)
-        return [self.crop(image, bbox, remove_background) for bbox in bboxes]
 
-    def segment(self, image: Image, bbox: torch.Tensor, remove_background=False) -> torch.BoolTensor:
+        crops = []
+        image_t = pil_to_tensor(image)
+        for bbox, mask in zip(bboxes, masks):
+            if only_mask: # Set non-masked regions to zero
+                image = to_pil_image(image_t * mask)
+
+            crops.append(self.crop(image, bbox, remove_background))
+
+        return crops
+
+    def segment(self, image: Image, bbox: torch.Tensor, remove_background=False, pixel_threshold=100) -> torch.BoolTensor:
         '''
             Segments the region specified by bbox into parts.
 
@@ -77,14 +94,24 @@ class Segmenter:
             Returns:
                 (torch.BoolTensor): Boolean mask (n_masks, h, w ) of segmented parts.
         '''
-        image = self.crop(image, bbox, remove_background)
+        cropped_image = self.crop(image, bbox, remove_background)
 
-        masks: list[dict] = self.sam_amg.generate(np.array(image))
-        masks = torch.stack([torch.from_numpy(mask_d['segmentation']) for mask_d in masks]).bool()
+        # Create mask of ones specified by bbox and zero elsewhere
+        bbox_mask = torch.zeros(image.size[1], image.size[0], dtype=torch.bool)
+        x1, y1, x2, y2 = bbox
+        bbox_mask[y1:y2, x1:x2] = True # XXX Should this be +1 at the end?
+
+        crop_masks: list[dict] = self.sam_amg.generate(np.array(cropped_image))
+        crop_masks = torch.stack([torch.from_numpy(mask_d['segmentation']) for mask_d in crop_masks]).bool() # (n_masks, h_crop, w_crop)
 
         if remove_background: # Remove masks segmenting the background
-            masks = masks & self.foreground_mask(image)
-            masks = torch.stack([m for m in masks if m.sum() > 0])
+            crop_masks = crop_masks & self.foreground_mask(cropped_image)
+            crop_masks = torch.stack([m for m in crop_masks if m.sum() > pixel_threshold])
+
+        # Convert back to original image size
+        masks = torch.zeros(len(crop_masks), image.size[1], image.size[0], dtype=torch.bool)
+        for i, crop_mask in enumerate(crop_masks):
+            masks[i, y1:y2, x1:x2] = crop_mask # XXX Should this be +1 at the end?
 
         return masks
 

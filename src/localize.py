@@ -8,7 +8,8 @@ from rembg import remove, new_session
 from PIL.Image import Image
 from maskrcnn_benchmark.structures.bounding_box import BoxList
 from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
-from segment_anything import SamPredictor
+from segment_anything.modeling import Sam
+from predictors import build_sam_predictor
 from typing import Union
 import logging
 
@@ -83,20 +84,20 @@ def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool =
     return boxes
 
 class Localizer:
-    def __init__(self, sam: SamPredictor, desco: GLIPDemo, rembg_model_name: str = 'sam_prompt'):
+    def __init__(self, sam: Sam, desco: GLIPDemo, rembg_model_name: str = 'sam_prompt'):
         self.rembg_session = new_session(model_name=rembg_model_name)
         self.desco = desco
-        self.sam = sam
+        self.sam = build_sam_predictor(model=sam)
 
     def rembg_ground(self, img: Image) -> torch.IntTensor:
         '''
             Returns tensor of shape (1, 4), where the last dim specifies (x1, y1, x2, y2),
             the bounding box IntTensor.
         '''
-        mask = self.rembg_mask(img) # (h,w)
+        mask = self.rembg_mask(img) # (1, h,w)
 
         logger.info('Obtaining bounding box from rembg mask')
-        bbox = bbox_from_mask(mask[None, ...])[0] # (4,)
+        bbox = bbox_from_mask(mask)[0] # (4,)
 
         # Attempt to widen bounding box since rembg segments the foreground without a bbox
         for i, coord in enumerate(bbox):
@@ -149,16 +150,16 @@ class Localizer:
             return torch.zeros(0, 4).int()
 
         logger.info(f'Detected {len(bboxes)} bounding boxes')
-        bboxes.round().int() # (n_detected, 4); Desco returns fractional bbox predictions
+        bboxes = bboxes.round().int() # (n_detected, 4); Desco returns fractional bbox predictions
 
         return bboxes
 
-    def desco_mask(self, img: Image, caption: str, token_to_ground: str, conf_thresh: float = .4) -> torch.BoolTensor:
+    def desco_mask(self, img: Image, caption: str, tokens_to_ground: list[str], conf_thresh: float = .4) -> torch.BoolTensor:
         '''
             Returns (n_detected, h, w) boolean array. If no detections are returned by DesCo, returns a
             tensor of shape (0, h, w).
         '''
-        bboxes = self.desco_ground(img, caption, token_to_ground, conf_thresh).numpy() # SAM takes numpy bbox
+        bboxes = self.desco_ground(img, caption, tokens_to_ground, conf_thresh).numpy() # SAM takes numpy bbox
 
         if len(bboxes) == 0:
             return torch.zeros(0, img.size[1], img.size[0]).bool() # (0, h, w); Image.Image has size (w, h)
@@ -176,7 +177,7 @@ class Localizer:
 
         return grounded_masks
 
-    def localize(self, img: Image, caption='', token_to_ground: str = '', conf_thresh: float = .4) -> torch.IntTensor:
+    def localize(self, img: Image, caption='', tokens_to_ground: list[str] = [], conf_thresh: float = .4) -> torch.IntTensor:
         '''
             Returns boolean array of shape (n_detections, h, w).
 
@@ -186,9 +187,9 @@ class Localizer:
         img = img.convert('RGB')
 
         if caption:
-            assert token_to_ground and token_to_ground in caption
-            logger.info(f'Localizing with DesCo to ground "{token_to_ground}" with caption "{caption}"')
-            bboxes = self.desco_ground(img, caption, token_to_ground, conf_thresh)
+            assert all(t in caption for t in tokens_to_ground)
+            logger.info(f'Localizing with DesCo to ground "{tokens_to_ground}" with caption "{caption}"')
+            bboxes = self.desco_ground(img, caption, tokens_to_ground, conf_thresh)
 
         else: # rembg
             logger.info('Localizing with rembg')
@@ -220,19 +221,19 @@ if __name__ == '__main__':
     img = PIL.Image.open(img_path).convert('RGB')
     img_tensor = pil_to_tensor(img)
 
-    desco_bbox = localizer.desco_ground(img, caption, token)
-    desco_mask = localizer.desco_mask(img, caption, token)
+    desco_bboxes = localizer.desco_ground(img, caption, token)
+    desco_masks = localizer.desco_mask(img, caption, token)
 
     show([
-        draw_bounding_boxes(img_tensor, boxes=desco_bbox.unsqueeze(0), colors='red'),
-        image_from_masks(desco_mask.unsqueeze(0), superimpose_on_image=img_tensor)
+        draw_bounding_boxes(img_tensor, boxes=desco_bboxes, colors='red'),
+        image_from_masks(desco_masks, superimpose_on_image=img_tensor)
     ], title='DesCo')
 
-    rembg_bbox = localizer.rembg_ground(img)
-    rembg_mask = localizer.rembg_mask(img)
+    rembg_bboxes = localizer.rembg_ground(img)
+    rembg_masks = localizer.rembg_mask(img)
 
     show([
-        draw_bounding_boxes(img_tensor, boxes=rembg_bbox.unsqueeze(0), colors='red'),
-        image_from_masks(rembg_mask.unsqueeze(0), superimpose_on_image=img_tensor)
+        draw_bounding_boxes(img_tensor, boxes=rembg_bboxes, colors='red'),
+        image_from_masks(rembg_masks, superimpose_on_image=img_tensor)
     ], title='Rembg')
 # %%
