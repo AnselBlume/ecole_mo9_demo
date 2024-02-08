@@ -62,11 +62,48 @@ def count_samples_per_annotation(annotation_file,attribute_to_index):
     attribute_to_id = open_file(attribute_to_index)
     
     for entry in tqdm(annotations):
-        positive_attributes = entry['positive_attributes']
+        positive_attributes = entry['negative_attributes']
         for attribute in positive_attributes:
             attribute_id = attribute_to_id[attribute]
             samples[attribute_id]+=1 
-    save_file('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/num_samples_per_attribute_val.json',samples.tolist())
+    save_file('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/num_samples_per_attribute_neg_val.json',samples.tolist())
+    
+def create_gt_for_val(annotation_file,attribute_to_index,num_classes=2):
+    """
+    If num classes==2, then each attribute is either positive or negative 
+    If num_classes==3, then by default attribute is unspecified and is a 2. Only specified attributes are negative 
+    """
+    gt = []
+    annotations = open_file(annotation_file)
+    attribute_to_id = open_file(attribute_to_index)
+    for entry in tqdm(list(annotations.values())):
+        # not explicitly labeled 
+        # only choose ones where we have features generated
+        instance_id = entry['instance_id']
+        if os.path.exists(os.path.join('/scratch/bcgp/datasets/vaw_cropped/features/test',instance_id+'.pkl')):
+            positive_attributes = entry['positive_attributes']
+            negative_attributes = entry['negative_attributes']
+            if num_classes ==3:
+                sample_preds = np.zeros(620)
+                sample_preds.fill(2)
+                for n in negative_attributes:
+                    attribute_id = attribute_to_id[n]
+
+                    sample_preds[attribute_id] = 0
+            else:
+                sample_preds = np.zeros(620)
+            for p in positive_attributes:
+                attribute_id = attribute_to_id[p]
+                sample_preds[attribute_id] = 1
+            gt.append(sample_preds)
+    gt = np.stack(gt)
+    with open('/scratch/bcgp/datasets/visual_genome/vaw_dataset/gt/test_gt_three_classes.npy','wb+') as f:
+        np.save(f,gt)
+
+   
+count_samples_per_annotation('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/old_val.json','/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/attribute_index.json')    
+        
+
     
 
-count_samples_per_annotation('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/old_val.json','/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/attribute_index.json')
+
