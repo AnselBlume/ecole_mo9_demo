@@ -1,16 +1,16 @@
 import torch
-from mo9_demo.src.model.concept import ConceptSet
+from model.concept import ConceptDB
 from PIL.Image import Image
 
 class Scorer:
     # TODO Batched computation of scores via padding or NestedTensors?
-    def zs_attr_scores(self, img: Image, concept_set: ConceptSet) -> torch.Tensor:
+    def zs_attr_scores(self, img: Image, concept_set: ConceptDB) -> torch.Tensor:
         pass
 
-    def learned_attr_scores(self, img: Image, concept_set: ConceptSet) -> torch.Tensor:
+    def learned_attr_scores(self, img: Image, concept_set: ConceptDB) -> torch.Tensor:
         pass
 
-    def score(self, img: Image, concept_set: ConceptSet) -> torch.Tensor:
+    def score(self, img: Image, concept_set: ConceptDB) -> torch.Tensor:
         '''
             Returns: torch.Tensor of shape (n_concepts,), image scores for each concept in the concept set.
 
@@ -42,7 +42,7 @@ class Scorer:
 
         return scores
 
-    def score_regions(self, regions: list[Image], region_weights: torch.Tensor, concept_set: ConceptSet):
+    def score_regions(self, regions: list[Image], region_weights: torch.Tensor, concept_set: ConceptDB):
         '''
             Returns: torch.Tensor of shape (n_regions, n_concepts), image scores of each region for each concept in
             the concept set.
@@ -53,7 +53,7 @@ class Scorer:
 
         return scores
 
-    def score_image_from_regions(self, regions: list[Image], region_weights: torch.Tensor, concept_set: ConceptSet):
+    def score_image_from_regions(self, regions: list[Image], region_weights: torch.Tensor, concept_set: ConceptDB):
         '''
             Returns: torch.Tensor of shape (n_concepts,), image scores for each concept in the concept set.
         '''

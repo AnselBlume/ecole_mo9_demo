@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import torch
-from weighted_predictor import WeightedPredictor
+from model.weighted_predictor import WeightedPredictor
 
 @dataclass
 class Attribute:

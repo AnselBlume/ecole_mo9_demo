@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import Callable, Any
-from image_input import ImageInput
+from model.image_input import ImageInput
 from dataclasses import dataclass
 
 @dataclass

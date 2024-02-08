@@ -1,21 +1,33 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from attribute import Attribute, AttributeGroup
-from weighted_predictor import WeightedPredictor, WeightedPredictorOutput
+from typing import Any
+from model.attribute import Attribute, AttributeGroup
+from model.weighted_predictor import WeightedPredictor, WeightedPredictorOutput
 import torch.nn as nn
 import torch
-from image_input import ImageInput
+from model.image_input import ImageInput
 
 @dataclass
 class Concept:
     name: str = ''
-    parent_concepts: list[Concept] = []
-    child_concepts: list[Concept] = []
-    component_concepts: list[Concept] = []
+
+    # str --> Concept instead of list[Concept] to allow different namings of the same concept
+    parent_concepts: dict[str,Concept] = field(
+        default_factory=dict,
+        metadata={'help': 'Dictionary of parent concepts. Keys are parent names (as described by this Concept), values are parent concepts.'}
+    )
+    child_concepts: dict[str,Concept] = field(
+        default_factory=dict,
+        metadata={'help': 'Dictionary of child concepts. Keys are child names (as described by this Concept), values are child concepts.'}
+    )
+    component_concepts: dict[str,Concept] = field(
+        default_factory=dict,
+        metadata={'help': 'Dictionary of component concepts. Keys are component names (as described by this Concept), values are component concepts.'}
+    )
 
     attr_groups: dict[str, list[Attribute]] = field(
         default_factory=dict,
-        metadata={'help': 'A dictionary of attribute groups. The keys are the names of the groups and the values are lists of attributes.'}
+        metadata={'help': 'Dictionary of attribute groups. Keys are canonicalized group names, values are lists of attributes.'}
     )
 
 class ConceptGroup(WeightedPredictor):
@@ -80,7 +92,10 @@ class ConceptPredictor(nn.Module):
 
 @dataclass
 class ConceptDB:
-    concepts: dict[str, Concept] = {}
+    concepts: dict[str, Concept] = field(
+        default_factory=dict,
+        metadata={'help': 'Dictionary of concepts. Keys are concept names, values are concepts.'}
+    )
 
     def add_concept(self, concept: Concept):
         self.concepts[concept.name] = concept
@@ -96,3 +111,9 @@ class ConceptDB:
 
     def __iter__(self):
         return iter(self.get_concepts())
+
+    def __contains__(self, name: str):
+        return name in self.concepts
+
+    def __getitem__(self, name: str):
+        return self.get_concept(name)
