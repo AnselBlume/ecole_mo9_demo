@@ -74,6 +74,7 @@ class Controller:
             logger.info('Localizing concept parts with DesCo')
             # concept = self.concepts.get_concept(concept_name)
             # component_parts = list(concept.component_concepts.keys())
+            # TODO consider setting areas not in the bbox to zero instead of cropping the image to maintain scale
             cropped_image = self.segmenter.crop(image, bboxes[0], remove_background=remove_background) # Crop around localized concept
             part_masks = self.localizer.desco_mask(cropped_image, caption=caption, tokens_to_ground=concept_parts) # (n_detections, h, w)
 
@@ -91,8 +92,9 @@ class Controller:
 
         else: # Non part-based segmentation of localized concept
             logger.info('Performing part segmentation with SAM')
+            # TODO consider not cropping or removing background from image, but using the mask to remove undesired portions
+            # after full-image segmentation
             part_masks = self.segmenter.segment(image, bboxes[0], remove_background=remove_background)
-
 
         if return_crops:
             return self.segmenter.crops_from_masks(image, part_masks, only_mask=remove_background)
@@ -116,12 +118,15 @@ class Controller:
         return article
 
     def _get_parts_caption(self, concept_name: str, component_parts: list[str]):
+        '''
+            dog, head, whiskers, tail --> a dog with a head, whiskers, and a tail
+        '''
         prompt = f'{self._get_article(concept_name)}{concept_name} '
         for i, component_part in enumerate(component_parts):
             if i == 0:
                 prompt += 'with '
             elif i == len(component_parts) - 1:
-                prompt += ', and '
+                prompt += ', and ' if len(component_parts) > 2 else ' and '
             else:
                 prompt += ', '
 
