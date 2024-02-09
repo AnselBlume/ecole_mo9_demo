@@ -21,12 +21,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 def initialize_classifiers(attribute_dict, clip_model, args):
     num_attributes = len(attribute_dict)
-    classifiers = nn.ModuleList([nn.Linear(args.enc_dim, 1, bias=True) for _ in range(num_attributes)]).to(args.device)
+    classifiers = nn.ModuleList([nn.Linear(args.enc_dim, 1, bias=False) for _ in range(num_attributes)]).to(args.device)
     # This is to use the text_encoder from CLIP to encode the attribute names as initial weights for the classifiers
     for attribute, classifier in zip(attribute_dict, classifiers):
-        attribute_vec = clip.tokenize(['a photo with an object that is '+attribute]).to(args.device)
+        attribute_vec = clip.tokenize([attribute]).to(args.device)
         weight = clip_model.encode_text(attribute_vec).float()
         classifier.weight.data = weight
+
 
     
     logger.info('Initialized CLIP classifiers')
@@ -36,71 +37,96 @@ def eval_classifier(classifier,dataloader,args):
     total_loss = []
     with torch.no_grad():
         for batch in tqdm(dataloader):
-            image = batch["image"].to(args.device)
+            #batch_size,_ = batch.size()
+            total_num = 128*620
+
+            image = batch["image"].squeeze(1).to(args.device)
+            image = image/image.norm(dim=1,keepdim=True)
             positive = batch["positive"].to(args.device)
             # we currently do not consider negative attributes
             negative = batch["negative"].to(args.device)
             # labels = torch.cat([positive, negative], dim=0)
+            no_label = batch["unknown"]
+            #total_no_label = torch.count_nonzero(no_label)
+            actual_labels = torch.numel(no_label)-torch.count_nonzero(no_label)
+            #TODO: Compute loss without unknown labels
             labels = positive
-
-            preds =  torch.cat([classifier(image) for classifier in classifiers], dim=1).squeeze(-1)
+            pred_output = []
+            for classifier in classifiers:
+                product = classifier(image)
+                proudct = product/classifier.weight.data.norm(dim=1,keepdim=True)
+                pred_output.append(product)
+            preds =  torch.cat([p for p in pred_output], dim=1)
             # weight here is used to incorporate with negative attributes which is a crucial annotation
-            loss = F.binary_cross_entropy_with_logits(preds, labels.float())
-            total_loss.append(loss.item())
+            loss = F.binary_cross_entropy_with_logits(preds, labels.float(),reduce=None)
+            actual_loss = torch.divide(loss.sum(),actual_labels)
+            total_loss.append(actual_labels.item())
     return np.mean(total_loss)
 def construct_weights(pos_labels,neg_labels,no_labels,neg_samples_per_att,pos_samples_per_att,args,size):
     weights = torch.ones((size,620)).to(torch.float)
-    
+    # need to count total number of positive and negatives 
+    total_count = 0
     for i,p in enumerate(pos_labels):
         pos_entry = pos_labels[i,:]
+        
         neg_entry = neg_labels[i,:]
         no_entry = no_labels[i,:]
+        #print(torch.any(pos_labels[i,:]),torch.any(neg_entry),torch.any(no_labels[i,:]))
         if torch.any(pos_labels[i,:]):
             ones = torch.where(pos_entry>0)
+
             for pos in ones:
+                total_count+=1 
                 weights[i,pos] = pos_samples_per_att[pos].to(torch.float)
         if torch.any(neg_labels[i,:]):
             ones = torch.where(neg_entry>0)
             for negs in ones:
+                total_count+=1 
                 weights[i,negs] = neg_samples_per_att[negs].to(torch.float)
         if torch.any(no_labels[i,:]):
             ones = torch.where(no_labels[i,:]>0)
             for u in ones:
                 weights[i,u] = 0
 
-    return weights 
+    return weights,total_count 
 
 def train_classifier(classifiers, train_dataloader, neg_samples_per_att,pos_samples_per_att, args,val_dataloader):
-    optim = opt.AdamW(classifiers.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optim = opt.Adam(classifiers.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     previous_loss = 100000
     loss_did_not_decrease = 0
     for i,epoch in enumerate(range(args.n_epochs)):
         average_loss = []
         logging.info(f'Epoch:{i}')
         for batch in tqdm(train_dataloader):
-            image = batch["image"].to(args.device)
+            image = batch["image"].squeeze(1).to(args.device)
+            image = image/image.norm(dim=1,keepdim=True)
             positive = batch["positive"]
             # we currently do not consider negative attributes
             negative = batch["negative"]
             # labels = torch.cat([positive, negative], dim=0)
             no_label = batch["unknown"] 
-
             labels = positive.to(args.device)
             # we get the union of the positive and negative attributes and they should be weighted more heavily compared to other attributes
-            #weight = torch.tensor(weights_for_loss).repeat(image.shape[0], 1).to(args.device)
-            weight = construct_weights(positive,negative,no_label,neg_samples_per_att,pos_samples_per_att,args,image.shape[0])
-            positive = positive.to(args.device)
-            negative = negative.to(args.device)
+            weight,total_count = construct_weights(positive,negative,no_label,neg_samples_per_att,pos_samples_per_att,args,image.shape[0])
+            # positive = positive.to(args.device)
+            # negative = negative.to(args.device)
             weight = weight.to(args.device)
-            weight[positive] *= args.weight_for_positive
-            weight[negative] *= args.weight_for_negative
+            # weight[positive] *= args.weight_for_positive
+            # weight[negative] *= args.weight_for_negative
             optim.zero_grad()
-            preds = torch.cat([classifier(image) for classifier in classifiers], dim=1).squeeze(-1)
+            pred_output = []
+            for classifier in classifiers:
+                product = classifier(image)
+                proudct = product/classifier.weight.data.norm(dim=1,keepdim=True)
+                pred_output.append(product)
+            preds =  torch.cat([p for p in pred_output], dim=1)
             # weight here is used to incorporate with negative attributes which is a crucial annotation
-            loss = F.binary_cross_entropy_with_logits(preds, labels.float(), weight=weight)
-            loss.backward()
+
+            loss = F.binary_cross_entropy_with_logits(preds, labels.float(),reduction='none',weight=weight)
+            average_over_nonzero = torch.divide(loss.sum(),total_count)
+            average_over_nonzero.backward()
             optim.step()
-            average_loss.append(loss.item())
+            average_loss.append(average_over_nonzero.item())
         epoch_loss =np.mean(average_loss)
  
         val_loss  = eval_classifier(classifiers,val_dataloader,args)
@@ -139,10 +165,10 @@ if __name__ == '__main__':
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--weight_decay", type=float, default=0.0)
-    parser.add_argument("--n_epochs", type=int, default=100)
+    parser.add_argument("--n_epochs", type=int, default=200)
     parser.add_argument("--enc_dim", type=int, default=768)
     parser.add_argument("--backbone", type=str, default="ViT-L/14")
-    parser.add_argument("--save_path", type=str, default="classifiers_bias")
+    parser.add_argument("--save_path", type=str, default="classifiers_fix_loss")
     parser.add_argument("--weight_for_positive", type=float, default=1.0)
     parser.add_argument("--weight_for_negative", type=float, default=1.0)
     parser.add_argument("--use_wandb", action='store_true')
