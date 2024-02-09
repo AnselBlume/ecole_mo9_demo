@@ -66,3 +66,11 @@ def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT
     desco = GLIPDemo(cfg, min_image_size=800)
 
     return desco
+
+#########################
+# Attribute Classifiers #
+#########################
+from learned_attrs import TrainedCLIPAttributePredictor
+
+def build_learned_attr_predictor(device: str):
+    return TrainedCLIPAttributePredictor(device=device)
