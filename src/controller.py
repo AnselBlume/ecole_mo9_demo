@@ -85,15 +85,19 @@ class Controller:
             full_part_masks = torch.zeros(len(part_masks), image.size[1], image.size[0], dtype=torch.bool)
             x1, y1, x2, y2 = bboxes[0]
 
+            if remove_background: # Crop had background removed, so just extract mask
+                crop_foreground = pil_to_tensor(cropped_image).bool().sum(dim=0).bool()
+
+            else: # Don't remove background
+                crop_foreground = torch.ones(cropped_image.size[1], cropped_image.size[0], dtype=torch.bool)
+
             for i, part_mask in enumerate(part_masks):
-                full_part_masks[i, y1:y2, x1:x2] = part_mask
+                full_part_masks[i, y1:y2, x1:x2] = part_mask & crop_foreground
 
             part_masks = full_part_masks
 
         else: # Non part-based segmentation of localized concept
             logger.info('Performing part segmentation with SAM')
-            # TODO consider not cropping or removing background from image, but using the mask to remove undesired portions
-            # after full-image segmentation
             part_masks = self.segmenter.segment(image, bboxes[0], remove_background=remove_background)
 
         if return_crops:
@@ -225,6 +229,7 @@ if __name__ == '__main__':
     # show_example('fork', [], 'name-no_parts-{}.jpg')
 
     # %% Concept name, concept parts
+    # TODO investigate why this returns so many masks. Does desco output 7 bboxes?
     show_example('animal', ['head', 'ears', 'body'], 'name-parts-{}.jpg')
     # show_example('fork', ['tines', 'handle'], 'name-parts-{}.jpg')
 # %%

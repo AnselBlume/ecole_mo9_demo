@@ -82,7 +82,14 @@ class Segmenter:
 
         return crops
 
-    def segment(self, image: Image, bbox: torch.Tensor, remove_background=False, pixel_threshold=100) -> torch.BoolTensor:
+    def segment(
+        self,
+        image: Image,
+        bbox: torch.Tensor,
+        remove_background=False,
+        pixel_threshold=100,
+        segment_before_crop=False
+    ) -> torch.BoolTensor:
         '''
             Segments the region specified by bbox into parts.
 
@@ -90,28 +97,46 @@ class Segmenter:
                 image (PIL.Image.Image): Image to segment
                 bbox (torch.Tensor): Bounding box of object to segment in XYXY
                 remove_background (bool): Whether to remove background from object after cropping
+                pixel_threshold (int): Minimum number of pixels for a mask to be considered a part
+                segment_before_crop (bool): Whether to segment the entire image before cropping results, instead
+                    of cropping the image first and then segmenting the cropped image.
 
             Returns:
                 (torch.BoolTensor): Boolean mask (n_masks, h, w ) of segmented parts.
         '''
-        cropped_image = self.crop(image, bbox, remove_background)
+        if remove_background or not segment_before_crop:
+            cropped_image = self.crop(image, bbox, remove_background)
 
-        # Create mask of ones specified by bbox and zero elsewhere
-        bbox_mask = torch.zeros(image.size[1], image.size[0], dtype=torch.bool)
+        masks: list[dict] = self.sam_amg.generate(np.array(image if segment_before_crop else cropped_image))
+        masks = sorted(masks, key=lambda mask_d: mask_d['area'], reverse=True) # Sort by area
+        masks = torch.stack([torch.from_numpy(mask_d['segmentation']) for mask_d in masks]).bool() # (n_masks, h_crop, w_crop) or (n_masks, h, w)
+
         x1, y1, x2, y2 = bbox
-        bbox_mask[y1:y2, x1:x2] = True # XXX Should this be +1 at the end?
 
-        crop_masks: list[dict] = self.sam_amg.generate(np.array(cropped_image))
-        crop_masks = torch.stack([torch.from_numpy(mask_d['segmentation']) for mask_d in crop_masks]).bool() # (n_masks, h_crop, w_crop)
+        if segment_before_crop:
+            # Create mask of ones specified by bbox and zero elsewhere
+            bbox_mask = torch.zeros(image.size[1], image.size[0], dtype=torch.bool)
+            bbox_mask[y1:y2, x1:x2] = True
 
-        if remove_background: # Remove masks segmenting the background
-            crop_masks = crop_masks & self.foreground_mask(cropped_image)
-            crop_masks = torch.stack([m for m in crop_masks if m.sum() > pixel_threshold])
+            if remove_background: # Remove background based on bbox crop
+                fg_mask = self.foreground_mask(cropped_image)
+                bbox_mask[y1:y2, x1:x2] = bbox_mask[y1:y2, x1:x2] & self.foreground_mask(cropped_image)
 
-        # Convert back to original image size
-        masks = torch.zeros(len(crop_masks), image.size[1], image.size[0], dtype=torch.bool)
-        for i, crop_mask in enumerate(crop_masks):
-            masks[i, y1:y2, x1:x2] = crop_mask # XXX Should this be +1 at the end?
+            masks = torch.stack([m & bbox_mask for m in masks]) # Restrict mask to bbox
+
+        else:
+            if remove_background:
+                masks = masks & self.foreground_mask(cropped_image)
+
+            # Convert back to original image size
+            full_masks = torch.zeros(len(masks), image.size[1], image.size[0], dtype=torch.bool)
+            for i, crop_mask in enumerate(masks):
+                full_masks[i, y1:y2, x1:x2] = crop_mask
+
+            masks = full_masks
+
+        # Filter out small masks, including those which may have been removed by background removal
+        masks = torch.stack([m for m in masks if m.sum() > pixel_threshold])
 
         return masks
 
