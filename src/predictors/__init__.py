@@ -27,7 +27,6 @@ def build_sam_amg(model: Sam = None, part_based: bool = False):
     if part_based:
         return SamAutomaticMaskGenerator(
             model=model,
-            points_per_side=32,
             pred_iou_thresh=0.86,
             stability_score_thresh=0.92,
             crop_n_layers=1,
@@ -70,7 +69,7 @@ def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT
 #########################
 # Attribute Classifiers #
 #########################
-from learned_attrs import TrainedCLIPAttributePredictor
+from predictors.learned_attrs import TrainedCLIPAttributePredictor
 
 def build_learned_attr_predictor(device: str):
     return TrainedCLIPAttributePredictor(device=device)

@@ -11,7 +11,7 @@ DEFAULT_CKPT_PATH = os.path.join(
     '../../attribute_training/classifiers_bias/classifiers.pth'
 )
 
-with open('./attribute_index.json') as f:
+with open(os.path.join(os.path.dirname(__file__), 'attribute_index.json')) as f:
     attr_to_index = json.load(f)
 
 INDEX_TO_ATTR = {v: k for k, v in attr_to_index.items()}
