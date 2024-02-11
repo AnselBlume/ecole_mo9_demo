@@ -66,10 +66,27 @@ def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT
 
     return desco
 
+########
+# CLIP #
+########
+import clip
+from clip.model import CLIP
+from torchvision.transforms import Compose
+
+def build_clip(model_name: str = 'ViT-L/14', device: str = 'cuda') -> tuple[CLIP, Compose]:
+    model, preprocess = clip.load(model_name, device=device)
+    return model, preprocess
+
 #########################
 # Attribute Classifiers #
 #########################
-from predictors.learned_attrs import TrainedCLIPAttributePredictor
+from predictors.trained_attrs import TrainedCLIPAttributePredictor
+from predictors.clip_features import CLIPFeatureExtractor
+from predictors.zero_shot_attrs import CLIPAttributePredictor
 
-def build_learned_attr_predictor(device: str):
-    return TrainedCLIPAttributePredictor(device=device)
+def build_trained_attr_predictor(clip_model: CLIP, preprocess: Compose, device: str = 'cuda'):
+    feature_extractor = CLIPFeatureExtractor(clip_model, preprocess)
+    return TrainedCLIPAttributePredictor(feature_extractor, device=device)
+
+def build_zero_shot_attr_predictor(clip_model: CLIP, preprocess: Compose, device: str = 'cuda'):
+    return CLIPAttributePredictor(clip_model, preprocess)
