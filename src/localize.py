@@ -179,7 +179,7 @@ class Localizer:
 
     def localize(self, img: Image, caption='', tokens_to_ground: list[str] = [], conf_thresh: float = .4) -> torch.IntTensor:
         '''
-            Returns boolean array of shape (n_detections, h, w).
+            Returns torch.IntTensor of shape (n_detections, h, w).
 
             If caption and token_to_ground are provided, uses DesCo to ground the token in the image.
             Otherwise, uses rembg to perform foreground segmentation.

@@ -13,7 +13,7 @@ import inflect
 from predictors import build_sam, build_desco, Sam, GLIPDemo
 import torch
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
-from typing import Union
+from llm import LLMClient, retrieve_parts
 
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
@@ -41,8 +41,8 @@ class Controller:
         concept_name: str = '',
         concept_parts: list[str] = [],
         remove_background: bool = True,
-        return_crops: bool = True,
-    ) -> Union[torch.BoolTensor, list[Image]]:
+        return_crops: bool = True
+    ) -> dict:
         '''
             Localizes and segments the concept in the image in to parts.
 
@@ -51,8 +51,14 @@ class Controller:
                 concept_name (str): Name of concept to localize. If not provided, uses rembg to perform foreground segmentation
                 concept_parts (list[str]): List of part names to localize. If not provided, uses SAM to perform part segmentation
                 remove_background (bool): Whether to remove the background from the localized concept.
-                return_crops (bool): If true, returns images of the cropped parts (possibly with background removed).
-                    Otherwise, returns the full image parts mask of shape (n_parts, h, w).
+                return_crops (bool): If true, returns images of the cropped parts (possibly with background removed) under the key 'part_crops'.
+
+            Returns:
+                dict: Dictionary containing the following keys:
+                    'part_masks' (torch.BoolTensor): Boolean array of shape (n_detections, h, w) representing the segmentation masks of the parts
+                    'localized_bbox' (torch.IntTensor): Bounding box of the localized concept in XYXY format with shape (4,).
+                    'localized_part_bboxes' (torch.IntTensor): Tensor of shape (n_part_detections, 4) of bounding boxes of the localized parts in XYXY format.
+                    'part_crops' (list[PIL.Image.Image]): List of cropped part images, if return_crops is True
         '''
         # Localize the concept
         caption = self._get_parts_caption(concept_name, concept_parts) if concept_parts else concept_name
@@ -71,39 +77,71 @@ class Controller:
         # Segment the concept parts
         if concept_parts:
         # if concept_name in self.concepts: # Use DesCo if we can retrieve the concept parts
-            logger.info('Localizing concept parts with DesCo')
+            logger.info(f'Localizing concept parts {concept_parts} with DesCo')
             # concept = self.concepts.get_concept(concept_name)
             # component_parts = list(concept.component_concepts.keys())
             # TODO consider setting areas not in the bbox to zero instead of cropping the image to maintain scale
             cropped_image = self.segmenter.crop(image, bboxes[0], remove_background=remove_background) # Crop around localized concept
             part_masks = self.localizer.desco_mask(cropped_image, caption=caption, tokens_to_ground=concept_parts) # (n_detections, h, w)
 
+            logger.info(f'Obtained {len(part_masks)} part masks with DesCo')
+
             if len(part_masks) == 0:
                 raise RuntimeError('Failed to localize concept parts with DesCo')
 
             # Convert masks into full image size
-            full_part_masks = torch.zeros(len(part_masks), image.size[1], image.size[0], dtype=torch.bool)
+            full_part_masks = []
             x1, y1, x2, y2 = bboxes[0]
 
             if remove_background: # Crop had background removed, so just extract mask
-                crop_foreground = pil_to_tensor(cropped_image).bool().sum(dim=0).bool()
+                crop_foreground_mask = pil_to_tensor(cropped_image).bool().sum(dim=0).bool()
 
             else: # Don't remove background
-                crop_foreground = torch.ones(cropped_image.size[1], cropped_image.size[0], dtype=torch.bool)
+                crop_foreground_mask = torch.ones(cropped_image.size[1], cropped_image.size[0], dtype=torch.bool)
 
             for i, part_mask in enumerate(part_masks):
-                full_part_masks[i, y1:y2, x1:x2] = part_mask & crop_foreground
+                full_part_mask = torch.zeros(image.size[1], image.size[0], dtype=torch.bool)
+                full_part_mask[y1:y2, x1:x2] = part_mask & crop_foreground_mask
 
-            part_masks = full_part_masks
+                if full_part_mask.sum() == 0:
+                    logger.warning(f'Part mask {i} is empty after intersecting with foreground; skipping')
+                    continue
+
+                full_part_masks.append(full_part_mask)
+
+            part_masks = torch.stack(full_part_masks)
 
         else: # Non part-based segmentation of localized concept
             logger.info('Performing part segmentation with SAM')
             part_masks = self.segmenter.segment(image, bboxes[0], remove_background=remove_background)
 
-        if return_crops:
-            return self.segmenter.crops_from_masks(image, part_masks, only_mask=remove_background)
+        # Construct return dictionary
+        ret_dict = {
+            'part_masks': part_masks,
+            'localized_bbox': bboxes[0],
+        }
 
-        return part_masks
+        if return_crops:
+            part_crops = self.segmenter.crops_from_masks(image, part_masks, only_mask=remove_background)
+            logger.info(f'Generated {len(part_crops)} part crops from part masks')
+
+            # Ignore part crops with a zero-dimension (caused by part mask being one-dimensional, e.g. a line)
+            filtered_crop_parts = []
+            for i, crop in enumerate(part_crops):
+                if crop.size[0] == 0 or crop.size[1] == 0:
+                    logger.warning(f'Part crop {i} has a zero-dimension; removing')
+                    continue
+
+                filtered_crop_parts.append(crop)
+
+            ret_dict['part_crops'] = filtered_crop_parts
+
+        if concept_parts:
+            ret_dict['localized_part_bboxes'] = bbox_from_mask(part_masks)
+
+        ret_dict = {k : ret_dict[k] for k in sorted(ret_dict.keys())}
+
+        return ret_dict
 
     def _get_article(self, word: str, space_if_nonempty: bool = True):
         '''
@@ -190,47 +228,69 @@ if __name__ == '__main__':
     import PIL
     import os
     from torchvision.utils import draw_bounding_boxes
-    from vis_utils import show, image_from_masks
+    from vis_utils import image_from_masks
 
     sam = build_sam()
     desco = build_desco()
+    llm_client = LLMClient()
     controller = Controller(sam, desco, ConceptDB())
 
     # %% Path
-    path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/dog.png'
-    out_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/dog_out'
-    # path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/fork_2_9.jpg'
-    # out_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/fork_out'
-    os.makedirs(out_path, exist_ok=True)
+    in_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/graduate_descent'
+    out_dir = '/shared/nas2/blume5/fa23/ecole/results/2_11_24-graduate_descent'
 
-    img = PIL.Image.open(path).convert('RGB')
+    os.makedirs(out_dir, exist_ok=True)
 
     # %%
-    def show_example(concept_name, concept_parts, file_fmt):
-        localized = controller.localizer.localize(img, caption=concept_name, tokens_to_ground=[concept_name])
-        bbox_img = draw_bounding_boxes(pil_to_tensor(img), localized[0:1], colors='red', width=8)
-        fig, ax = show(bbox_img)
-        fig.savefig(os.path.join(out_path, file_fmt.format('localized')))
+    def run_segmentation(concept_name, concept_parts, file_fmt, save_crops=False):
+        try:
+            result = controller.localize_and_segment(img, concept_name=concept_name, concept_parts=concept_parts)
 
-        masks = controller.localize_and_segment(img, concept_name=concept_name, concept_parts=concept_parts, return_crops=False)
-        mask_img = image_from_masks(masks, superimpose_on_image=pil_to_tensor(img))
-        show(mask_img, title='Segmentation plots')
+        except RuntimeError as e:
+            logger.error(f'Error occurred during segmentation: {e}')
+            return
 
-        crops = controller.localize_and_segment(img, concept_name=concept_name, concept_parts=concept_parts, return_crops=True)
-        for crop in crops:
-            show(crop, title='Cropped part')
-        fig.savefig(os.path.join(out_path, file_fmt.format('segmented')))
+        # Save localized region
+        bbox_img = draw_bounding_boxes(pil_to_tensor(img), result['localized_bbox'].unsqueeze(0), colors='red', width=8)
+        to_pil_image(bbox_img).save(os.path.join(out_dir, file_fmt.format('localized')))
 
-    # %% No concept name, no concept parts
-    show_example('', [], 'no_name-no_parts-{}.jpg')
+        # Save part bboxes, if available
+        if 'localized_part_bboxes' in result:
+            part_bbox_img = draw_bounding_boxes(pil_to_tensor(img), result['localized_part_bboxes'], colors='green', width=8)
+            to_pil_image(part_bbox_img).save(os.path.join(out_dir, file_fmt.format('part_bboxes')))
 
-    # %% Concept name, no concept parts
-    show_example('animal', [], 'name-no_parts-{}.jpg')
-    # show_example('fork', [], 'name-no_parts-{}.jpg')
+        # Save segmented region
+        mask_img = image_from_masks(result['part_masks'], superimpose_on_image=pil_to_tensor(img))
+        to_pil_image(mask_img).save(os.path.join(out_dir, file_fmt.format('segmented')))
 
-    # %% Concept name, concept parts
-    # TODO investigate why this returns so many masks. Does desco output 7 bboxes?
-    show_example('animal', ['head', 'ears', 'body'], 'name-parts-{}.jpg')
-    # show_example('fork', ['tines', 'handle'], 'name-parts-{}.jpg')
-# %%
-#
+        # Save crops
+        if save_crops:
+            for i, crop in enumerate(result['part_crops']):
+                crop.save(os.path.join(out_dir, file_fmt.format(f'part_{i}')))
+
+        return result
+
+    # %%
+    for basename in os.listdir(in_dir):
+        if not (basename.endswith('.jpg') or basename.endswith('.png')):
+            continue
+
+        logger.info(f'Processing {basename}')
+        input_path = os.path.join(in_dir, basename)
+        img = PIL.Image.open(input_path).convert('RGB')
+
+        # Extract file name for saving and object name for prompting
+        fname = os.path.splitext(basename)[0]
+        obj_name = fname.split('_')[0]
+
+        # No concept name, no concept parts
+        result = run_segmentation('', [], f'{fname}-no_name-no_parts-{{}}.jpg')
+
+        # Concept name, no concept parts
+        result = run_segmentation(obj_name, [], f'{fname}-name-no_parts-{{}}.jpg')
+
+        # Concept name, concept parts
+        retrieved_parts = retrieve_parts(obj_name, llm_client)
+        result = run_segmentation(obj_name, retrieved_parts, f'{fname}-name-parts-{{}}.jpg')
+    # %%
+    #
