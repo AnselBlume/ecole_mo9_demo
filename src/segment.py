@@ -15,6 +15,9 @@ from torchvision.transforms.functional import crop, to_pil_image, pil_to_tensor
 from torchvision.ops import box_convert
 import numpy as np
 from localize import bbox_from_mask
+import logging
+logger = logging.getLogger(__name__)
+
 
 class Segmenter:
     def __init__(self, sam: Sam, rembg_model_name: str = 'sam_prompt'):
@@ -70,6 +73,9 @@ class Segmenter:
                 remove_background (bool): Whether to remove background from object after cropping with rembg.
                 only_mask (bool): Whether to zero out non-masked regions in the cropped image.
         '''
+        if len(masks) == 0:
+            return []
+
         bboxes = bbox_from_mask(masks)
 
         crops = []
@@ -136,7 +142,16 @@ class Segmenter:
             masks = full_masks
 
         # Filter out small masks, including those which may have been removed by background removal
-        masks = torch.stack([m for m in masks if m.sum() > pixel_threshold])
+        orig_num_masks = len(masks)
+        masks = [m for m in masks if m.sum() > pixel_threshold]
+        logger.info(f'Filtered out {orig_num_masks - len(masks)} / {orig_num_masks} masks')
+
+        if len(masks) == 0:
+            logger.warning('No masks remaining after filtering. Consider lowering pixel_threshold.')
+            masks = torch.tensor([])
+
+        else:
+            masks = torch.stack([m for m in masks if m.sum() > pixel_threshold])
 
         return masks
 

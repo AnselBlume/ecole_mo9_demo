@@ -129,10 +129,11 @@ class Controller:
             filtered_crop_parts = []
             for i, crop in enumerate(part_crops):
                 if crop.size[0] == 0 or crop.size[1] == 0:
-                    logger.warning(f'Part crop {i} has a zero-dimension; removing')
-                    continue
+                    logger.warning(f'Part crop {i} has a zero-dimension; adding None to part_crops instead of crop')
+                    filtered_crop_parts.append(None)
 
-                filtered_crop_parts.append(crop)
+                else:
+                    filtered_crop_parts.append(crop)
 
             ret_dict['part_crops'] = filtered_crop_parts
 
