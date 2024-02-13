@@ -69,13 +69,13 @@ def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT
 ########
 # CLIP #
 ########
-import clip
-from clip.model import CLIP
-from torchvision.transforms import Compose
+from transformers import CLIPModel, CLIPProcessor
 
-def build_clip(model_name: str = 'ViT-L/14', device: str = 'cuda') -> tuple[CLIP, Compose]:
-    model, preprocess = clip.load(model_name, device=device)
-    return model, preprocess
+def build_clip(model_name: str = 'openai/clip-vit-large-patch14', device: str = 'cuda') -> tuple[CLIPModel, CLIPProcessor]:
+    model = CLIPModel.from_pretrained(model_name).to(device)
+    processor = CLIPProcessor.from_pretrained(model_name)
+
+    return model, processor
 
 #########################
 # Attribute Classifiers #
@@ -84,9 +84,9 @@ from predictors.trained_attrs import TrainedCLIPAttributePredictor
 from predictors.clip_features import CLIPFeatureExtractor
 from predictors.zero_shot_attrs import CLIPAttributePredictor
 
-def build_trained_attr_predictor(clip_model: CLIP, preprocess: Compose, device: str = 'cuda'):
-    feature_extractor = CLIPFeatureExtractor(clip_model, preprocess)
+def build_trained_attr_predictor(clip_model: CLIPModel, processor: CLIPProcessor, device: str = 'cuda'):
+    feature_extractor = CLIPFeatureExtractor(clip_model, processor)
     return TrainedCLIPAttributePredictor(feature_extractor, device=device)
 
-def build_zero_shot_attr_predictor(clip_model: CLIP, preprocess: Compose, device: str = 'cuda'):
-    return CLIPAttributePredictor(clip_model, preprocess)
+def build_zero_shot_attr_predictor(clip_model: CLIPModel, processor: CLIPProcessor):
+    return CLIPAttributePredictor(clip_model, processor)

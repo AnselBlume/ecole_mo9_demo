@@ -1,15 +1,15 @@
 import clip
-from clip.model import CLIP
 from PIL import Image
 import torch.nn as nn
 from torchvision.transforms import Compose
+from transformers import CLIPModel, CLIPProcessor
 
 class CLIPFeatureExtractor(nn.Module):
-    def __init__(self, model: CLIP, preprocess: Compose):
+    def __init__(self, model: CLIPModel, processor: CLIPProcessor):
         super().__init__()
 
-        self.model = model.eval()
-        self.preprocess = preprocess
+        self.model: CLIPModel = model.eval()
+        self.processor = processor
 
     def forward(self, *, image: Image = None, texts: list[str] = None):
         '''
@@ -22,16 +22,20 @@ class CLIPFeatureExtractor(nn.Module):
         '''
         assert image is not None or texts is not None, 'At least one of image or texts must be provided'
 
+        # Prepare inputs
         ret_vals = []
+        inputs = self.processor(image=image, text=texts, return_tensors='pt', truncation=True, padding=True)
 
+        for k, v in inputs.items():
+            inputs[k] = v.to(self.model.device)
+
+        # Generate features
         if image is not None:
-            image_input = self.preprocess(image).unsqueeze(0).to(self.device)
-            image_feats = self.model.encode_image(image_input)
+            image_feats = self.model.get_image_features(inputs['pixel_values'])
             ret_vals.append(image_feats)
 
         if texts is not None:
-            text_input = clip.tokenize(texts).to(self.device)
-            text_feats = self.model.encode_text(text_input)
+            text_feats = self.model.get_text_features(inputs['input_ids'], inputs['attention_mask'])
             ret_vals.append(text_feats)
 
         if len(ret_vals) == 1:
