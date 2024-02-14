@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import os
+import random 
 import os.path as osp
 import argparse
 from vaw_dataset import VAW 
@@ -38,57 +39,57 @@ def eval_classifier(classifier,dataloader,args):
     with torch.no_grad():
         for batch in tqdm(dataloader):
             #batch_size,_ = batch.size()
-            total_num = 128*620
 
             image = batch["image"].squeeze(1).to(args.device)
             image = image/image.norm(dim=1,keepdim=True)
+        
             positive = batch["positive"].to(args.device)
+            bs, _ = positive.size()
             # we currently do not consider negative attributes
             negative = batch["negative"].to(args.device)
             # labels = torch.cat([positive, negative], dim=0)
-            no_label = batch["unknown"]
+            no_label = batch["unknown"].to(device=args.device,dtype=torch.bool)
             #total_no_label = torch.count_nonzero(no_label)
-            actual_labels = torch.numel(no_label)-torch.count_nonzero(no_label)
+            actual_labels = torch.numel(positive)-torch.count_nonzero(no_label)
             #TODO: Compute loss without unknown labels
             labels = positive
             pred_output = []
             for classifier in classifiers:
                 product = classifier(image)
-                proudct = product/classifier.weight.data.norm(dim=1,keepdim=True)
+                product = product/classifier.weight.data.norm(dim=1,keepdim=True)
                 pred_output.append(product)
             preds =  torch.cat([p for p in pred_output], dim=1)
             # weight here is used to incorporate with negative attributes which is a crucial annotation
-            loss = F.binary_cross_entropy_with_logits(preds, labels.float(),reduce=None)
-            actual_loss = torch.divide(loss.sum(),actual_labels)
-            total_loss.append(actual_labels.item())
+            total_count= torch.count_nonzero(no_label)
+            if total_count>0:
+                loss = F.binary_cross_entropy_with_logits(preds[no_label], labels.float()[no_label],reduction='mean')
+                #actual_loss = torch.divide(loss.sum(),(actual_labels+1e-10))
+                total_loss.append(loss.item())
     return np.mean(total_loss)
 def construct_weights(pos_labels,neg_labels,no_labels,neg_samples_per_att,pos_samples_per_att,args,size):
     weights = torch.ones((size,620)).to(torch.float)
     # need to count total number of positive and negatives 
-    total_count = 0
     for i,p in enumerate(pos_labels):
         pos_entry = pos_labels[i,:]
         
         neg_entry = neg_labels[i,:]
         no_entry = no_labels[i,:]
         #print(torch.any(pos_labels[i,:]),torch.any(neg_entry),torch.any(no_labels[i,:]))
-        if torch.any(pos_labels[i,:]):
-            ones = torch.where(pos_entry>0)
+        if torch.count_nonzero(pos_labels[i,:])>0:
+            ones = torch.nonzero(pos_entry)
 
             for pos in ones:
-                total_count+=1 
                 weights[i,pos] = pos_samples_per_att[pos].to(torch.float)
-        if torch.any(neg_labels[i,:]):
-            ones = torch.where(neg_entry>0)
+        if torch.count_nonzero(neg_labels[i,:])>0:
+            ones = torch.nonzero(neg_entry)
             for negs in ones:
-                total_count+=1 
                 weights[i,negs] = neg_samples_per_att[negs].to(torch.float)
-        if torch.any(no_labels[i,:]):
-            ones = torch.where(no_labels[i,:]>0)
+        if torch.count_nonzero(no_labels[i,:])>0:
+            ones = torch.nonzero(no_labels[i,:])
             for u in ones:
                 weights[i,u] = 0
 
-    return weights,total_count 
+    return weights 
 
 def train_classifier(classifiers, train_dataloader, neg_samples_per_att,pos_samples_per_att, args,val_dataloader):
     optim = opt.Adam(classifiers.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -101,32 +102,35 @@ def train_classifier(classifiers, train_dataloader, neg_samples_per_att,pos_samp
             image = batch["image"].squeeze(1).to(args.device)
             image = image/image.norm(dim=1,keepdim=True)
             positive = batch["positive"]
+            #print(torch.numel(positive),positive.size()[0]*positive.size()[1])
             # we currently do not consider negative attributes
             negative = batch["negative"]
             # labels = torch.cat([positive, negative], dim=0)
-            no_label = batch["unknown"] 
+            no_label = batch["unknown"].to(device=args.device,dtype=torch.bool) 
             labels = positive.to(args.device)
             # we get the union of the positive and negative attributes and they should be weighted more heavily compared to other attributes
-            weight,total_count = construct_weights(positive,negative,no_label,neg_samples_per_att,pos_samples_per_att,args,image.shape[0])
+            bs = positive.size()[0]
+
             # positive = positive.to(args.device)
             # negative = negative.to(args.device)
-            weight = weight.to(args.device)
+            #weights = weights.to(args.device)
             # weight[positive] *= args.weight_for_positive
             # weight[negative] *= args.weight_for_negative
             optim.zero_grad()
             pred_output = []
             for classifier in classifiers:
                 product = classifier(image)
-                proudct = product/classifier.weight.data.norm(dim=1,keepdim=True)
+                product = product/classifier.weight.data.norm(dim=1,keepdim=True)
                 pred_output.append(product)
             preds =  torch.cat([p for p in pred_output], dim=1)
             # weight here is used to incorporate with negative attributes which is a crucial annotation
-
-            loss = F.binary_cross_entropy_with_logits(preds, labels.float(),reduction='none',weight=weight)
-            average_over_nonzero = torch.divide(loss.sum(),total_count)
-            average_over_nonzero.backward()
-            optim.step()
-            average_loss.append(average_over_nonzero.item())
+            total_count= torch.count_nonzero(no_label)
+            if total_count>0:
+                loss = F.binary_cross_entropy_with_logits(preds[no_label], labels.float()[no_label],reduction='mean')
+                #average_over_nonzero = torch.divide(loss.sum(),(total_count))
+                #average_over_nonzero.backward()
+                optim.step()
+                average_loss.append(loss.item())
         epoch_loss =np.mean(average_loss)
  
         val_loss  = eval_classifier(classifiers,val_dataloader,args)
@@ -150,7 +154,7 @@ def train_classifier(classifiers, train_dataloader, neg_samples_per_att,pos_samp
 
         if loss_did_not_decrease>args.stop_after:
             # stop if loss is not decreasing 
-            break 
+            continue  
 
     return classifiers
 
@@ -164,8 +168,8 @@ if __name__ == '__main__':
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--lr", type=float, default=0.001)
-    parser.add_argument("--weight_decay", type=float, default=0.0)
-    parser.add_argument("--n_epochs", type=int, default=200)
+    parser.add_argument("--weight_decay", type=float, default=0.0001)
+    parser.add_argument("--n_epochs", type=int, default=100)
     parser.add_argument("--enc_dim", type=int, default=768)
     parser.add_argument("--backbone", type=str, default="ViT-L/14")
     parser.add_argument("--save_path", type=str, default="classifiers_fix_loss")
@@ -177,7 +181,9 @@ if __name__ == '__main__':
     parser.add_argument("--data_dir", type=str, default='/scratch/bcgp/datasets')
 
     args = parser.parse_args()
-
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     wandb.init(project=f'attribute_training', config=args)
     train_dataset = VAW(index_to_attribute=os.path.join(args.data_dir,'visual_genome/vaw_dataset/data/index_to_attribute.json'),
                     attribute_to_index=os.path.join(args.data_dir,'visual_genome/vaw_dataset/data/attribute_index.json'),

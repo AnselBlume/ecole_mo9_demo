@@ -36,18 +36,18 @@ class VAW(Dataset):
             return {'image':features,'positive':positive_labels,'negative':negative_labels,"unknown":no_attribute_labels}
         else:
             # get index of class 
-            return {'image':features,'label':positive_labels[self.class_index]}
+            return {'image':features,'positive':positive_labels[self.class_index],'negative':negative_labels[self.class_index],'unknown':no_attribute_labels[self.class_index]}
     def construct_labels(self,positive_attributes,negative_attributes):
         positive_labels = np.zeros(620).astype(int)
         negative_labels = np.zeros(620).astype(int)
-        no_attribute_labels = np.zeros(620).astype(int)
+        no_attribute_labels = np.ones(620).astype(int)
         for p in positive_attributes:
             positive_labels[self.attribute_to_id[p]] = 1 
         for n in negative_attributes:
             negative_labels[self.attribute_to_id[n]] =1 
         for i in range(620):
             if positive_labels[i] !=1 and negative_labels[i]!=1:
-                no_attribute_labels[i] = 1 
+                no_attribute_labels[i] = 0 
         #pnegative_labels = np.ones(620).astype(int)-positive_labels
         return positive_labels,negative_labels,no_attribute_labels
     def open_file(self,filename,use_json=True):
