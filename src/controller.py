@@ -3,7 +3,7 @@ if __name__ == '__main__': # TODO Delete me after debugging
     import sys
     sys.path.append('/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src')
 
-from score import Scorer
+from score import AttributeScorer
 from model.concept import ConceptDB, Concept
 from segment import Segmenter
 from localize import Localizer, bbox_from_mask
@@ -13,24 +13,29 @@ import inflect
 from predictors import build_sam, build_desco, Sam, GLIPDemo
 import torch
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
-from llm import LLMClient, retrieve_parts
+from llm import LLMClient, retrieve_parts, retrieve_attributes
+from score import AttributeScorer
+from predictors import CLIPAttributePredictor
+import torch.nn.functional as F
+from utils import to_device
 
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
 
 class Controller:
-    def __init__(self, sam: Sam, desco: GLIPDemo, concept_db: ConceptDB):
+    def __init__(self, sam: Sam, desco: GLIPDemo, zs_predictor: CLIPAttributePredictor, concept_db: ConceptDB):
         self.concepts = concept_db
 
-        self.scorer = Scorer()
         self.segmenter = Segmenter(sam)
         self.localizer = Localizer(sam, desco)
+        self.attr_scorer = AttributeScorer(zs_predictor)
+        self.llm_client = LLMClient()
 
         self.p = inflect.engine()
 
-    ##############
-    # Prediction #
-    ##############
+    ################
+    # Segmentation #
+    ################
     def predict_image(self, image: Image):
         pass
 
@@ -176,6 +181,63 @@ class Controller:
             prompt += f'{self._get_article(component_part)}{component_part}'
 
         return prompt
+
+    ##############
+    # Prediction #
+    ##############
+    def predict(self,
+        image: Image,
+        concept_name: str = '',
+        concept_parts: list[str] = [],
+        remove_background: bool = True,
+        zs_attrs: list[str] = []
+    ) -> dict:
+        segmentations = self.localize_and_segment(
+            image=image,
+            concept_name=concept_name,
+            concept_parts=concept_parts,
+            remove_background=remove_background,
+            return_crops=True
+        )
+
+        region_crops = segmentations['part_crops']
+        if region_crops == []:
+            region_crops = [image]
+
+        # Compute zero-shot scores
+        part_zs_scores = to_device(self.zs_attr_match_score(region_crops, zs_attrs), 'cpu')
+        full_zs_scores = to_device(self.zs_attr_match_score([image], zs_attrs), 'cpu')
+
+        ret_dict = {
+            'segmentations': segmentations,
+            'scores': {
+                'part_zs_scores': part_zs_scores,
+                'full_zs_scores': full_zs_scores
+            }
+        }
+
+        return ret_dict
+
+    ###########
+    # Scoring #
+    ###########
+    def zs_attr_match_score(self, regions: list[Image], zs_attrs: list[str]):
+        results = self.attr_scorer.score_regions(regions, zs_attrs)
+
+        raw_scores = results['zs_scores_per_region_raw'] # (n_regions, n_texts)
+        weighted_scores = results['zs_scores_per_region_weighted'] # (n_regions, n_texts)
+
+        attr_probs_per_region = weighted_scores.permute(1, 0).softmax(dim=1) # (n_texts, n_regions)
+        match_score = weighted_scores.sum().item()
+
+        ret_dict = {
+            'raw_scores': raw_scores,
+            'weighted_scores': weighted_scores,
+            'attr_probs_per_region': attr_probs_per_region,
+            'match_score': match_score
+        }
+
+        return ret_dict
 
     ###################
     # Concept Removal #

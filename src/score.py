@@ -5,9 +5,8 @@ from typing import Iterable, Union, Callable
 from predictors.zero_shot_attrs import CLIPAttributePredictor
 
 class AttributeScorer:
-    def __init__(self, zs_predictor: CLIPAttributePredictor, zs_detection_threshold: float = .5):
+    def __init__(self, zs_predictor: CLIPAttributePredictor):
         self.zs_predictor = zs_predictor
-        self.zs_detection_threshold = zs_detection_threshold
 
     def _apply_weights(
         self,
@@ -24,13 +23,13 @@ class AttributeScorer:
         if img_weights is None:
             img_weights = torch.full((scores.shape[0],), fill_value=1/scores.shape[0])
 
-        scores = scores * img_weights[:, None] # (n_imgs, n_attrs)
+        scores = scores * img_weights[:, None].to(scores.device) # (n_imgs, n_attrs)
 
         # Weights scores by attribute
         if attr_weights is None:
             attr_weights = torch.full((scores.shape[1],), fill_value=1/scores.shape[1])
 
-        scores = scores * attr_weights[None, :] # (n_imgs, n_attrs)
+        scores = scores * attr_weights[None, :].to(scores.device) # (n_imgs, n_attrs)
 
         return scores
 
@@ -60,14 +59,13 @@ class AttributeScorer:
         ret_dict = {}
 
         # Zero-shot scores
-        raw_zs_scores = self.zs_scores(regions, zs_texts, img_weights=region_weights, text_weights=zs_text_weights) # (n_regions, n_texts)
+        raw_zs_scores = self.zs_scores(regions, zs_texts) # (n_regions, n_texts)
         ret_dict['zs_scores_per_region_raw'] = raw_zs_scores
 
         weighted_zs_scores = self._apply_weights(raw_zs_scores, img_weights=region_weights, attr_weights=zs_text_weights) # (n_regions, n_texts)
         ret_dict['zs_scores_per_region_weighted'] = weighted_zs_scores * zs_weight
 
         return ret_dict
-
 
 class ConceptScorer:
     def __init__(self):
