@@ -12,6 +12,7 @@ import PIL
 from llm.attr_retrieval import retrieve_attributes
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from vis_utils import image_from_masks, show
+import math
 
 # %%
 if __name__ == '__main__':
@@ -56,9 +57,11 @@ if __name__ == '__main__':
     print('Image regions:')
     to_pil_image(image_from_masks(part_masks, superimpose_on_image=img_t)).show()
 
-    mask_imgs = []
+    heatmap_imgs = []
+    maximizing_region_imgs = []
     for i, attr in enumerate(zs_attrs):
         part_scores = attr_scores[i] # (n_regions,)
+        maximizing_region = part_scores.argmax().item()
 
         # Heatmap colors from probabilities
         colors = colormap(part_scores)[:,:3] # (n_regions, 3)
@@ -68,11 +71,15 @@ if __name__ == '__main__':
         ]
 
         # Draw masks with colors on image
-        mask_img = draw_segmentation_masks(img_t, masks=part_masks, colors=colors)
-        mask_imgs.append(mask_img)
-        # mask_img = to_pil_image(mask_img)
-        # mask_img.show()
+        heatmap_img = draw_segmentation_masks(img_t, masks=part_masks, colors=colors)
+        heatmap_img.append(heatmap_img)
 
-    show(mask_imgs, subplot_titles=zs_attrs, nrows=2)
+        # Draw mask of maximizing region
+        maximizing_region_img = image_from_masks(part_masks[maximizing_region], superimpose_on_image=img_t)
+        maximizing_region_imgs.append(maximizing_region_img)
+
+    nrows = math.ceil(len(heatmap_imgs) / 3)
+    show(heatmap_imgs, subplot_titles=zs_attrs, nrows=nrows, title='Region Heatmaps')
+    show(maximizing_region_imgs, subplot_titles=zs_attrs, nrows=nrows, title='Maximizing regions')
 
 # %%
