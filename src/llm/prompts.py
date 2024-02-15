@@ -62,8 +62,15 @@ You should just say
 These attributes should be such that they could be a caption for a part of the image. For example, saying for a bus
 - school children nearby or inside
 
-would not be a reasonable caption for the part of the image showing the children. Instead, you would just say:
+would not be a reasonable caption for the part of the image showing the children. Instead, say:
 - school children
+
+In the same way, don't say for a bowl
+- typically made of ceramic or glass
+
+Instead, just list the attributes separately as
+- ceramic
+- glass
 
 List the distinctive visual features necessary to identify the following object in a photograph:
 '''
