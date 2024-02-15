@@ -6,9 +6,9 @@ from torchvision.transforms.functional import to_pil_image
 from torchvision.utils import draw_segmentation_masks
 from typing import Union, List, Optional
 from PIL.Image import Image
-import skimage 
+import skimage
 import cv2
-from pycocotools import mask as mask_utils 
+from pycocotools import mask as mask_utils
 
 def show(
     imgs: Union[torch.Tensor, List[torch.Tensor], np.ndarray, List[np.ndarray], Image, List[Image]],
@@ -23,7 +23,6 @@ def show(
 
     ncols = int(np.ceil(len(imgs) / nrows))
     fig, axs = plt.subplots(nrows=nrows, ncols=ncols, squeeze=False, **fig_kwargs)
-    fig.tight_layout()
 
     for i, ax in enumerate(axs.flatten()):
         if i < len(imgs):
@@ -45,6 +44,8 @@ def show(
 
     if title:
         fig.suptitle(title, y=title_y)
+
+    fig.tight_layout()
 
     return fig, axs
 
@@ -123,27 +124,27 @@ def masks_to_boxes(masks:torch.Tensor):
     bounding_boxes[0] = torch.min(x)
     bounding_boxes[1] = torch.min(y)
     bounding_boxes[2] = torch.max(x)
-    bounding_boxes[3] = torch.max(y)       
+    bounding_boxes[3] = torch.max(y)
 
     return bounding_boxes
 
 def mask_and_crop_image(image_file:str,mask:List):
     """
-    Mask out part of image not in polygon and crop to bounding box created from mask. 
+    Mask out part of image not in polygon and crop to bounding box created from mask.
 
     Args:
         image_file(str): location of image to process
-        mask(List): part of image to segment. Can either be a polygon (like in VAW) or RLE (output from SAM) 
+        mask(List): part of image to segment. Can either be a polygon (like in VAW) or RLE (output from SAM)
     """
     image = cv2.imread(image_file)
-    w,h,_ = image.shape 
+    w,h,_ = image.shape
     if type(mask) == list:
         segment = skimage.draw.polygon2mask((h,w),mask)
     else:
         segment = mask_utils.decode(mask)
     if segment.shape[0] == h:
-        # need to transpose for cv2  
-        segment = segment.T 
+        # need to transpose for cv2
+        segment = segment.T
     segmented_image = cv2.bitwise_and(image,image,mask=segment.astype(np.uint8))
     segmented_box = masks_to_boxes(torch.from_numpy(segment).unsqueeze(0))
     x1,y1,x2,y2 = segmented_box
