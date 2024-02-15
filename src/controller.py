@@ -4,7 +4,7 @@ if __name__ == '__main__': # TODO Delete me after debugging
     sys.path.append('/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src')
 
 from score import AttributeScorer
-from model.concept import ConceptDB, Concept
+from model.concept import ConceptKB, Concept
 from segment import Segmenter
 from localize import Localizer, bbox_from_mask
 from PIL.Image import Image
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
 
 class Controller:
-    def __init__(self, sam: Sam, desco: GLIPDemo, zs_predictor: CLIPAttributePredictor, concept_db: ConceptDB):
+    def __init__(self, sam: Sam, desco: GLIPDemo, zs_predictor: CLIPAttributePredictor, concept_db: ConceptKB):
         self.concepts = concept_db
 
         self.segmenter = Segmenter(sam)
@@ -296,7 +296,7 @@ if __name__ == '__main__':
     sam = build_sam()
     desco = build_desco()
     llm_client = LLMClient()
-    controller = Controller(sam, desco, ConceptDB())
+    controller = Controller(sam, desco, ConceptKB())
 
     # %% Path
     in_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/graduate_descent'

@@ -91,7 +91,7 @@ class ConceptPredictor(nn.Module):
         )
 
 @dataclass
-class ConceptDB:
+class ConceptKB:
     concepts: dict[str, Concept] = field(
         default_factory=dict,
         metadata={'help': 'Dictionary of concepts. Keys are concept names, values are concepts.'}

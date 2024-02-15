@@ -1,5 +1,5 @@
 import torch
-from model.concept import ConceptDB, Concept
+from model.concept import ConceptKB, Concept
 from PIL.Image import Image
 from typing import Iterable, Union, Callable
 from predictors.zero_shot_attrs import CLIPAttributePredictor
