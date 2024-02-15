@@ -97,6 +97,14 @@ if __name__ == '__main__':
         for k, v in class_to_zs_attrs.items()
     }
 
+    class_to_zs_attrs = { # Encode class name to disambiguate attribute/class collisions
+        class_name : [
+            f'{attr} of {controller._get_article(class_name)}{class_name}'
+            for attr in attrs
+        ]
+        for class_name, attrs in class_to_zs_attrs.items()
+    }
+
     all_zs_attrs = list(chain.from_iterable(class_to_zs_attrs.values())) # list[str]
 
     # Generate results
@@ -136,24 +144,21 @@ if __name__ == '__main__':
         regions_img = image_from_masks(part_masks, combine_as_binary_mask=len(part_masks) == 0, superimpose_on_image=img_t)
 
         # Plot scores
-        fig, axs = plt.subplots(nrows=2, ncols=3)
+        fig, axs = plt.subplots(nrows=2, ncols=2)
 
-        axs[0][0].imshow(img)
-        axs[0][0].set_title('Original Image')
+        axs[0][0].imshow(to_pil_image(regions_img))
+        # Set title to bottom of plot
+        axs[0][0].set_title('Regions')
         axs[0][0].axis('off')
-
-        axs[0][1].imshow(to_pil_image(regions_img))
-        axs[0][1].set_title('Regions')
-        axs[0][1].axis('off')
 
         y_max = axs[0][1].get_ylim()[1]
         class_attrs = class_to_zs_attrs[class_name]
-        axs[0][2].set_title('Class Attributes')
+        axs[0][1].set_title('Class Attributes')
         attr_str = '\n'.join([f'- {attr}' for attr in class_attrs])
-        axs[0][2].text(0, y_max - .1*y_max, attr_str, fontsize=8, verticalalignment='top')
+        axs[0][1].text(0, y_max - .1*y_max, attr_str, fontsize=8, verticalalignment='top')
         # for i, attr in enumerate(class_attrs):
         #     axs[0][1].text(0, y_max - y_max / len(class_attrs) * i, f'- {attr}, fontsize=8, verticalalignment='top')
-        axs[0][2].axis('off')
+        axs[0][1].axis('off')
 
         axs[1][0].barh(all_classes, part_class_scores)
         axs[1][0].set_title('Part scores')
