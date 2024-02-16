@@ -2,7 +2,7 @@ import os
 import torch
 import torch.nn.functional as F
 from controller import Controller
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from model.concept import ConceptKB
 from model.concept_predictor import ConceptPredictorOutput
 from model.features import ImageFeatures
@@ -32,6 +32,9 @@ class ConceptKBTrainer:
         self.feature_extractor = feature_extractor
         self.run = wandb_run
 
+    def get_dataloader(self, dataset: Dataset, is_train: bool):
+        return DataLoader(dataset, batch_size=1, shuffle=is_train, collate_fn=list_collate, num_workers=3, pin_memory=True)
+
     def train(
         self,
         train_ds: Union[ImageDataset, PresegmentedDataset],
@@ -49,8 +52,8 @@ class ConceptKBTrainer:
         is_presegmented = isinstance(train_ds, PresegmentedDataset)
         data_key = 'segmentations' if is_presegmented else 'image'
 
-        train_dl = DataLoader(train_ds, batch_size=1, shuffle=True, collate_fn=list_collate)
-        val_dl = DataLoader(val_ds, batch_size=1, shuffle=False, collate_fn=list_collate)
+        train_dl = self.get_dataloader(train_ds, is_train=True)
+        val_dl = self.get_dataloader(val_ds, is_train=False)
         optimizer = torch.optim.Adam(self.concept_kb.parameters(), lr=lr)
 
         for epoch in range(1, n_epochs + 1):
@@ -58,8 +61,8 @@ class ConceptKBTrainer:
             self.concept_kb.train()
 
             for i, batch in enumerate(tqdm(train_dl, desc=f'Epoch {epoch}/{n_epochs}'), start=1):
-                image_data, label = batch[data_key], batch['label']
-                outputs = self.forward_pass(image_data[0], self.label_to_index[label[0]], backward_every_n_concepts=backward_every_n_concepts)
+                image_data, text_label = batch[data_key], batch['label']
+                outputs = self.forward_pass(image_data[0], text_label[0], backward_every_n_concepts=backward_every_n_concepts)
 
                 self.log({'train_loss': outputs['loss'], 'epoch': epoch})
 
@@ -90,15 +93,15 @@ class ConceptKBTrainer:
         data_key = 'segmentations' if isinstance(val_dl.dataset, PresegmentedDataset) else 'image'
 
         for batch in tqdm(val_dl, desc='Validation'):
-            image, label = batch[data_key], batch['label']
-            outputs = self.forward_pass(image[0], self.label_to_index[label[0]], do_backward=False)
+            image, text_label = batch[data_key], batch['label']
+            outputs = self.forward_pass(image[0], text_label[0], do_backward=False)
 
             total_loss += outputs['loss'] # Store loss
 
             # Compute predictions and accuracy
             scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
             pred_ind = scores.argmax(dim=0, keepdim=True) # (1,) IntTensor
-            true_ind = self.label_to_index[label[0]].int().unsqueeze(0) # (1,)
+            true_ind = self.label_to_index[text_label[0]].int().unsqueeze(0) # (1,)
 
             acc(pred_ind, true_ind)
 
@@ -117,7 +120,7 @@ class ConceptKBTrainer:
     def forward_pass(
         self,
         image_data: Union[Image, dict],
-        label: str,
+        text_label: str,
         do_backward: bool = True,
         backward_every_n_concepts: int = None
     ):
@@ -145,15 +148,22 @@ class ConceptKBTrainer:
         total_loss = 0
         curr_loss = 0
         outputs = []
+        visual_features = None # Cache to avoid recomputation
 
         for i, concept in enumerate(self.concept_kb, start=1):
             zs_attrs = [attr.query for attr in concept.zs_attributes]
 
             with torch.no_grad():
-                features: ImageFeatures = self.feature_extractor(image, region_crops, zs_attrs)
+                features: ImageFeatures = self.feature_extractor(image, region_crops, zs_attrs, cached_visual_features=visual_features)
+
+            if visual_features is None:
+                visual_features = torch.cat([features.image_features, features.region_features], dim=0)
 
             output: ConceptPredictorOutput = concept.predictor(features)
-            concept_loss = F.binary_cross_entropy_with_logits(output.cum_score, label.to(output.cum_score)) / len(self.concept_kb)
+            score = output.cum_score
+
+            binary_label = torch.tensor(int(concept.name == text_label), dtype=score.dtype, device=score.device)
+            concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(self.concept_kb)
 
             curr_loss += concept_loss
             total_loss += concept_loss.item()
