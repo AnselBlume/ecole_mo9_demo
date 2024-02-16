@@ -2,6 +2,7 @@
 import os
 from typing import Iterable
 import numpy as np
+from kb.build import label_from_path
 
 import logging
 logger = logging.getLogger(__name__)
@@ -11,6 +12,17 @@ def train_val_test_split(
     split: tuple[float,float,float] = (0.6,0.2,0.2),
     seed: int = 42
 ) -> tuple[list,list,list]:
+    '''
+        Splits an iterable into train, validation, and test sets.
+
+        Arguments:
+            iterable (Iterable): Iterable to split.
+            split (tuple[float,float,float]): Proportions for train, validation, and test sets.
+            seed (int): Random seed for reproducibility.
+
+        Returns: 3-tuple of lists, each containing a split of the iterable. Lists are returned in the order
+            (train, validation, test).
+    '''
     rng = np.random.default_rng(seed)
     assert np.allclose(sum(split), 1), 'Split values must sum to 1'
 
@@ -31,16 +43,28 @@ def train_val_test_split(
 
     return train, val, test
 
-def label_from_path(path):
-    return os.path.basename(path).split('_')[0].lower()
-
 def split_from_directory(
     img_dir: str,
     split: tuple[float,float,float] = (0.6,0.2,0.2),
     exts: list[str] = ['.jpg', '.png'],
     stratified = True,
+    label_from_path=label_from_path,
     seed: int = 42
 ) -> tuple[list,list,list]:
+    '''
+        Splits images in a directory into train, validation, and test sets.
+
+        Arguments:
+            img_dir (str): Directory containing images.
+            split (tuple[float,float,float]): Proportions for train, validation, and test sets.
+            exts (list[str]): List of file extensions to consider.
+            stratified (bool): Whether to stratify the split by label.
+            label_from_path (Callable): Function to extract label from path.
+            seed (int): Random seed for reproducibility.
+
+        Returns: Tuple of 2-tuples, each containing a list of paths and a list of labels. 2-tuples are returned
+            in the order (train, validation, test).
+    '''
     paths = sorted([
         os.path.join(img_dir, f)
         for f in os.listdir(img_dir)

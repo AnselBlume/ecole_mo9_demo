@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from dataclasses import dataclass, field
+from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ class FeatureGroup(nn.Module):
         use_equal_weights: bool = True,
         weight_by_probs: bool = False,
         copy_input_features: bool = True,
-        feature_metadata: list[FeatureMetadata] = None
+        feature_metadata: list[Optional[FeatureMetadata]] = []
     ):
         '''
             indices (Optional[list[int]]): Indicates the specific indices to use from the input feature vector.
@@ -52,8 +53,8 @@ class FeatureGroup(nn.Module):
         else:
             self.feature_weights = nn.Parameter(torch.ones(self.n_features) / self.n_features)
 
-        assert feature_metadata is None or len(feature_metadata) == self.n_features
-        self.feature_metadata = feature_metadata
+        if not feature_metadata:
+            feature_metadata = [None for _ in range(self.n_features)]
 
     @property
     def n_features(self):
@@ -63,12 +64,13 @@ class FeatureGroup(nn.Module):
         self.indices = list(range(self.start_ind, self.end_ind))
         self.start_ind, self.end_ind = None, None
 
-    def add_index(self, index: int, weight: float = None):
+    def add_index(self, index: int, weight: float = None, metadata: FeatureMetadata = None):
         if not self.indices: # Range-based
             logger.info('Feature group is range-based; converting to index-based.')
             self._convert_to_index_based()
 
         self.indices.append(index)
+        self.feature_metadata.append(metadata)
 
         if not self.use_equal_weights:
             if weight is None:
@@ -88,6 +90,7 @@ class FeatureGroup(nn.Module):
 
         removal_ind = self.indices.index(index)
         self.indices = self.indices[:removal_ind] + self.indices[removal_ind+1:]
+        self.feature_metadata = self.feature_metadata[:removal_ind] + self.feature_metadata[removal_ind+1:]
 
         if not self.use_equal_weights:
             self.feature_weights = nn.Parameter(
