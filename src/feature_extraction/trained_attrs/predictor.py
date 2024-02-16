@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from PIL.Image import Image
 from typing import Optional
-from feature_extraction import CLIPFeatureExtractor
+from feature_extraction.clip_features import CLIPFeatureExtractor
 import torch.linalg as LA
 
 from . import DEFAULT_CKPT_PATH, COLOR_SHAPE_MATERIAL_SUBSET, INDEX_TO_ATTR

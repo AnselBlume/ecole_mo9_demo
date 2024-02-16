@@ -1,7 +1,6 @@
 # %%
 import json
 import os
-from .predictor import TrainedCLIPAttributePredictor
 
 DEFAULT_CKPT_PATH = os.path.join(
     os.path.dirname(__file__),
@@ -24,3 +23,5 @@ with open(subset_index_path, 'r') as f:
     COLOR_SHAPE_MATERIAL_SUBSET = json.load(f)
 
 N_ATTRS_SUBSET = sum(len(v) for v in COLOR_SHAPE_MATERIAL_SUBSET.values())
+
+from .predictor import TrainedCLIPAttributePredictor

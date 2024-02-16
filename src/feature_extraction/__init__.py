@@ -94,6 +94,7 @@ def build_zero_shot_attr_predictor(clip_model: CLIPModel, processor: CLIPProcess
 #####################
 # Feature Extractor #
 #####################
-from feature_extractor import FeatureExtractor
+from .feature_extractor import FeatureExtractor
+
 def build_feature_extractor(model_name: str = 'openai/clip-vit-large-patch14', device: str = 'cuda'):
     return FeatureExtractor(*build_clip(model_name)).to(device)

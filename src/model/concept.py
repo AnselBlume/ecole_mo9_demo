@@ -2,7 +2,7 @@ from __future__ import annotations
 import pickle
 from dataclasses import dataclass, field
 from model.attribute import Attribute
-from concept_predictor import ConceptPredictor
+from .concept_predictor import ConceptPredictor
 from llm import LLMClient, retrieve_attributes
 import logging
 from utils import ArticleDeterminer

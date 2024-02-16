@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from features import ImageFeatures
+from .features import ImageFeatures
 from dataclasses import dataclass
 
 class BatchedPredictor:

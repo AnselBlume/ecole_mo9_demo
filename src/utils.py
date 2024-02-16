@@ -15,7 +15,7 @@ def to_device(d: dict, device: Union[str, torch.device]):
     return d
 
 class ArticleDeterminer:
-    def __init__(self)
+    def __init__(self):
         self.p = inflect.engine()
 
     def determine(self, word: str, space_if_nonempty: bool = True):
