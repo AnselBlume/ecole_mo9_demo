@@ -62,29 +62,29 @@ class ConceptPredictor(nn.Module):
         self.use_ln = use_ln
 
         # Modules
-        self.img_predictor = nn.Sequential([
+        self.img_predictor = nn.Sequential(
             nn.LayerNorm(img_feature_dim) if use_ln else nn.Identity(),
             nn.Linear(img_feature_dim, 1, bias=use_bias)
-        ])
+        )
 
-        self.region_predictor = nn.Sequential([
+        self.region_predictor = nn.Sequential(
             nn.LayerNorm(region_feature_dim) if use_ln else nn.Identity(),
             nn.Linear(region_feature_dim, 1, bias=use_bias)
-        ])
+        )
 
         self.full_img_scale = nn.Parameter(torch.randn(1)) if use_full_img else 0
 
         if n_trained_attrs > 0:
-            self.trained_attr_predictor = nn.Sequential([
+            self.trained_attr_predictor = nn.Sequential(
                 nn.LayerNorm(n_trained_attrs) if use_ln else nn.Identity(),
                 nn.Linear(n_trained_attrs, n_trained_attrs, bias=use_bias)
-            ])
+            )
 
         if n_zs_attrs > 0:
-            self.zs_attr_predictor = nn.Sequential([
+            self.zs_attr_predictor = nn.Sequential(
                 nn.LayerNorm(n_zs_attrs) if use_ln else nn.Identity(),
                 nn.Linear(n_zs_attrs, n_zs_attrs, bias=use_bias)
-            ])
+            )
 
         self.feature_groups = nn.ModuleDict()
 

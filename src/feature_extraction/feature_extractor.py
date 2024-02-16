@@ -21,8 +21,11 @@ class FeatureExtractor(nn.Module):
         img_features = visual_features[:1] # (1, d_img)
         region_features = visual_features[1:] # (n_regions, d_img)
 
-        zs_features = self.clip_feature_extractor(texts=zs_attrs)
-        zs_scores = self.zs_attr_predictor.feature_score(visual_features, zs_features) # (1 + n_regions, n_zs_attrs)
+        if len(zs_attrs):
+            zs_features = self.clip_feature_extractor(texts=zs_attrs)
+            zs_scores = self.zs_attr_predictor.feature_score(visual_features, zs_features) # (1 + n_regions, n_zs_attrs)
+        else:
+            zs_scores = torch.tensor([[]]) # This will be a nop in the indexing below
 
         trained_attr_scores = self.trained_clip_attr_predictor.predict_from_features(visual_features) # (1 + n_regions, n_learned_attrs)
 

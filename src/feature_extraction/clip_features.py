@@ -22,7 +22,7 @@ class CLIPFeatureExtractor(nn.Module):
 
         # Prepare inputs
         ret_vals = []
-        inputs = self.processor(image=images, text=texts, return_tensors='pt', truncation=True, padding=True)
+        inputs = self.processor(images=images, text=texts, return_tensors='pt', truncation=True, padding=True)
 
         for k, v in inputs.items():
             inputs[k] = v.to(self.model.device)
