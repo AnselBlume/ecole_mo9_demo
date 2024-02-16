@@ -72,8 +72,8 @@ if __name__ == '__main__':
     controller = Controller(
         build_sam(),
         build_desco(),
-        build_zero_shot_attr_predictor(*build_clip()),
-        ConceptKB()
+        ConceptKB(),
+        zs_predictor=build_zero_shot_attr_predictor(*build_clip())
     )
 
     # %%

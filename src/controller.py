@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
 
 class Controller:
-    def __init__(self, sam: Sam, desco: GLIPDemo, zs_predictor: CLIPAttributePredictor, concept_db: ConceptKB):
+    def __init__(self, sam: Sam, desco: GLIPDemo, concept_db: ConceptKB, zs_predictor: CLIPAttributePredictor = None):
         self.concepts = concept_db
 
         self.segmenter = Segmenter(sam)
         self.localizer = Localizer(sam, desco)
-        self.attr_scorer = AttributeScorer(zs_predictor)
         self.llm_client = LLMClient()
+        self.attr_scorer = AttributeScorer(zs_predictor)
 
         self.article_det = ArticleDeterminer()
 

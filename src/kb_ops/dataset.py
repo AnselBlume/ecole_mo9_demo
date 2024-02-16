@@ -3,6 +3,7 @@ import pickle
 from torch.utils.data import Dataset
 from PIL import Image
 from controller import Controller
+from tqdm import tqdm
 
 def list_collate(batch):
     keys = batch[0].keys()
@@ -64,12 +65,14 @@ def preprocess_segmentations(img_dir: str, out_dir: str, controller: Controller)
     '''
     os.makedirs(out_dir, exist_ok=True)
 
-    for img_path in os.listdir(img_dir):
+    for img_path in tqdm(os.listdir(img_dir)):
+        in_path = os.path.join(img_dir, img_path)
         out_path = os.path.join(out_dir, img_path)
-        if os.path.exists(out_path):
+
+        if os.path.exists(out_path) or os.path.splitext(out_path)[1] not in ['.jpg', '.png']:
             continue
 
-        img = Image.open(img_path)
+        img = Image.open(in_path).convert('RGB')
         segmentations = controller.localize_and_segment(img)
         segmentations['image_path'] = img_path
 
@@ -77,6 +80,18 @@ def preprocess_segmentations(img_dir: str, out_dir: str, controller: Controller)
             pickle.dump(segmentations, f)
 
 if __name__ == '__main__':
+    from feature_extraction import (
+        build_desco,
+        build_sam,
+    )
+
     in_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data'
     out_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data_segmentations'
 
+    controller = Controller(
+        build_sam(),
+        build_desco(),
+        None
+    )
+
+    preprocess_segmentations(in_dir, out_dir, controller)

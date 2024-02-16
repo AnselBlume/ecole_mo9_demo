@@ -88,7 +88,6 @@ if __name__ == '__main__':
     controller = Controller(
         build_sam(),
         build_desco(),
-        None, # Don't need a ZS attribute predictor in this setup
         concept_kb
     )
 
@@ -100,8 +99,8 @@ if __name__ == '__main__':
         encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,
         img_feature_dim=feature_extractor.clip.config.projection_dim,
         n_trained_attrs=N_ATTRS_SUBSET,
-        use_ln=True,
-        use_full_img=True
+        use_ln=args.predictor.use_ln,
+        use_full_img=args.predictor.use_full_img,
     ), llm_client=controller.llm_client)
     # )) # Uncomment me and common above to test with no ZS attributes to avoid paying Altman
 

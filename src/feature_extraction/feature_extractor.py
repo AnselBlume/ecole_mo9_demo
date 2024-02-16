@@ -6,6 +6,7 @@ from PIL.Image import Image
 from model.features import ImageFeatures
 
 class FeatureExtractor(nn.Module):
+    # TODO batch the zs_attrs by making it a list of lists, flattening, then chunking
     def __init__(self, clip: CLIPModel, processor: CLIPProcessor):
         super().__init__()
 
