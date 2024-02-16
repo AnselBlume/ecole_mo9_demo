@@ -8,7 +8,7 @@
 '''
 import torch
 from segment_anything.modeling import Sam
-from predictors import build_sam_amg
+from feature_extraction import build_sam_amg
 from PIL.Image import Image
 from rembg import remove, new_session
 from torchvision.transforms.functional import crop, to_pil_image, pil_to_tensor
@@ -17,7 +17,6 @@ import numpy as np
 from localize import bbox_from_mask
 import logging
 logger = logging.getLogger(__name__)
-
 
 class Segmenter:
     def __init__(self, sam: Sam, rembg_model_name: str = 'sam_prompt'):
@@ -159,7 +158,7 @@ class Segmenter:
 if __name__ == '__main__':
     import PIL
     from vis_utils import image_from_masks, show
-    from predictors import build_sam, build_desco
+    from feature_extraction import build_sam, build_desco
     from localize import Localizer
     from torchvision.utils import draw_bounding_boxes
     from torchvision.transforms.functional import pil_to_tensor

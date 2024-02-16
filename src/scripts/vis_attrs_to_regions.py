@@ -38,7 +38,7 @@ def get_all_classes(in_dir: str):
 # %%
 if __name__ == '__main__':
     # Import here so DesCo sees the CUDA device change
-    from predictors import (
+    from feature_extraction import (
         build_clip,
         build_zero_shot_attr_predictor,
         build_desco,

@@ -48,7 +48,7 @@ if __name__ == '__main__':
     # Example usage
     import PIL
     import sys
-    from predictors import build_clip
+    from feature_extraction import build_clip
 
     predictor = CLIPAttributePredictor(*build_clip(device='cuda'))
 

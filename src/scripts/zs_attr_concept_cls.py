@@ -62,7 +62,7 @@ def get_class_scores(all_zs_attr_scores: torch.Tensor, class_to_zs_attrs: dict, 
 # %%
 if __name__ == '__main__':
     # Import here so DesCo sees the CUDA device change
-    from predictors import (
+    from feature_extraction import (
         build_clip,
         build_zero_shot_attr_predictor,
         build_desco,

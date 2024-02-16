@@ -2,7 +2,7 @@ import torch
 from model.concept import ConceptKB, Concept
 from PIL.Image import Image
 from typing import Iterable, Union, Callable
-from predictors.zero_shot_attrs import CLIPAttributePredictor
+from feature_extraction.zero_shot_attrs import CLIPAttributePredictor
 
 class AttributeScorer:
     def __init__(self, zs_predictor: CLIPAttributePredictor):

@@ -5,7 +5,7 @@ import torch.nn as nn
 from PIL.Image import Image
 import os
 from typing import Optional
-from predictors.clip_features import CLIPFeatureExtractor
+from feature_extraction.clip_features import CLIPFeatureExtractor
 
 DEFAULT_CKPT_PATH = os.path.join(
     os.path.dirname(__file__),

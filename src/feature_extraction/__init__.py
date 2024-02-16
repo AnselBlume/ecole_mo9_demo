@@ -80,9 +80,9 @@ def build_clip(model_name: str = 'openai/clip-vit-large-patch14', device: str = 
 #########################
 # Attribute Classifiers #
 #########################
-from predictors.trained_attrs import TrainedCLIPAttributePredictor
-from predictors.clip_features import CLIPFeatureExtractor
-from predictors.zero_shot_attrs import CLIPAttributePredictor
+from feature_extraction.trained_attrs import TrainedCLIPAttributePredictor
+from feature_extraction.clip_features import CLIPFeatureExtractor
+from feature_extraction.zero_shot_attrs import CLIPAttributePredictor
 
 def build_trained_attr_predictor(clip_model: CLIPModel, processor: CLIPProcessor, device: str = 'cuda'):
     feature_extractor = CLIPFeatureExtractor(clip_model, processor)

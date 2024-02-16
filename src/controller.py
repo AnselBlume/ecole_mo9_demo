@@ -10,12 +10,12 @@ from localize import Localizer, bbox_from_mask
 from PIL.Image import Image
 import logging, coloredlogs
 import inflect
-from predictors import build_sam, build_desco, Sam, GLIPDemo
+from feature_extraction import build_sam, build_desco, Sam, GLIPDemo
 import torch
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from llm import LLMClient, retrieve_parts, retrieve_attributes
 from score import AttributeScorer
-from predictors import CLIPAttributePredictor
+from feature_extraction import CLIPAttributePredictor
 import torch.nn.functional as F
 from utils import to_device
 

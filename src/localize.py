@@ -9,7 +9,7 @@ from PIL.Image import Image
 from maskrcnn_benchmark.structures.bounding_box import BoxList
 from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
 from segment_anything.modeling import Sam
-from predictors import build_sam_predictor
+from feature_extraction import build_sam_predictor
 from typing import Union
 import logging
 
@@ -204,7 +204,7 @@ if __name__ == '__main__':
     from vis_utils import show, image_from_masks
     from torchvision.utils import draw_bounding_boxes
     from torchvision.transforms.functional import pil_to_tensor
-    from predictors import build_sam_predictor, build_desco
+    from feature_extraction import build_sam_predictor, build_desco
     import coloredlogs
 
     coloredlogs.install(level=logging.INFO, logger=logger)
