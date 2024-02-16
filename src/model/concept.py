@@ -1,13 +1,8 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any
 from model.attribute import Attribute
-from model.weighted_predictor import WeightedPredictor, WeightedPredictorOutput
-import torch.nn as nn
-import numpy as np
-import torch
+from concept_predictor import ConceptPredictor
 from llm import LLMClient, retrieve_attributes
-from model.features import ImageFeatures
 import logging
 from utils import ArticleDeterminer
 
@@ -42,11 +37,6 @@ class Concept:
     )
 
     examples: list = field(default_factory=list, metadata={'help': 'Paths to example images.'})
-
-class ConceptGroup(WeightedPredictor):
-    def __init__(self, concepts: list[Concept], weights: torch.Tensor, name: str = ''):
-        super().__init__(concepts, weights, name)
-
 
 class ConceptKB:
     def __init__(self, concepts: list[Concept] = []):
