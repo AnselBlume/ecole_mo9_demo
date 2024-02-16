@@ -63,6 +63,14 @@ class ConceptKB:
 
         return params
 
+    def train(self):
+        for concept in self.concepts:
+            concept.predictor.train()
+
+    def eval(self):
+        for concept in self.concepts:
+            concept.predictor.eval()
+
     def to(self, device):
         for concept in self.concepts:
             concept.predictor.to(device)
@@ -136,3 +144,6 @@ class ConceptKB:
 
     def __getitem__(self, name: str):
         return self.get_concept(name)
+
+    def __len__(self):
+        return len(self._concepts)

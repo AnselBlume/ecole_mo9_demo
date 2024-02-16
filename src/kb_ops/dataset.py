@@ -1,5 +1,13 @@
+import os
+import pickle
 from torch.utils.data import Dataset
 from PIL import Image
+from controller import Controller
+
+def list_collate(batch):
+    keys = batch[0].keys()
+
+    return {k : [d[k] for d in batch] for k in keys}
 
 class ImageDataset(Dataset):
     def __init__(self, img_paths: list[str], labels: list[str]):
@@ -12,10 +20,63 @@ class ImageDataset(Dataset):
         return len(self.img_paths)
 
     def __getitem__(self, idx):
-        img = Image.open(self.paths[idx])
+        img = Image.open(self.img_paths[idx])
         label = self.labels[idx]
 
         return {
             'image': img,
             'label': label
         }
+
+'''
+    # TODO Make this more space efficient by
+    not saving the crops with return_crops, but generating them in the dataset below
+'''
+class PresegmentedDataset(Dataset):
+    '''
+        Dataset for preprocessed images. img_paths should be the paths to the unprocessed images
+        corresponding to the labels.
+    '''
+    def __init__(self, segmentation_paths: list[str], labels: list[str]):
+        assert len(segmentation_paths) == len(labels)
+        self.data_paths = segmentation_paths
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.img_paths)
+
+    def __getitem__(self, idx):
+        with open(self.img_paths[idx], 'rb') as f:
+            segmentations = pickle.load(f)
+
+        segmentations['image'] = Image.open(segmentations['image_path'])
+        label = self.labels[idx]
+
+        return {
+            'segmentations': segmentations,
+            'label': label
+        }
+
+def preprocess_segmentations(img_dir: str, out_dir: str, controller: Controller):
+    '''
+        Preprocesses segmentations for a directory of images and saves them to a directory.
+        If a segmentation file already exists, it will be skipped.
+    '''
+    os.makedirs(out_dir, exist_ok=True)
+
+    for img_path in os.listdir(img_dir):
+        out_path = os.path.join(out_dir, img_path)
+        if os.path.exists(out_path):
+            continue
+
+        img = Image.open(img_path)
+        segmentations = controller.localize_and_segment(img)
+        segmentations['image_path'] = img_path
+
+        with open(out_path, 'wb') as f:
+            pickle.dump(segmentations, f)
+
+if __name__ == '__main__':
+    in_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data'
+    out_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data_segmentations'
+

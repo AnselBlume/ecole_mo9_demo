@@ -28,7 +28,7 @@ class TrainedCLIPAttributePredictor:
                 att_to_ind = COLOR_SHAPE_MATERIAL_SUBSET[k]
                 for attr, ind in att_to_ind.items():
                     classifier_subset.append(classifiers[ind])
-                    self.attr_names.append(attr)
+                    attr_names.append(attr)
 
             classifiers = classifier_subset
 
@@ -44,10 +44,10 @@ class TrainedCLIPAttributePredictor:
             stacked_bias = torch.cat([classifier.bias for classifier in classifiers]) # (num_cls,)
 
         self.predictor = nn.Linear(stacked_weight.shape[1], stacked_weight.shape[0], bias=True)
-        self.predictor.weight = nn.Parameter(stacked_weight)
-        self.predictor.bias = nn.Parameter(stacked_bias)
+        self.predictor.weight = nn.Parameter(stacked_weight.float()) # Loaded in double, so cast to float
+        self.predictor.bias = nn.Parameter(stacked_bias.float())
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def predict(self, image: Image, apply_sigmoid: bool = True, threshold: Optional[float] = 0.5):
         '''
             Returns a torch.Tensor with shape (1, num_cls) of scores in if threshold is None.
@@ -72,7 +72,7 @@ class TrainedCLIPAttributePredictor:
 
         return preds
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def predict_from_features(self, img_feats: torch.Tensor):
         '''
             img_feats: torch.Tensor of shape (n_imgs, d)

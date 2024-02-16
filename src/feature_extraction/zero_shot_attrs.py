@@ -17,7 +17,7 @@ class CLIPAttributePredictor:
         self.device = next(clip.parameters()).device
         self.processor = processor
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def predict(self, images: Iterable[Image], texts: list[str], apply_sigmoid: bool = False, threshold: Optional[float] = None):
         '''
             Returns a torch.Tensor of matching scores in [0, 1] with shape (1, num_texts) if threshold is None.
@@ -44,7 +44,7 @@ class CLIPAttributePredictor:
 
         return preds
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def feature_score(self, img_feats: torch.Tensor, text_feats: torch.Tensor):
         '''
             Args:

@@ -11,11 +11,12 @@ from controller import Controller
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from kb_ops.train_test_split import split_from_directory
 from vis_utils import image_from_masks
-from kb_ops.dataset import ImageDataset
+from kb_ops.dataset import ImageDataset, PresegmentedDataset
 import logging, coloredlogs
 from feature_extraction.trained_attrs import N_ATTRS_SUBSET
 from kb_ops.train import ConceptKBTrainer
 import wandb
+from collections import Counter
 import jsonargparse as argparse
 
 logger = logging.getLogger(__name__)
@@ -28,9 +29,14 @@ def parse_args(cl_args: list[str] = None):
 
     parser.add_argument('--img_dir', type=str,
                         default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data',
-                        help='Path to directory of images')
+                        help='Path to directory of images or preprocessed segmentations')
+
+    parser.add_argument('--presegmented_dir',
+                        # default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data_presegmented',
+                        help='Path to directory of preprocessed segmentations')
 
     parser.add_argument('--wandb_project', type=str, default='ecole_mo9_demo', help='WandB project name')
+    parser.add_argument('--wandb_dir', default='/shared/nas2/blume5/fa23/ecole', help='WandB log directory')
 
     parser.add_argument('--predictor.use_ln', type=bool, default=True, help='Whether to use LayerNorm')
     parser.add_argument('--predictor.use_full_img', type=bool, default=True, help='Whether to use full image as input')
@@ -45,12 +51,25 @@ def parse_args(cl_args: list[str] = None):
 
     return parser.parse_args(cl_args)
 
+def get_dataset_type(data_dir: str):
+    exts = [os.path.splitext(f)[1] for f in os.listdir(data_dir)]
+    ext_counts = Counter(exts)
+
+    pkl_count = ext_counts.get('.pkl', 0)
+    jpg_count = ext_counts.get('.jpg', 0)
+    png_count = ext_counts.get('.png', 0)
+
+    if pkl_count > jpg_count + png_count:
+        return PresegmentedDataset
+
+    return ImageDataset
+
 # %%
 if __name__ == '__main__':
-    args = parse_args()
+    args = parse_args([])
 
     # %%
-    run = wandb.init(project='ecole_mo9_demo', config=args)
+    run = wandb.init(project='ecole_mo9_demo', config=args, dir=args.wandb_dir, reinit=True)
 
     # %% Initialize concept KB
     concept_kb = kb_from_img_dir(args.img_dir)
@@ -62,6 +81,10 @@ if __name__ == '__main__':
         build_sam,
     )
 
+    # %% Split images into train, val, test
+    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_directory(args.img_dir)
+
+    # Build controller for segmentation
     controller = Controller(
         build_sam(),
         build_desco(),
@@ -69,29 +92,38 @@ if __name__ == '__main__':
         concept_kb
     )
 
+    # %%
     feature_extractor = build_feature_extractor()
 
+    # %%
     concept_kb.initialize(ConceptKBConfig(
-        encode_class_in_zs_attr=args.encode_class_in_zs_attr,
+        encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,
         img_feature_dim=feature_extractor.clip.config.projection_dim,
         n_trained_attrs=N_ATTRS_SUBSET,
         use_ln=True,
         use_full_img=True
-    ))
+    ), llm_client=controller.llm_client)
+    # )) # Uncomment me and common above to test with no ZS attributes to avoid paying Altman
 
-
-    # Split images into train, val, test
-    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_directory(args.img_dir)
-
-    # Train concept detectors
+    # %% Train concept detectors
     trainer = ConceptKBTrainer(concept_kb, controller, feature_extractor, run)
+
+    # %%
+    ds_type = PresegmentedDataset if args.presegmented_dir else ImageDataset
+    train_ds = ds_type(trn_p, trn_l)
+    val_ds = ds_type(val_p, val_l)
+
+    concept_kb.to('cuda')
+
     trainer.train(
-        train_ds=ImageDataset(trn_p, trn_l),
-        val_ds=ImageDataset(val_p, val_l),
-        n_epochs=args.n_epochs,
-        lr=args.lr,
-        backward_every_n_concepts=args.backward_every_n_concepts,
-        imgs_per_optim_step=args.imgs_per_optim_step,
-        ckpt_every_n_epochs=args.ckpt_every_n_epochs,
-        ckpt_dir=args.ckpt_dir
+        train_ds=train_ds,
+        val_ds=val_ds,
+        n_epochs=args.train.n_epochs,
+        lr=args.train.lr,
+        backward_every_n_concepts=args.train.backward_every_n_concepts,
+        imgs_per_optim_step=args.train.imgs_per_optim_step,
+        ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
+        ckpt_dir=args.train.ckpt_dir
     )
+
+# %%

@@ -7,8 +7,9 @@ from model.concept import ConceptKB
 from model.concept_predictor import ConceptPredictorOutput
 from model.features import ImageFeatures
 from wandb.sdk.wandb_run import Run
-from kb_ops.dataset import ImageDataset
+from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset
 from feature_extraction import FeatureExtractor
+from typing import Union
 from tqdm import tqdm
 from PIL.Image import Image
 from torchmetrics import Accuracy
@@ -26,14 +27,15 @@ class ConceptKBTrainer:
     ):
 
         self.concept_kb = concept_kb
+        self.label_to_index = {concept.name : torch.tensor(i, dtype=torch.float32) for i, concept in enumerate(concept_kb)}
         self.controller = controller
         self.feature_extractor = feature_extractor
         self.run = wandb_run
 
     def train(
         self,
-        train_ds: ImageDataset,
-        val_ds: ImageDataset,
+        train_ds: Union[ImageDataset, PresegmentedDataset],
+        val_ds: Union[ImageDataset, PresegmentedDataset],
         n_epochs: int,
         lr: float,
         backward_every_n_concepts: int = None,
@@ -44,16 +46,19 @@ class ConceptKBTrainer:
 
         os.makedirs(ckpt_dir, exist_ok=True)
 
-        train_dl = DataLoader(train_ds, batch_size=1, shuffle=True)
-        val_dl = DataLoader(val_ds, batch_size=1, shuffle=False)
+        is_presegmented = isinstance(train_ds, PresegmentedDataset)
+        data_key = 'segmentations' if is_presegmented else 'image'
+
+        train_dl = DataLoader(train_ds, batch_size=1, shuffle=True, collate_fn=list_collate)
+        val_dl = DataLoader(val_ds, batch_size=1, shuffle=False, collate_fn=list_collate)
         optimizer = torch.optim.Adam(self.concept_kb.parameters(), lr=lr)
 
         for epoch in range(1, n_epochs + 1):
             logger.info(f'======== Starting Epoch {epoch}/{n_epochs} ========')
 
             for i, batch in enumerate(tqdm(train_dl, desc=f'Epoch {epoch}/{n_epochs}'), start=1):
-                image, label = batch['image'], batch['label']
-                outputs = self.forward_pass(image[0], label[0], backward_every_n_concepts=backward_every_n_concepts)
+                image_data, label = batch[data_key], batch['label']
+                outputs = self.forward_pass(image_data[0], self.label_to_index[label[0]], backward_every_n_concepts=backward_every_n_concepts)
 
                 self.log({'train_loss': outputs['loss'], 'epoch': epoch})
 
@@ -76,8 +81,6 @@ class ConceptKBTrainer:
 
     @torch.inference_mode()
     def validate(self, val_dl: DataLoader):
-        label_to_index = {concept.name : i for i, concept in enumerate(self.concept_kb)}
-
         total_loss = 0
         predicted_concept_outputs = []
         acc = Accuracy(task='multiclass', num_classes=len(self.concept_kb))
@@ -90,8 +93,8 @@ class ConceptKBTrainer:
 
             # Compute predictions and accuracy
             scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
-            pred_ind = scores.argmax(dim=0, keepdim=True) # (1,)
-            true_ind = label_to_index[label]
+            pred_ind = scores.argmax(dim=0, keepdim=True) # (1,) IntTensor
+            true_ind = self.label_to_index[label].int()
 
             acc(pred_ind, true_ind)
 
@@ -109,19 +112,26 @@ class ConceptKBTrainer:
 
     def forward_pass(
         self,
-        image: Image,
+        image_data: Union[Image, dict],
         label: str,
         do_backward: bool = True,
         backward_every_n_concepts: int = None
     ):
+        # TODO Make an actual Segmentations data type and have localize_and_segment return it
 
         # Get region crops
-        segmentations = self.controller.localize(
-            image=image,
-            concept_name='',
-            concept_parts=[],
-            remove_background=True
-        )
+        if isinstance(image_data, Image):
+            segmentations = self.controller.localize_and_segment(
+                image=image_data,
+                concept_name='',
+                concept_parts=[],
+                remove_background=True
+            )
+            image = image_data
+
+        else: # Assume they're preprocessed segmentations
+            segmentations = image_data
+            image = segmentations['image']
 
         region_crops = segmentations['part_crops']
         if region_crops == []:
@@ -135,11 +145,11 @@ class ConceptKBTrainer:
         for i, concept in enumerate(self.concept_kb, start=1):
             zs_attrs = [attr.query for attr in concept.zs_attributes]
 
-            with torch.inference_mode():
+            with torch.no_grad():
                 features: ImageFeatures = self.feature_extractor(image, region_crops, zs_attrs)
 
             output: ConceptPredictorOutput = concept.predictor(features)
-            concept_loss = F.binary_cross_entropy_with_logits(output.cum_score, label) / len(self.concept_kb)
+            concept_loss = F.binary_cross_entropy_with_logits(output.cum_score, label.to(output.cum_score)) / len(self.concept_kb)
 
             curr_loss += concept_loss
             total_loss += concept_loss.item()

@@ -98,7 +98,7 @@ class ConceptPredictor(nn.Module):
 
             region_scores = self.region_predictor(img_feats.region_features) # (n_regions, 1)
             region_scores = region_scores * region_weights # (n_regions, 1)
-            region_score = region_scores.sum(dim=1, keepdim=True) # (1, 1)
+            region_score = region_scores.sum(dim=0, keepdim=True) # (1, 1)
 
             # Trained attributes
             if self.n_trained_attrs > 0:

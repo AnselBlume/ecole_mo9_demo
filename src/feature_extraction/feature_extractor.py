@@ -29,7 +29,7 @@ class FeatureExtractor(nn.Module):
 
         trained_attr_scores = self.trained_clip_attr_predictor.predict_from_features(visual_features) # (1 + n_regions, n_learned_attrs)
 
-        region_weights = torch.ones(len(regions)) / len(regions) # Uniform weights
+        region_weights = torch.ones(len(regions), device=trained_attr_scores.device) / len(regions) # Uniform weights
 
         return ImageFeatures(
             image_features=img_features,
