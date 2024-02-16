@@ -7,12 +7,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 # %%
-def retrieve_attributes(concept_name: str, client: LLMClient) -> list[str]:
+def retrieve_attributes(concept_name: str, client: LLMClient) -> dict[str,list[str]]:
     '''
         Retrieves parts of a concept using LLM.
+
         Arguments:
             concept_name (str): Name of concept to retrieve parts for
             client (LLMClient): OpenAI LLM client
+
+        Returns: dict[str,list[str]] of required and likely attributes with keys 'required' and 'likely'.
+
     '''
     response = client.query(LIST_ATTRIBUTES_PROMPT + concept_name)
     lines = response.split('\n')
