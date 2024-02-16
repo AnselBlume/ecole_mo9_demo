@@ -1,6 +1,5 @@
-from PIL import Image
+from PIL.Image import Image
 import torch.nn as nn
-from torchvision.transforms import Compose
 from transformers import CLIPModel, CLIPProcessor
 
 class CLIPFeatureExtractor(nn.Module):
@@ -10,26 +9,26 @@ class CLIPFeatureExtractor(nn.Module):
         self.model: CLIPModel = model.eval()
         self.processor = processor
 
-    def forward(self, *, image: Image = None, texts: list[str] = None):
+    def forward(self, *, images: list[Image] = None, texts: list[str] = None):
         '''
-            image: PIL.Image.Image
+            image: list[PIL.Image.Image]
             texts: list[str]
             Returns:
-                If only image is provided, torch.Tensor of shape (1, enc_dim).
+                If only image is provided, torch.Tensor of shape (n_imgs, enc_dim).
                 If only texts is provided, torch.Tensor of shape (n_texts, enc_dim).
                 If both are provided, returns a tuple of (image_feats, text_feats).
         '''
-        assert image is not None or texts is not None, 'At least one of image or texts must be provided'
+        assert images is not None or texts is not None, 'At least one of image or texts must be provided'
 
         # Prepare inputs
         ret_vals = []
-        inputs = self.processor(image=image, text=texts, return_tensors='pt', truncation=True, padding=True)
+        inputs = self.processor(image=images, text=texts, return_tensors='pt', truncation=True, padding=True)
 
         for k, v in inputs.items():
             inputs[k] = v.to(self.model.device)
 
         # Generate features
-        if image is not None:
+        if images is not None:
             image_feats = self.model.get_image_features(inputs['pixel_values'])
             ret_vals.append(image_feats)
 
