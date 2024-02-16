@@ -1,10 +1,12 @@
 from __future__ import annotations
+import pickle
 from dataclasses import dataclass, field
 from model.attribute import Attribute
 from concept_predictor import ConceptPredictor
 from llm import LLMClient, retrieve_attributes
 import logging
 from utils import ArticleDeterminer
+from functools import reduce
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +50,34 @@ class ConceptKBConfig:
 
 class ConceptKB:
     def __init__(self, concepts: list[Concept] = []):
-        self.concepts = {concept.name : concept for concept in concepts}
+        self._concepts = {concept.name : concept for concept in concepts}
+
+    @property
+    def concepts(self) -> list[Concept]:
+        return self.get_concepts()
+
+    def parameters(self):
+        params = []
+        for concept in self.concepts:
+            params.extend(list(concept.predictor.parameters()))
+
+        return params
+
+    def to(self, device):
+        for concept in self.concepts:
+            concept.predictor.to(device)
+
+    def save(self, path):
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
+
+    @staticmethod
+    def load(path) -> ConceptKB:
+        with open(path, 'rb') as f:
+            dt = pickle.load(f)
+
+        assert isinstance(dt, ConceptKB)
+        return dt
 
     def initialize(self, cfg: ConceptKBConfig, llm_client: LLMClient = None):
         self.cfg = cfg
@@ -62,7 +91,7 @@ class ConceptKB:
         self._init_predictors()
 
     def _init_predictors(self):
-        for concept in self.concepts.values():
+        for concept in self.concepts:
             concept.predictor = ConceptPredictor(
                 img_feature_dim=self.cfg.img_feature_dim,
                 region_feature_dim=self.cfg.img_feature_dim,
@@ -75,7 +104,7 @@ class ConceptKB:
     def _init_zs_attrs(self, llm_client: LLMClient, encode_class: bool):
         determiner = ArticleDeterminer()
 
-        for concept in self.concepts.values():
+        for concept in self.concepts:
             zs_attr_dict = retrieve_attributes(concept.name, llm_client)
 
             for attr_type in ['required', 'likely']:
@@ -84,22 +113,22 @@ class ConceptKB:
                     concept.zs_attributes.append(Attribute(attr, necessary=attr_type == 'required', query=query))
 
     def add_concept(self, concept: Concept):
-        self.concepts[concept.name] = concept
+        self._concepts[concept.name] = concept
 
     def remove_concept(self, name: str):
-        self.concepts.pop(name)
+        self._concepts.pop(name)
 
     def get_concept(self, name: str) -> Concept:
-        return self.concepts[name]
+        return self._concepts[name]
 
     def get_concepts(self) -> list[Concept]:
-        return sorted(list(self.concepts.values()), key=lambda x: x.name)
+        return sorted(list(self._concepts.values()), key=lambda x: x.name)
 
     def __iter__(self):
         return iter(self.get_concepts())
 
     def __contains__(self, name: str):
-        return name in self.concepts
+        return name in self._concepts
 
     def __getitem__(self, name: str):
         return self.get_concept(name)
