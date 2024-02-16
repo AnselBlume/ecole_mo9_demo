@@ -38,24 +38,39 @@ class Concept:
 
     examples: list = field(default_factory=list, metadata={'help': 'Paths to example images.'})
 
+@dataclass
+class ConceptKBConfig:
+    encode_class_in_zs_attr: bool = False
+    img_feature_dim: int = 768
+    n_trained_attrs: int = None
+    use_ln: bool = True
+    use_full_img: bool = True
+
 class ConceptKB:
     def __init__(self, concepts: list[Concept] = []):
         self.concepts = {concept.name : concept for concept in concepts}
 
-    def initialize(
-        self,
-        llm_client: LLMClient = None,
-        encode_class_in_zs_attr: bool = False
-    ):
+    def initialize(self, cfg: ConceptKBConfig, llm_client: LLMClient = None):
+        self.cfg = cfg
+        self.used_zs_attrs_from_llm = llm_client is not None
+
         # Get zero-shot attributes
-        if llm_client:
-            self._init_zs_attrs(llm_client, encode_class_in_zs_attr)
+        if llm_client is not None:
+            self._init_zs_attrs(llm_client, cfg.encode_class_in_zs_attr)
 
         # Build predictors
+        self._init_predictors()
 
     def _init_predictors(self):
         for concept in self.concepts.values():
-            concept.predictor = ConceptPredictor(concept)
+            concept.predictor = ConceptPredictor(
+                img_feature_dim=self.cfg.img_feature_dim,
+                region_feature_dim=self.cfg.img_feature_dim,
+                n_trained_attrs=self.cfg.n_trained_attrs,
+                n_zs_attrs=len(concept.zs_attributes),
+                use_ln=self.cfg.use_ln,
+                use_full_img=self.cfg.use_full_img
+            )
 
     def _init_zs_attrs(self, llm_client: LLMClient, encode_class: bool):
         determiner = ArticleDeterminer()
