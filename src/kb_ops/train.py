@@ -55,6 +55,7 @@ class ConceptKBTrainer:
 
         for epoch in range(1, n_epochs + 1):
             logger.info(f'======== Starting Epoch {epoch}/{n_epochs} ========')
+            self.concept_kb.train()
 
             for i, batch in enumerate(tqdm(train_dl, desc=f'Epoch {epoch}/{n_epochs}'), start=1):
                 image_data, label = batch[data_key], batch['label']
@@ -81,11 +82,13 @@ class ConceptKBTrainer:
 
     @torch.inference_mode()
     def validate(self, val_dl: DataLoader):
+        self.concept_kb.eval()
+
         total_loss = 0
         predicted_concept_outputs = []
         acc = Accuracy(task='multiclass', num_classes=len(self.concept_kb))
 
-        for i, batch in enumerate(tqdm(val_dl, desc='Validation'), start=1):
+        for batch in tqdm(val_dl, desc='Validation'):
             image, label = batch['image'], batch['label']
             outputs = self.forward_pass(image[0], label[0], do_backward=False)
 
