@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 from typing import Callable, Any
-from model.image_input import ImageInput
 from dataclasses import dataclass
+from model.features import ImageFeatures
 
 @dataclass
 class WeightedPredictorOutput:
@@ -17,7 +17,7 @@ class WeightedPredictor(nn.Module):
         self.weights = nn.Parameter(weights)
         self.name = name
 
-    def forward(self, input: ImageInput, scores: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, input: ImageFeatures, scores: torch.Tensor = None) -> torch.Tensor:
         if scores is None:
             scores = self.get_scores(input)
 
