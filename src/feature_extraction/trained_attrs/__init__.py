@@ -2,6 +2,7 @@
 import json
 import torch
 import torch.nn as nn
+import torch.linalg as LA
 from PIL.Image import Image
 import os
 from typing import Optional
@@ -26,6 +27,7 @@ class TrainedCLIPAttributePredictor:
 
         with torch.no_grad():
             stacked_weight = torch.stack([classifier.weight.squeeze() for classifier in classifiers]) # (num_cls, enc_dim)
+            stacked_weight = stacked_weight / LA.norm(stacked_weight, dim=-1, keepdim=True) # Pre-normalize to avoid in forward
             stacked_bias = torch.cat([classifier.bias for classifier in classifiers]) # (num_cls,)
 
         self.predictor = nn.Linear(stacked_weight.shape[1], stacked_weight.shape[0], bias=True)
@@ -56,4 +58,13 @@ class TrainedCLIPAttributePredictor:
             preds = preds > threshold
 
         return preds
+
+    @torch.inference_mode()
+    def predict_from_features(self, img_feats: torch.Tensor):
+        '''
+            img_feats: torch.Tensor of shape (n_imgs, d)
+
+            Returns a torch.Tensor with shape (n_imgs, num_cls) of scores in [-1, 1]
+        '''
+        return self.predictor(img_feats) / LA.norm(img_feats, dim=-1, keepdim=True)
 # %%

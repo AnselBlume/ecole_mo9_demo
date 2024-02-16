@@ -14,13 +14,16 @@ class ImageFeatures:
     #####################################
     # Features for internal calculation #
     #####################################
-    image_features: torch.Tensor = None # (d_img,)
+    image_features: torch.Tensor = None # (1, d_img)
 
     region_features: torch.Tensor = None # (n_regions, d_regions)
-    region_feature_weights: torch.Tensor = None # (n_regions,)
+    region_weights: torch.Tensor = None # (n_regions,); how much to weight each region in all calculations
 
-    learned_attr_scores: torch.Tensor = None # (n_learned_attrs,)
-    zs_attr_scores: torch.Tensor = None # (n_zs_attrs,)
+    trained_attr_img_scores: torch.Tensor = None # (1, n_trained_attrs)
+    trained_attr_region_scores: torch.Tensor = None # (n_regions, n_trained_attrs,)
+
+    zs_attr_img_scores: torch.Tensor = None # (1, n_zs_attrs)
+    zs_attr_region_scores: torch.Tensor = None # (n_regions, n_zs_attrs)
 
     #############################################
     # Features computed via batched calculation #
