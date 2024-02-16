@@ -16,12 +16,16 @@ import logging, coloredlogs
 from feature_extraction.trained_attrs import N_ATTRS_SUBSET
 from kb_ops.train import ConceptKBTrainer
 import wandb
+from datetime import datetime
 import jsonargparse as argparse
 
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
 
-def parse_args(cl_args: list[str] = None):
+def get_timestr():
+    return datetime.now().strftime('%Y_%m_%d-%H:%M:%S')
+
+def get_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--config', action=argparse.ActionConfigFile)
@@ -48,11 +52,13 @@ def parse_args(cl_args: list[str] = None):
     parser.add_argument('--train.ckpt_every_n_epochs', type=int, default=1, help='Number of epochs to save model')
     parser.add_argument('--train.ckpt_dir', type=str, default='checkpoints', help='Directory to save model checkpoints')
 
-    return parser.parse_args(cl_args)
+    return parser
 
 # %%
 if __name__ == '__main__':
-    args = parse_args([])
+    parser = get_parser()
+    args = parser.parse_args()
+    # args = parser.parse_args([]) # For debugging or jupyter notebook
 
     # %%
     run = wandb.init(project='ecole_mo9_demo', config=args, dir=args.wandb_dir, reinit=True)
@@ -108,6 +114,13 @@ if __name__ == '__main__':
 
     concept_kb.to('cuda')
 
+    # Save arguments as yaml
+    checkpoint_dir = os.path.join(args.train.ckpt_dir, get_timestr())
+    os.makedirs(checkpoint_dir)
+
+    parser.save(args, os.path.join(checkpoint_dir, 'args.yaml'))
+
+    # Train
     trainer.train(
         train_ds=train_ds,
         val_ds=val_ds,
@@ -116,7 +129,7 @@ if __name__ == '__main__':
         backward_every_n_concepts=args.train.backward_every_n_concepts,
         imgs_per_optim_step=args.train.imgs_per_optim_step,
         ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
-        ckpt_dir=args.train.ckpt_dir
+        ckpt_dir=checkpoint_dir
     )
 
 # %%
