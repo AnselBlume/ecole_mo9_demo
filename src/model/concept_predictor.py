@@ -31,6 +31,7 @@ class ConceptPredictor(nn.Module):
         use_bias=True,
         use_ln=True
     ):
+        super().__init__()
 
         self.img_feature_dim = img_feature_dim
         self.region_feature_dim = region_feature_dim
