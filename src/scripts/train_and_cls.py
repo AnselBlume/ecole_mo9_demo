@@ -16,7 +16,6 @@ import logging, coloredlogs
 from feature_extraction.trained_attrs import N_ATTRS_SUBSET
 from kb_ops.train import ConceptKBTrainer
 import wandb
-from collections import Counter
 import jsonargparse as argparse
 
 logger = logging.getLogger(__name__)
@@ -50,19 +49,6 @@ def parse_args(cl_args: list[str] = None):
     parser.add_argument('--train.ckpt_dir', type=str, default='checkpoints', help='Directory to save model checkpoints')
 
     return parser.parse_args(cl_args)
-
-def get_dataset_type(data_dir: str):
-    exts = [os.path.splitext(f)[1] for f in os.listdir(data_dir)]
-    ext_counts = Counter(exts)
-
-    pkl_count = ext_counts.get('.pkl', 0)
-    jpg_count = ext_counts.get('.jpg', 0)
-    png_count = ext_counts.get('.png', 0)
-
-    if pkl_count > jpg_count + png_count:
-        return PresegmentedDataset
-
-    return ImageDataset
 
 # %%
 if __name__ == '__main__':
