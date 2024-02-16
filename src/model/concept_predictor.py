@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 import torch.nn as nn
 from features import ImageFeatures
 from dataclasses import dataclass
@@ -22,6 +21,21 @@ class ConceptPredictorOutput:
 
     all_scores_weighted: torch.Tensor = None # (1 + 1 + 2*n_trained_attrs + 2*n_zs_attrs,)
     cum_score: torch.Tensor = None # (,); For backpropagating loss or for prediction
+
+    def to(self, device, detach=True):
+        '''
+            Detaches and shifts all tensors to the specified device
+        '''
+        for field in self.__dataclass_fields__:
+            attr = getattr(self, field)
+
+            if isinstance(attr, torch.Tensor):
+                if detach:
+                    attr = attr.detach()
+
+                setattr(self, field, attr.to(device))
+
+        return self
 
 class ConceptPredictor(nn.Module):
     # TODO incorporate unnamed visual features

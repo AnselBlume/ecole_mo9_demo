@@ -33,6 +33,9 @@ class ImageFeatures:
     all_scores: torch.Tensor = None
 
     def to(self, device):
+        '''
+            Shifts all tensors to the specified device.
+        '''
         for field in self.__dataclass_fields__:
             attr = getattr(self, field)
 

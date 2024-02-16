@@ -22,3 +22,5 @@ subset_index_path = os.path.join(
 
 with open(subset_index_path, 'r') as f:
     COLOR_SHAPE_MATERIAL_SUBSET = json.load(f)
+
+N_ATTRS_SUBSET = sum(len(v) for v in COLOR_SHAPE_MATERIAL_SUBSET.values())
