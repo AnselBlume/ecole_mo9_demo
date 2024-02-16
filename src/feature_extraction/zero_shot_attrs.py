@@ -9,6 +9,7 @@ from transformers import CLIPModel, CLIPProcessor
 from PIL.Image import Image
 import torch
 from typing import Optional
+import torch.linalg as LA
 
 class CLIPAttributePredictor:
     def __init__(self, clip: CLIPModel, processor: CLIPProcessor):
@@ -42,6 +43,21 @@ class CLIPAttributePredictor:
             preds = preds > threshold
 
         return preds
+
+    @torch.inference_mode()
+    def feature_score(self, img_feats: torch.Tensor, text_feats: torch.Tensor):
+        '''
+            Args:
+                img_feats: torch.Tensor of shape (n_imgs, d)
+                text_feats: torch.Tensor of shape (n_texts, d)
+
+            Returns:
+                torch.Tensor of shape (n_imgs, n_texts) with matching scores in [-1, 1]
+        '''
+        img_feats = img_feats / LA.norm(img_feats, dim=-1, keepdim=True)
+        text_feats = text_feats / LA.norm(text_feats, dim=-1, keepdim=True)
+
+        return torch.matmul(img_feats, text_feats.T)
 
 # %%
 if __name__ == '__main__':
