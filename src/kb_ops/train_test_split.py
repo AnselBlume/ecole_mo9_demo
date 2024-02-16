@@ -2,7 +2,7 @@
 import os
 from typing import Iterable
 import numpy as np
-from kb.build import label_from_path
+from kb_ops.build import label_from_path
 
 import logging
 logger = logging.getLogger(__name__)

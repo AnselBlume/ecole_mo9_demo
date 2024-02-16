@@ -1,1 +1,0 @@
-from mo9_demo.src.kb.build import kb_from_img_dir

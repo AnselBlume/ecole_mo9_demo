@@ -1,0 +1,1 @@
+from .build import kb_from_img_dir
