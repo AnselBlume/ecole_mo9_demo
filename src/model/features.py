@@ -32,14 +32,6 @@ class ImageFeatures:
     # the image and region scores, respectively
     all_scores: torch.Tensor = None
 
-    # Tensor of shape (n_regions,) where each element is the score for the corresponding region
-    # Should be provided when all_scores is as region_scores cannot be determined from all_scores
-    region_scores: torch.Tensor = None
-
-    def __post_init__(self):
-        if self.all_scores is not None and self.region_scores is None:
-            raise ValueError('region_scores must be provided when all_scores is provided.')
-
 @dataclass
 class FeatureMetadata:
     name: str = field(default=None, metadata={'help': 'Name of the feature.'})

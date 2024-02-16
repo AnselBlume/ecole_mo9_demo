@@ -1,6 +1,7 @@
 # %%
 import json
 import os
+from .predictor import TrainedCLIPAttributePredictor
 
 DEFAULT_CKPT_PATH = os.path.join(
     os.path.dirname(__file__),

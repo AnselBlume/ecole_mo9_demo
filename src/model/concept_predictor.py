@@ -110,10 +110,6 @@ class ConceptPredictor(nn.Module):
             ], dim=1) # (1, 1 + 1 + 2*n_trained_attrs + 2*n_zs_attrs)
 
         else:
-            if img_feats.region_scores is None:
-                raise ValueError('region_scores must be provided when all_scores is provided.')
-
-            region_scores = img_feats.region_scores
             all_scores = img_feats.all_scores
 
         for group in self.feature_groups:
