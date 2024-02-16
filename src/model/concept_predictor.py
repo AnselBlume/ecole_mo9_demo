@@ -2,7 +2,6 @@ import torch
 import numpy as np
 import torch.nn as nn
 from features import ImageFeatures
-from weighted_predictor import WeightedPredictorOutput
 from dataclasses import dataclass
 
 class BatchedPredictor:
@@ -61,15 +60,17 @@ class ConceptPredictor(nn.Module):
 
         self.full_img_scale = nn.Parameter(torch.randn(1)) if use_full_img else 0
 
-        self.trained_attr_predictor = nn.Sequential([
-            nn.LayerNorm(n_trained_attrs) if use_ln else nn.Identity(),
-            nn.Linear(n_trained_attrs, n_trained_attrs, bias=use_bias)
-        ])
+        if n_trained_attrs > 0:
+            self.trained_attr_predictor = nn.Sequential([
+                nn.LayerNorm(n_trained_attrs) if use_ln else nn.Identity(),
+                nn.Linear(n_trained_attrs, n_trained_attrs, bias=use_bias)
+            ])
 
-        self.zs_attr_predictor = nn.Sequential([
-            nn.LayerNorm(n_zs_attrs) if use_ln else nn.Identity(),
-            nn.Linear(n_zs_attrs, n_zs_attrs, bias=use_bias)
-        ])
+        if n_zs_attrs > 0:
+            self.zs_attr_predictor = nn.Sequential([
+                nn.LayerNorm(n_zs_attrs) if use_ln else nn.Identity(),
+                nn.Linear(n_zs_attrs, n_zs_attrs, bias=use_bias)
+            ])
 
         self.feature_groups = nn.ModuleDict()
 
@@ -77,6 +78,7 @@ class ConceptPredictor(nn.Module):
         if img_feats.all_scores is None: # If scores are not provided for feature_group-weighting, calculate them
             region_weights = img_feats.region_weights.unsqueeze(-1) # (n_regions, 1)
 
+            # Image and region feature scores
             img_score = self.img_predictor(img_feats.image_features) # (1, 1)
             img_score = img_score * self.full_img_scale # (1, 1)
 
@@ -84,22 +86,35 @@ class ConceptPredictor(nn.Module):
             region_scores = region_scores * region_weights # (n_regions, 1)
             region_score = region_scores.sum(dim=1, keepdim=True) # (1, 1)
 
-            trained_attr_img_scores = self.trained_attr_predictor(img_feats.trained_attr_img_scores) # (1, n_trained_attrs)
-            trained_attr_img_scores = trained_attr_img_scores * self.full_img_scale # (1, n_trained_attrs)
-            trained_attr_img_score = trained_attr_img_scores # (1, n_trained_attrs)
+            # Trained attributes
+            if self.n_trained_attrs > 0:
+                trained_attr_img_scores = self.trained_attr_predictor(img_feats.trained_attr_img_scores) # (1, n_trained_attrs)
+                trained_attr_img_scores = trained_attr_img_scores * self.full_img_scale # (1, n_trained_attrs)
+                trained_attr_img_score = trained_attr_img_scores # (1, n_trained_attrs)
 
-            trained_attr_region_scores = self.trained_attr_predictor(img_feats.trained_attr_region_scores) # (n_regions, n_trained_attrs)
-            trained_attr_region_scores = trained_attr_region_scores * region_weights # (n_regions, n_trained_attrs)
-            trained_attr_region_score = trained_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_trained_attrs)
+                trained_attr_region_scores = self.trained_attr_predictor(img_feats.trained_attr_region_scores) # (n_regions, n_trained_attrs)
+                trained_attr_region_scores = trained_attr_region_scores * region_weights # (n_regions, n_trained_attrs)
+                trained_attr_region_score = trained_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_trained_attrs)
 
-            zs_attr_img_scores = self.zs_attr_predictor(img_feats.zs_attr_img_scores.unsqueeze(0)) # (1, n_zs_attrs)
-            zs_attr_img_scores = zs_attr_img_scores * self.full_img_scale # (1, n_zs_attrs)
-            zs_attr_img_score = zs_attr_img_scores # (1, n_zs_attrs)
+            else:
+                trained_attr_img_score = torch.tensor([[]], device=region_weights.device)
+                trained_attr_region_score = torch.tensor([[]], device=region_weights.device)
 
-            zs_attr_region_scores = self.zs_attr_predictor(img_feats.zs_attr_region_scores) # (n_regions, n_zs_attrs)
-            zs_attr_region_scores = zs_attr_region_scores * region_weights
-            zs_attr_region_score = zs_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_zs_attrs)
+            # Zero shot attributes
+            if self.n_zs_attrs > 0:
+                zs_attr_img_scores = self.zs_attr_predictor(img_feats.zs_attr_img_scores) # (1, n_zs_attrs)
+                zs_attr_img_scores = zs_attr_img_scores * self.full_img_scale # (1, n_zs_attrs)
+                zs_attr_img_score = zs_attr_img_scores # (1, n_zs_attrs)
 
+                zs_attr_region_scores = self.zs_attr_predictor(img_feats.zs_attr_region_scores) # (n_regions, n_zs_attrs)
+                zs_attr_region_scores = zs_attr_region_scores * region_weights
+                zs_attr_region_score = zs_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_zs_attrs)
+
+            else:
+                zs_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
+                zs_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
+
+            # Concatenate all scores
             all_scores = torch.cat([
                 img_score, # (1, 1)
                 region_score, # (1, 1)
