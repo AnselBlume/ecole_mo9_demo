@@ -32,6 +32,15 @@ class ImageFeatures:
     # the image and region scores, respectively
     all_scores: torch.Tensor = None
 
+    def to(self, device):
+        for field in self.__dataclass_fields__:
+            attr = getattr(self, field)
+
+            if isinstance(attr, torch.Tensor):
+                setattr(self, field, attr.to(device))
+
+        return self
+
 @dataclass
 class FeatureMetadata:
     name: str = field(default=None, metadata={'help': 'Name of the feature.'})
