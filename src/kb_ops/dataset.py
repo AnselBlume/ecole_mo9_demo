@@ -44,10 +44,10 @@ class PresegmentedDataset(Dataset):
         self.labels = labels
 
     def __len__(self):
-        return len(self.img_paths)
+        return len(self.data_paths)
 
     def __getitem__(self, idx):
-        with open(self.img_paths[idx], 'rb') as f:
+        with open(self.data_paths[idx], 'rb') as f:
             segmentations = pickle.load(f)
 
         segmentations['image'] = Image.open(segmentations['image_path'])
@@ -66,15 +66,17 @@ def preprocess_segmentations(img_dir: str, out_dir: str, controller: Controller)
     os.makedirs(out_dir, exist_ok=True)
 
     for img_path in tqdm(os.listdir(img_dir)):
-        in_path = os.path.join(img_dir, img_path)
-        out_path = os.path.join(out_dir, img_path)
+        ext = os.path.splitext(img_path)[1]
 
-        if os.path.exists(out_path) or os.path.splitext(out_path)[1] not in ['.jpg', '.png']:
+        in_path = os.path.join(img_dir, img_path)
+        out_path = os.path.join(out_dir, img_path).replace(ext, '.pkl')
+
+        if os.path.exists(out_path) or ext not in ['.jpg', '.png']:
             continue
 
         img = Image.open(in_path).convert('RGB')
         segmentations = controller.localize_and_segment(img)
-        segmentations['image_path'] = img_path
+        segmentations['image_path'] = in_path
 
         with open(out_path, 'wb') as f:
             pickle.dump(segmentations, f)

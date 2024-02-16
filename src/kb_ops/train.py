@@ -87,17 +87,18 @@ class ConceptKBTrainer:
         total_loss = 0
         predicted_concept_outputs = []
         acc = Accuracy(task='multiclass', num_classes=len(self.concept_kb))
+        data_key = 'segmentations' if isinstance(val_dl.dataset, PresegmentedDataset) else 'image'
 
         for batch in tqdm(val_dl, desc='Validation'):
-            image, label = batch['image'], batch['label']
-            outputs = self.forward_pass(image[0], label[0], do_backward=False)
+            image, label = batch[data_key], batch['label']
+            outputs = self.forward_pass(image[0], self.label_to_index[label[0]], do_backward=False)
 
             total_loss += outputs['loss'] # Store loss
 
             # Compute predictions and accuracy
             scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
             pred_ind = scores.argmax(dim=0, keepdim=True) # (1,) IntTensor
-            true_ind = self.label_to_index[label].int()
+            true_ind = self.label_to_index[label[0]].int().unsqueeze(0) # (1,)
 
             acc(pred_ind, true_ind)
 

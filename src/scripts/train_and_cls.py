@@ -1,6 +1,6 @@
 # %%
 import os # TODO Change DesCo CUDA device here
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -31,7 +31,7 @@ def parse_args(cl_args: list[str] = None):
                         help='Path to directory of images or preprocessed segmentations')
 
     parser.add_argument('--presegmented_dir',
-                        # default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data_presegmented',
+                        default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data_segmentations',
                         help='Path to directory of preprocessed segmentations')
 
     parser.add_argument('--wandb_project', type=str, default='ecole_mo9_demo', help='WandB project name')
@@ -56,6 +56,7 @@ if __name__ == '__main__':
 
     # %%
     run = wandb.init(project='ecole_mo9_demo', config=args, dir=args.wandb_dir, reinit=True)
+    # run = None # Comment me to use wandb
 
     # %% Initialize concept KB
     concept_kb = kb_from_img_dir(args.img_dir)
@@ -94,9 +95,16 @@ if __name__ == '__main__':
     trainer = ConceptKBTrainer(concept_kb, controller, feature_extractor, run)
 
     # %%
-    ds_type = PresegmentedDataset if args.presegmented_dir else ImageDataset
-    train_ds = ds_type(trn_p, trn_l)
-    val_ds = ds_type(val_p, val_l)
+    if args.presegmented_dir:
+        trn_p = [os.path.join(args.presegmented_dir, os.path.basename(os.path.splitext(p)[0]) + '.pkl') for p in trn_p]
+        val_p = [os.path.join(args.presegmented_dir, os.path.basename(os.path.splitext(p)[0]) + '.pkl') for p in val_p]
+
+        train_ds = PresegmentedDataset(trn_p, trn_l)
+        val_ds = PresegmentedDataset(val_p, val_l)
+
+    else:
+        train_ds = ImageDataset(trn_p, trn_l)
+        val_ds = ImageDataset(val_p, val_l)
 
     concept_kb.to('cuda')
 
