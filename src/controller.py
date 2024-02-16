@@ -9,7 +9,6 @@ from segment import Segmenter
 from localize import Localizer, bbox_from_mask
 from PIL.Image import Image
 import logging, coloredlogs
-import inflect
 from feature_extraction import build_sam, build_desco, Sam, GLIPDemo
 import torch
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
@@ -17,7 +16,7 @@ from llm import LLMClient, retrieve_parts, retrieve_attributes
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
 import torch.nn.functional as F
-from utils import to_device
+from utils import to_device, ArticleDeterminer
 
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
@@ -31,7 +30,7 @@ class Controller:
         self.attr_scorer = AttributeScorer(zs_predictor)
         self.llm_client = LLMClient()
 
-        self.p = inflect.engine()
+        self.article_det = ArticleDeterminer()
 
     ################
     # Segmentation #
@@ -149,27 +148,11 @@ class Controller:
 
         return ret_dict
 
-    def _get_article(self, word: str, space_if_nonempty: bool = True):
-        '''
-            Returns 'a/an' if the word is singular, else returns ''
-        '''
-        # Determine the article for the concept
-        is_singular_noun = not bool(self.p.singular_noun(word)) # Returns false if singular; singular version if plural
-        article = self.p.a(word) if is_singular_noun else ''
-
-        if article: # Split off the 'a' or 'an' from the word
-            article = article.split(' ')[0]
-
-        if space_if_nonempty and article:
-            article += ' '
-
-        return article
-
     def _get_parts_caption(self, concept_name: str, component_parts: list[str]):
         '''
             dog, head, whiskers, tail --> a dog with a head, whiskers, and a tail
         '''
-        prompt = f'{self._get_article(concept_name)}{concept_name} '
+        prompt = f'{self.article_det.determine(concept_name)}{concept_name} '
         for i, component_part in enumerate(component_parts):
             if i == 0:
                 prompt += 'with '
