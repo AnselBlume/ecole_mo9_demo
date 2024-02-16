@@ -4,9 +4,9 @@ from dataclasses import dataclass, field
 from model.attribute import Attribute
 from .concept_predictor import ConceptPredictor
 from llm import LLMClient, retrieve_attributes
+from tqdm import tqdm
 import logging
 from utils import ArticleDeterminer
-from functools import reduce
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,9 @@ class ConceptKB:
         self._init_predictors()
 
     def _init_predictors(self):
-        for concept in self.concepts:
+        logger.info('Initializing concept predictors')
+
+        for concept in tqdm(self.concepts):
             concept.predictor = ConceptPredictor(
                 img_feature_dim=self.cfg.img_feature_dim,
                 region_feature_dim=self.cfg.img_feature_dim,
@@ -102,15 +104,17 @@ class ConceptKB:
             )
 
     def _init_zs_attrs(self, llm_client: LLMClient, encode_class: bool):
+        logger.info('Initializing zero-shot attributes from an LLM')
+
         determiner = ArticleDeterminer()
 
-        for concept in self.concepts:
+        for concept in tqdm(self.concepts):
             zs_attr_dict = retrieve_attributes(concept.name, llm_client)
 
             for attr_type in ['required', 'likely']:
                 for attr in zs_attr_dict[attr_type]:
                     query = f'{attr} of {determiner.determine(attr)}{concept.name}' if encode_class else attr
-                    concept.zs_attributes.append(Attribute(attr, necessary=attr_type == 'required', query=query))
+                    concept.zs_attributes.append(Attribute(attr, is_necessary=attr_type == 'required', query=query))
 
     def add_concept(self, concept: Concept):
         self._concepts[concept.name] = concept
