@@ -6,6 +6,37 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+import torch
+from dataclasses import dataclass
+
+@dataclass
+class ImageFeatures:
+    #####################################
+    # Features for internal calculation #
+    #####################################
+    image_features: torch.Tensor = None # (d_img,)
+
+    region_features: torch.Tensor = None # (n_regions, d_regions)
+    region_feature_weights: torch.Tensor = None # (n_regions,)
+
+    learned_attr_scores: torch.Tensor = None # (n_learned_attrs,)
+    zs_attr_scores: torch.Tensor = None # (n_zs_attrs,)
+
+    #############################################
+    # Features computed via batched calculation #
+    #############################################
+    # Tensor of shape (1 + 1 + n_learned_attrs + n_zs_attrs,) where the first and second elmts are
+    # the image and region scores, respectively
+    all_scores: torch.Tensor = None
+
+    # Tensor of shape (n_regions,) where each element is the score for the corresponding region
+    # Should be provided when all_scores is as region_scores cannot be determined from all_scores
+    region_scores: torch.Tensor = None
+
+    def __post_init__(self):
+        if self.all_scores is not None and self.region_scores is None:
+            raise ValueError('region_scores must be provided when all_scores is provided.')
+
 @dataclass
 class FeatureMetadata:
     name: str = field(default=None, metadata={'help': 'Name of the feature.'})

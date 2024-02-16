@@ -4,9 +4,10 @@ from typing import Any
 from model.attribute import Attribute
 from model.weighted_predictor import WeightedPredictor, WeightedPredictorOutput
 import torch.nn as nn
+import numpy as np
 import torch
 from llm import LLMClient, retrieve_attributes
-from model.image_input import ImageInput
+from model.features import ImageFeatures
 import logging
 from utils import ArticleDeterminer
 
@@ -46,46 +47,6 @@ class ConceptGroup(WeightedPredictor):
     def __init__(self, concepts: list[Concept], weights: torch.Tensor, name: str = ''):
         super().__init__(concepts, weights, name)
 
-@dataclass
-class ConceptPredictorOutput:
-    attr_group_results: dict[str, WeightedPredictorOutput]
-    component_concept_results: WeightedPredictorOutput
-    final_score: torch.Tensor
-
-class ConceptPredictor(nn.Module):
-    # TODO incorporate unnamed visual features
-    def __init__(self, concept: Concept):
-        self.concept = concept
-        self.feature_groups = nn.ModuleDict()
-
-        # Attribute detectors: necessary/descriptive, zero-shot/learned
-
-        # TODO detect component concept detectors
-
-    def forward(self, input: ImageInput):
-        # Get attribute scores
-        attr_group_results = {
-            name : group(input)
-            for name, group in self.attr_groups.items()
-        }
-
-        weighted_attr_score = sum(
-            attr_group_results[name].final_score * self.attr_group_weights[name]
-            for name in attr_group_results
-        )
-
-        # Get component concept scores
-        component_concept_results = self.component_concepts(input)
-        weighted_concept_score = component_concept_results.final_score * self.component_concepts_weight
-
-        # Final score
-        final_score = weighted_attr_score + weighted_concept_score
-
-        return ConceptPredictorOutput(
-            attr_group_results=attr_group_results,
-            component_concept_results=component_concept_results,
-            final_score=final_score
-        )
 
 class ConceptKB:
     def __init__(self, concepts: list[Concept] = []):
@@ -101,6 +62,10 @@ class ConceptKB:
             self._init_zs_attrs(llm_client, encode_class_in_zs_attr)
 
         # Build predictors
+
+    def _init_predictors(self):
+        for concept in self.concepts.values():
+            concept.predictor = ConceptPredictor(concept)
 
     def _init_zs_attrs(self, llm_client: LLMClient, encode_class: bool):
         determiner = ArticleDeterminer()
