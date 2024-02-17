@@ -61,7 +61,7 @@ if __name__ == '__main__':
     # args = parser.parse_args([]) # For debugging or jupyter notebook
 
     # %%
-    run = wandb.init(project='ecole_mo9_demo', config=args, dir=args.wandb_dir, reinit=True)
+    run = wandb.init(project='ecole_mo9_demo', config=args.as_flat(), dir=args.wandb_dir, reinit=True)
     # run = None # Comment me to use wandb
 
     # %% Initialize concept KB

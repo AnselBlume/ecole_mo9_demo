@@ -161,7 +161,7 @@ class Controller:
             else:
                 prompt += ', '
 
-            prompt += f'{self._get_article(component_part)}{component_part}'
+            prompt += f'{self.article_det.determine(component_part)}{component_part}'
 
         return prompt
 
