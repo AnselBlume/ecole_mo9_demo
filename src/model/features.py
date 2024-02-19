@@ -44,6 +44,18 @@ class ImageFeatures:
 
         return self
 
+    def cpu(self):
+        '''
+            Moves all tensors to the CPU.
+        '''
+        return self.to('cpu')
+
+    def cuda(self):
+        '''
+            Moves all tensors to the GPU.
+        '''
+        return self.to('cuda')
+
 @dataclass
 class FeatureMetadata:
     name: str = field(default=None, metadata={'help': 'Name of the feature.'})

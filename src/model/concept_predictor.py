@@ -37,6 +37,18 @@ class ConceptPredictorOutput:
 
         return self
 
+    def cpu(self):
+        '''
+            Moves all tensors to the CPU.
+        '''
+        return self.to('cpu')
+
+    def cuda(self):
+        '''
+            Moves all tensors to the GPU.
+        '''
+        return self.to('cuda')
+
 class ConceptPredictor(nn.Module):
     # TODO incorporate unnamed visual features
     # TODO detect component concepts
