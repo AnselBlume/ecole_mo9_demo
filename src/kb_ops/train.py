@@ -62,7 +62,12 @@ class ConceptKBTrainer:
 
             for i, batch in enumerate(tqdm(train_dl, desc=f'Epoch {epoch}/{n_epochs}'), start=1):
                 image_data, text_label = batch[data_key], batch['label']
-                outputs = self.forward_pass(image_data[0], text_label[0], backward_every_n_concepts=backward_every_n_concepts)
+                outputs = self.forward_pass(
+                    image_data[0],
+                    text_label[0],
+                    do_backward=True,
+                    backward_every_n_concepts=backward_every_n_concepts
+                )
 
                 self.log({'train_loss': outputs['loss'], 'epoch': epoch})
 
@@ -94,7 +99,7 @@ class ConceptKBTrainer:
 
         for batch in tqdm(val_dl, desc='Validation'):
             image, text_label = batch[data_key], batch['label']
-            outputs = self.forward_pass(image[0], text_label[0], do_backward=False)
+            outputs = self.forward_pass(image[0], text_label[0])
 
             total_loss += outputs['loss'] # Store loss
 
@@ -121,7 +126,7 @@ class ConceptKBTrainer:
         self,
         image_data: Union[Image, dict],
         text_label: str,
-        do_backward: bool = True,
+        do_backward: bool = False,
         backward_every_n_concepts: int = None
     ):
         # TODO Make an actual Segmentations data type and have localize_and_segment return it
