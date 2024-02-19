@@ -35,7 +35,7 @@ class ImageDataset(Dataset):
 '''
 class PresegmentedDataset(Dataset):
     '''
-        Dataset for preprocessed images. img_paths should be the paths to the unprocessed images
+        Dataset for preprocessed images. segmentation_paths should be the paths to the image segmentations
         corresponding to the labels.
     '''
     def __init__(self, segmentation_paths: list[str], labels: list[str]):
