@@ -122,6 +122,32 @@ class ConceptKBTrainer:
             'predicted_concept_outputs': predicted_concept_outputs
         }
 
+    @torch.inference_mode()
+    def predict(self, predict_dl: DataLoader):
+        self.concept_kb.eval()
+
+        predictions = []
+        data_key = 'segmentations' if isinstance(predict_dl.dataset, PresegmentedDataset) else 'image'
+
+        for batch in tqdm(predict_dl, desc='Prediction'):
+            image, text_label = batch[data_key], batch['label']
+            outputs = self.forward_pass(image[0], text_label[0])
+
+            # Compute predictions
+            scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
+            pred_ind = scores.argmax(dim=0, keepdim=True) # (1,) IntTensor
+            true_ind = self.label_to_index[text_label[0]].int().unsqueeze(0) # (1,)
+
+            predictions.append({
+                'predictors_scores': scores.cpu(),
+                'predicted_index': pred_ind.item(),
+                'predicted_concept_outputs': outputs['predictors_outputs'][pred_ind.item()].cpu(),
+                'true_index': true_ind.item(),
+                'true_concept_outputs': outputs['predictors_outputs'][true_ind.item()].cpu()
+            })
+
+        return predictions
+
     def forward_pass(
         self,
         image_data: Union[Image, dict],
