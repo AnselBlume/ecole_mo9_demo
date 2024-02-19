@@ -57,6 +57,9 @@ class ConceptKB:
         return self.get_concepts()
 
     def parameters(self):
+        '''
+            Returns all parameters of the concept predictors.
+        '''
         params = []
         for concept in self.concepts:
             params.extend(list(concept.predictor.parameters()))
@@ -64,23 +67,38 @@ class ConceptKB:
         return params
 
     def train(self):
+        '''
+            Sets all concept predictors to train mode.
+        '''
         for concept in self.concepts:
             concept.predictor.train()
 
     def eval(self):
+        '''
+            Sets all concept predictors to eval mode.
+        '''
         for concept in self.concepts:
             concept.predictor.eval()
 
     def to(self, device):
+        '''
+            Calls the to method on all concept predictors.
+        '''
         for concept in self.concepts:
             concept.predictor.to(device)
 
     def save(self, path):
+        '''
+            Saves the ConceptKB to a pickle file.
+        '''
         with open(path, 'wb') as f:
             pickle.dump(self, f)
 
     @staticmethod
     def load(path) -> ConceptKB:
+        '''
+            Returns a saved ConceptKB from a pickle file.
+        '''
         with open(path, 'rb') as f:
             dt = pickle.load(f)
 
@@ -88,6 +106,9 @@ class ConceptKB:
         return dt
 
     def initialize(self, cfg: ConceptKBConfig, llm_client: LLMClient = None):
+        '''
+            Initializes the ConceptKB with zero-shot attributes and concept predictors.
+        '''
         self.cfg = cfg
         self.used_zs_attrs_from_llm = llm_client is not None
 
