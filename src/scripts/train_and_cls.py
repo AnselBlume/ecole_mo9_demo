@@ -98,7 +98,7 @@ if __name__ == '__main__':
     # )) # Uncomment me and comment above to test with no ZS attributes to avoid paying Altman
 
     # %% Train concept detectors
-    trainer = ConceptKBTrainer(concept_kb, controller, feature_extractor, run)
+    trainer = ConceptKBTrainer(concept_kb, feature_extractor, controller, run)
 
     # %%
     if args.presegmented_dir:

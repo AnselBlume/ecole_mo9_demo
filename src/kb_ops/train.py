@@ -21,8 +21,8 @@ class ConceptKBTrainer:
     def __init__(
         self,
         concept_kb: ConceptKB,
-        controller: Controller,
         feature_extractor: FeatureExtractor,
+        controller: Controller = None,
         wandb_run: Run = None
     ):
 
@@ -128,6 +128,9 @@ class ConceptKBTrainer:
 
         # Get region crops
         if isinstance(image_data, Image):
+            if self.controller is None:
+                raise ValueError('Controller is required for online localization and segmentation')
+
             segmentations = self.controller.localize_and_segment(
                 image=image_data,
                 concept_name='',
