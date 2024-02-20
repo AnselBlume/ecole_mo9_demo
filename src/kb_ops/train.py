@@ -198,20 +198,36 @@ class ConceptKBTrainer:
         total_loss = 0
         curr_loss = 0
         outputs = []
-        visual_features = None # Cache to avoid recomputation
+
+        # Cache to avoid recomputation for each image
+        visual_features = None
+        trained_attr_scores = None
 
         for i, concept in enumerate(self.concept_kb, start=1):
             zs_attrs = [attr.query for attr in concept.zs_attributes]
 
+            # Compute image features
             with torch.no_grad():
-                features: ImageFeatures = self.feature_extractor(image, region_crops, zs_attrs, cached_visual_features=visual_features)
+                features: ImageFeatures = self.feature_extractor(
+                    image,
+                    region_crops,
+                    zs_attrs,
+                    cached_visual_features=visual_features,
+                    cached_trained_attr_scores=trained_attr_scores
+                )
 
+            # Cache visual features and trained attribute scores
             if visual_features is None:
                 visual_features = torch.cat([features.image_features, features.region_features], dim=0)
 
+            if trained_attr_scores is None:
+                trained_attr_scores = torch.cat([features.trained_attr_img_scores, features.trained_attr_region_scores], dim=0)
+
+            # Compute concept predictor outputs
             output: ConceptPredictorOutput = concept.predictor(features)
             score = output.cum_score
 
+            # Compute loss and potentially perform backward pass
             binary_label = torch.tensor(int(concept.name == text_label), dtype=score.dtype, device=score.device)
             concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(self.concept_kb)
 

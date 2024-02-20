@@ -17,11 +17,20 @@ class FeatureExtractor(nn.Module):
         self.trained_clip_attr_predictor = TrainedCLIPAttributePredictor(self.clip_feature_extractor)
         self.zs_attr_predictor = CLIPAttributePredictor(clip, processor)
 
-    def forward(self, image: Image, regions: list[Image], zs_attrs: list[str], cached_visual_features: torch.Tensor = None):
-        # TODO cache the trained attr scores
+    def forward(
+        self,
+        image: Image,
+        regions: list[Image],
+        zs_attrs: list[str],
+        cached_visual_features: torch.Tensor = None,
+        cached_trained_attr_scores: torch.Tensor = None
+    ):
         '''
             If cached_visual_features is provided, does not recompute image and region features.
-            It should have shape (1 + n_regions, d_img) where the first element is the image feature.
+            Should have shape (1 + n_regions, d_img) where the first element is the image feature.
+
+            If cached_trained_attr_scores is provided, does not recompute trained attribute scores.
+            Should have shape (1 + n_regions, n_learned_attrs) where the first element is the image feature.
         '''
         if cached_visual_features is None:
             visual_features = self.clip_feature_extractor(images=[image] + regions)
@@ -37,7 +46,10 @@ class FeatureExtractor(nn.Module):
         else:
             zs_scores = torch.tensor([[]]) # This will be a nop in the indexing below
 
-        trained_attr_scores = self.trained_clip_attr_predictor.predict_from_features(visual_features) # (1 + n_regions, n_learned_attrs)
+        if cached_trained_attr_scores is None:
+            trained_attr_scores = self.trained_clip_attr_predictor.predict_from_features(visual_features) # (1 + n_regions, n_learned_attrs)
+        else:
+            trained_attr_scores = cached_trained_attr_scores
 
         region_weights = torch.ones(len(regions), device=trained_attr_scores.device) / len(regions) # Uniform weights
 
