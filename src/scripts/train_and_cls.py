@@ -1,6 +1,6 @@
 # %%
 import os # TODO Change DesCo CUDA device here
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -50,7 +50,7 @@ def get_parser():
     parser.add_argument('--train.backward_every_n_concepts', type=int, default=None, help='Number of concepts to accumulate gradients over')
     parser.add_argument('--train.imgs_per_optim_step', type=int, default=4, help='Number of images to accumulate gradients over before stepping optimizer')
     parser.add_argument('--train.ckpt_every_n_epochs', type=int, default=1, help='Number of epochs to save model')
-    parser.add_argument('--train.ckpt_dir', type=str, default='checkpoints', help='Directory to save model checkpoints')
+    parser.add_argument('--train.ckpt_dir', type=str, default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb', help='Directory to save model checkpoints')
 
     return parser
 
