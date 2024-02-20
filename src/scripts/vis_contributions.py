@@ -19,7 +19,6 @@ from PIL.Image import Image
 from vis_utils import image_from_masks
 from torchvision.transforms.functional import to_pil_image, pil_to_tensor
 import jsonargparse as argparse
-from feature_extraction.trained_attrs import INDEX_TO_ATTR
 from torchmetrics import Accuracy
 
 def get_parser():
@@ -41,7 +40,7 @@ def get_parser():
 
     return parser
 
-def prediction_contributions(output: ConceptPredictorOutput, zs_attrs: list[str] = []):
+def prediction_contributions(output: ConceptPredictorOutput, trained_attrs: list[str] = [], zs_attrs: list[str] = []):
     ret_dict = {}
 
     # Cumulative feature scores
@@ -59,16 +58,17 @@ def prediction_contributions(output: ConceptPredictorOutput, zs_attrs: list[str]
     ret_dict['total_scores'] = total_scores
 
     # Trained attribute contributions
-    t_attr_img_scores = {INDEX_TO_ATTR[i] : v for i, v in enumerate(output.trained_attr_img_scores)}
-    t_attr_img_mass = output.trained_attr_img_scores.abs().sum()
-    t_attr_img_scores = {k : v.sgn() * v.abs() / t_attr_img_mass for k, v in t_attr_img_scores.items()}
+    if trained_attrs != []:
+        t_attr_img_scores = {trained_attrs[i] : v for i, v in enumerate(output.trained_attr_img_scores)}
+        t_attr_img_mass = output.trained_attr_img_scores.abs().sum()
+        t_attr_img_scores = {k : v.sgn() * v.abs() / t_attr_img_mass for k, v in t_attr_img_scores.items()}
 
-    t_attr_region_scores = {INDEX_TO_ATTR[i] : v.sum() for i, v in enumerate(output.trained_attr_region_scores.T)}
-    t_attr_region_mass = output.trained_attr_region_scores.abs().sum()
-    t_attr_region_scores = {k : v.sgn() * v.abs() / t_attr_region_mass for k, v in t_attr_region_scores.items()}
+        t_attr_region_scores = {trained_attrs[i] : v.sum() for i, v in enumerate(output.trained_attr_region_scores.T)}
+        t_attr_region_mass = output.trained_attr_region_scores.abs().sum()
+        t_attr_region_scores = {k : v.sgn() * v.abs() / t_attr_region_mass for k, v in t_attr_region_scores.items()}
 
-    ret_dict['trained_attr_img_scores'] = t_attr_img_scores
-    ret_dict['trained_attr_region_scores'] = t_attr_region_scores
+        ret_dict['trained_attr_img_scores'] = t_attr_img_scores
+        ret_dict['trained_attr_region_scores'] = t_attr_region_scores
 
     # Zero-shot attribute contributions
     if zs_attrs != []:
@@ -159,16 +159,6 @@ def visualize_prediction_contributions(img: Image, region_img: Image, prediction
 
     return fig
 
-def get_prediction_contribution_inputs(prediction: dict, kb: ConceptKB):
-    '''
-        predictions: list returned by ConceptKBTrainer.predict.
-    '''
-    predicted_concept_output = prediction['predicted_concept_outputs']
-    concepts = list(kb)
-    predicted_concept_zs_attrs = [attr.name for attr in concepts[prediction['predicted_index']].zs_attributes]
-
-    return predicted_concept_output, predicted_concept_zs_attrs
-
 def get_dataloader(dataset):
     return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=3, pin_memory=True, collate_fn=list_collate)
 
@@ -179,7 +169,9 @@ if __name__ == '__main__':
 
     # %%
     kb = ConceptKB.load(args.ckpt_path)
-    trainer = ConceptKBTrainer(kb, build_feature_extractor())
+    feature_extractor = build_feature_extractor()
+    trainer = ConceptKBTrainer(kb, feature_extractor)
+    trained_attrs = feature_extractor.trained_clip_attr_predictor.attr_names
 
     # %%  Build datasets
     (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_directory(args.presegmented_dir, exts='.pkl')
@@ -193,12 +185,11 @@ if __name__ == '__main__':
     # %%
     accuracy = Accuracy(task='multiclass', num_classes=len(kb))
 
+    concepts = list(kb)
     all_contributions = []
     os.makedirs(args.output_dir, exist_ok=True)
 
     for index in tqdm(range(len(predictions)), desc='Visualizing contributions'):
-        concepts = list(kb)
-
         instance = test_ds[index]
         prediction = predictions[index]
 
@@ -209,8 +200,9 @@ if __name__ == '__main__':
         ) if instance['segmentations']['part_masks'].shape[0] > 0 else img
 
         # Attribute scores
-        inputs = get_prediction_contribution_inputs(prediction, kb)
-        contributions = prediction_contributions(*inputs)
+        predicted_concept_outputs = prediction['predicted_concept_outputs']
+        predicted_concept_zs_attrs = [attr.name for attr in concepts[prediction['predicted_index']].zs_attributes]
+        contributions = prediction_contributions(predicted_concept_outputs, trained_attrs, predicted_concept_zs_attrs)
         all_contributions.append(contributions)
 
         # Create figure
