@@ -18,6 +18,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ConceptKBTrainer:
+    UNK_LABEL = '[UNK]'
+
     def __init__(
         self,
         concept_kb: ConceptKB,
@@ -27,7 +29,11 @@ class ConceptKBTrainer:
     ):
 
         self.concept_kb = concept_kb
-        self.label_to_index = {concept.name : torch.tensor(i, dtype=torch.float32) for i, concept in enumerate(concept_kb)}
+
+        self.label_to_index: dict[str,int] = {concept.name : i for i, concept in enumerate(concept_kb)}
+        self.label_to_index[self.UNK_LABEL] = -1 # For unknown labels
+        self.index_to_label: dict[int,str] = {v : k for k, v in self.label_to_index.items()}
+
         self.controller = controller
         self.feature_extractor = feature_extractor
         self.run = wandb_run
@@ -106,7 +112,7 @@ class ConceptKBTrainer:
             # Compute predictions and accuracy
             scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
             pred_ind = scores.argmax(dim=0, keepdim=True) # (1,) IntTensor
-            true_ind = self.label_to_index[text_label[0]].int().unsqueeze(0) # (1,)
+            true_ind = torch.tensor(self.label_to_index[text_label[0]]).unsqueeze(0) # (1,)
 
             acc(pred_ind, true_ind)
 
@@ -123,7 +129,11 @@ class ConceptKBTrainer:
         }
 
     @torch.inference_mode()
-    def predict(self, predict_dl: DataLoader):
+    def predict(self, predict_dl: DataLoader, unk_threshold: float = 0.):
+        '''
+            unk_threshold: Number between [0,1]. If sigmoid(max concept score) is less than this,
+                outputs self.label_to_index[self.UNK_LABEL] as the predicted label.
+        '''
         self.concept_kb.eval()
 
         predictions = []
@@ -134,16 +144,22 @@ class ConceptKBTrainer:
             outputs = self.forward_pass(image[0], text_label[0])
 
             # Compute predictions
+            true_ind = self.label_to_index[text_label[0]] # int
+
             scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
-            pred_ind = scores.argmax(dim=0, keepdim=True) # (1,) IntTensor
-            true_ind = self.label_to_index[text_label[0]].int().unsqueeze(0) # (1,)
+            pred_ind = scores.argmax(dim=0).item() # int
+
+            # If max score is less than threshold, predict UNK_LABEL
+            if unk_threshold > 0 and scores[pred_ind].sigmoid() < unk_threshold:
+                pred_ind = self.label_to_index[self.UNK_LABEL]
 
             predictions.append({
                 'predictors_scores': scores.cpu(),
-                'predicted_index': pred_ind.item(),
-                'predicted_concept_outputs': outputs['predictors_outputs'][pred_ind.item()].cpu(),
-                'true_index': true_ind.item(),
-                'true_concept_outputs': outputs['predictors_outputs'][true_ind.item()].cpu()
+                'predicted_index': pred_ind,
+                'predicted_label': self.index_to_label[pred_ind],
+                'predicted_concept_outputs': outputs['predictors_outputs'][pred_ind].cpu(),
+                'true_index': true_ind,
+                'true_concept_outputs': outputs['predictors_outputs'][true_ind].cpu() if true_ind >= 0 else None
             })
 
         return predictions
