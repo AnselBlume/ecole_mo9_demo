@@ -231,7 +231,7 @@ if __name__ == '__main__':
         # Save figure
         file_path = os.path.splitext(os.path.basename(instance['segmentations']['image_path']))[0]
         out_path = os.path.join(args.output_dir, f'{file_path}.jpg')
-        fig.savefig(out_path)
+        fig.savefig(out_path, bbox_inches='tight') # Recompute fig dims when saving because of raised suptitle
         plt.close(fig)
 
     # %% Compute and save stats
