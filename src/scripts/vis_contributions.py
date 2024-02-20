@@ -35,7 +35,7 @@ def get_parser():
                         help='Path to output directory')
 
     parser.add_argument('--ckpt_path',
-                        default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_19-13:52:44_no_class_zs/concept_kb_epoch_10.pt',
+                        default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_20-08:02:42_abs_img_scale/concept_kb_epoch_15.pt',
                         help='Path to model checkpoint')
 
     return parser
@@ -61,11 +61,11 @@ def prediction_contributions(output: ConceptPredictorOutput, trained_attrs: list
     if trained_attrs != []:
         t_attr_img_scores = {trained_attrs[i] : v for i, v in enumerate(output.trained_attr_img_scores)}
         t_attr_img_mass = output.trained_attr_img_scores.abs().sum()
-        t_attr_img_scores = {k : v.sgn() * v.abs() / t_attr_img_mass for k, v in t_attr_img_scores.items()}
+        t_attr_img_scores = {k : v / t_attr_img_mass for k, v in t_attr_img_scores.items()}
 
         t_attr_region_scores = {trained_attrs[i] : v.sum() for i, v in enumerate(output.trained_attr_region_scores.T)}
         t_attr_region_mass = output.trained_attr_region_scores.abs().sum()
-        t_attr_region_scores = {k : v.sgn() * v.abs() / t_attr_region_mass for k, v in t_attr_region_scores.items()}
+        t_attr_region_scores = {k : v / t_attr_region_mass for k, v in t_attr_region_scores.items()}
 
         ret_dict['trained_attr_img_scores'] = t_attr_img_scores
         ret_dict['trained_attr_region_scores'] = t_attr_region_scores

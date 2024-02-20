@@ -106,7 +106,7 @@ class ConceptPredictor(nn.Module):
 
             # Image and region feature scores
             img_score = self.img_predictor(img_feats.image_features) # (1, 1)
-            img_score = img_score * self.full_img_scale # (1, 1)
+            img_score = img_score * self.full_img_scale.abs() # (1, 1)
 
             region_scores = self.region_predictor(img_feats.region_features) # (n_regions, 1)
             region_scores = region_scores * region_weights # (n_regions, 1)
@@ -115,7 +115,7 @@ class ConceptPredictor(nn.Module):
             # Trained attributes
             if self.n_trained_attrs > 0:
                 trained_attr_img_scores = self.trained_attr_predictor(img_feats.trained_attr_img_scores) # (1, n_trained_attrs)
-                trained_attr_img_scores = trained_attr_img_scores * self.full_img_scale # (1, n_trained_attrs)
+                trained_attr_img_scores = trained_attr_img_scores * self.full_img_scale.abs() # (1, n_trained_attrs)
                 trained_attr_img_score = trained_attr_img_scores # (1, n_trained_attrs)
 
                 trained_attr_region_scores = self.trained_attr_predictor(img_feats.trained_attr_region_scores) # (n_regions, n_trained_attrs)
@@ -129,7 +129,7 @@ class ConceptPredictor(nn.Module):
             # Zero shot attributes
             if self.n_zs_attrs > 0:
                 zs_attr_img_scores = self.zs_attr_predictor(img_feats.zs_attr_img_scores) # (1, n_zs_attrs)
-                zs_attr_img_scores = zs_attr_img_scores * self.full_img_scale # (1, n_zs_attrs)
+                zs_attr_img_scores = zs_attr_img_scores * self.full_img_scale.abs() # (1, n_zs_attrs)
                 zs_attr_img_score = zs_attr_img_scores # (1, n_zs_attrs)
 
                 zs_attr_region_scores = self.zs_attr_predictor(img_feats.zs_attr_region_scores) # (n_regions, n_zs_attrs)
