@@ -18,6 +18,7 @@ class FeatureExtractor(nn.Module):
         self.zs_attr_predictor = CLIPAttributePredictor(clip, processor)
 
     def forward(self, image: Image, regions: list[Image], zs_attrs: list[str], cached_visual_features: torch.Tensor = None):
+        # TODO cache the trained attr scores
         '''
             If cached_visual_features is provided, does not recompute image and region features.
             It should have shape (1 + n_regions, d_img) where the first element is the image feature.
