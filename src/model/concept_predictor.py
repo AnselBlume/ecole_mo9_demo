@@ -157,13 +157,7 @@ class ConceptPredictor(nn.Module):
             all_scores = group(all_scores)
 
         # Construct output
-        if img_feats.all_scores is None: # Intermediate results computed externally;
-            output = ConceptPredictorOutput(
-                all_scores_weighted=all_scores.detach().squeeze(),
-                cum_score=all_scores.sum()
-            )
-
-        else: # Intermediate results computed here
+        if img_feats.all_scores is None: # Intermediate results computed here
             output = ConceptPredictorOutput(
                 img_score=img_score.detach().squeeze(),
                 region_scores=region_scores.detach().squeeze(),
@@ -172,6 +166,12 @@ class ConceptPredictor(nn.Module):
                 trained_attr_region_scores=trained_attr_region_scores.detach(),
                 zs_attr_img_scores=zs_attr_img_scores.detach().squeeze(),
                 zs_attr_region_scores=zs_attr_region_scores.detach(),
+                all_scores_weighted=all_scores.detach().squeeze(),
+                cum_score=all_scores.sum()
+            )
+
+        else: # Intermediate results computed externally;
+            output = ConceptPredictorOutput(
                 all_scores_weighted=all_scores.detach().squeeze(),
                 cum_score=all_scores.sum()
             )
