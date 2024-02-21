@@ -1,7 +1,7 @@
 import os
 import torch
 import torch.nn.functional as F
-from controller import Controller
+from image_processing import LocalizerAndSegmenter
 from torch.utils.data import DataLoader, Dataset
 from model.concept import ConceptKB
 from model.concept_predictor import ConceptPredictorOutput
@@ -24,7 +24,7 @@ class ConceptKBTrainer:
         self,
         concept_kb: ConceptKB,
         feature_extractor: FeatureExtractor,
-        controller: Controller = None,
+        loc_and_seg: LocalizerAndSegmenter = None,
         wandb_run: Run = None
     ):
 
@@ -34,7 +34,7 @@ class ConceptKBTrainer:
         self.label_to_index[self.UNK_LABEL] = -1 # For unknown labels
         self.index_to_label: dict[int,str] = {v : k for k, v in self.label_to_index.items()}
 
-        self.controller = controller
+        self.loc_and_seg = loc_and_seg
         self.feature_extractor = feature_extractor
         self.run = wandb_run
 
@@ -175,10 +175,10 @@ class ConceptKBTrainer:
 
         # Get region crops
         if isinstance(image_data, Image):
-            if self.controller is None:
-                raise ValueError('Controller is required for online localization and segmentation')
+            if self.loc_and_seg is None:
+                raise ValueError('LocalizerAndSegmenter is required for online localization and segmentation')
 
-            segmentations = self.controller.localize_and_segment(
+            segmentations = self.loc_and_seg.localize_and_segment(
                 image=image_data,
                 concept_name='',
                 concept_parts=[],

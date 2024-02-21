@@ -104,7 +104,7 @@ if __name__ == '__main__':
         zs_attrs = class_to_zs_attrs[obj_name]
 
         # Get predictions
-        results = controller.predict(img, zs_attrs=zs_attrs)
+        results = controller.predict_from_zs_attributes(img, zs_attrs=zs_attrs)
 
         part_masks = results['segmentations']['part_masks']
         attr_scores = results['scores']['part_zs_scores']['attr_probs_per_region'] # (n_attrs, n_regions)

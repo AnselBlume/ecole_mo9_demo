@@ -133,7 +133,7 @@ if __name__ == '__main__':
         class_name = get_class_name(basename)
 
         # Get predictions
-        results = controller.predict(img, zs_attrs=all_zs_attrs)
+        results = controller.predict_from_zs_attributes(img, zs_attrs=all_zs_attrs)
 
         part_attr_scores = results['scores']['part_zs_scores']['raw_scores'] # (n_all_zs_attrs, n_regions)
         part_class_scores = get_class_scores(part_attr_scores, class_to_zs_attrs, controller) # (n_classes,)
