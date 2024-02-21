@@ -38,6 +38,11 @@ class Controller:
         self.cached_predictions = []
 
     def predict_concept(self, image: Image, unk_threshold: float = .1):
+        '''
+        Predicts the concept of an image and returns the predicted label and a plot of the predicted classes.
+
+        Returns: dict with keys 'predicted_label' and 'plot' of types str and PIL.Image, respectively.
+        '''
         prediction = self.trainer.predict(image_data=image, unk_threshold=unk_threshold)
         self.cached_predictions.append(prediction)
 

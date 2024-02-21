@@ -160,7 +160,7 @@ def plot_predicted_classes(
     return_img=False
 ) -> Union[tuple[plt.Figure, plt.Axes], Image]:
     '''
-        Takes a of Trainer.predict dict and plots the top scoring classes.
+        Takes a Trainer.predict dict and plots the top scoring classes.
     '''
     scores: torch.Tensor = prediction['predictors_scores'].sigmoid() # (n,)
     names: list = prediction['concept_names']
