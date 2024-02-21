@@ -7,34 +7,71 @@ from score import AttributeScorer
 from model.concept import ConceptKB, Concept
 from PIL.Image import Image
 import logging, coloredlogs
-from feature_extraction import build_sam, build_desco
+from feature_extraction import build_sam, build_desco, FeatureExtractor
 from image_processing import LocalizerAndSegmenter, build_localizer_and_segmenter
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
+from kb_ops.train import ConceptKBTrainer
 from llm import LLMClient, retrieve_parts, retrieve_attributes
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
 from utils import to_device
+from vis_utils import plot_predicted_classes
 
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
 
 class Controller:
-    def __init__(self, loc_and_seg: LocalizerAndSegmenter, concept_kb: ConceptKB, zs_predictor: CLIPAttributePredictor = None):
+    def __init__(
+        self,
+        loc_and_seg: LocalizerAndSegmenter,
+        concept_kb: ConceptKB,
+        feature_extractor: FeatureExtractor,
+        zs_predictor: CLIPAttributePredictor = None
+    ):
         self.concepts = concept_kb
+        self.trainer = ConceptKBTrainer(concept_kb, feature_extractor, loc_and_seg)
 
         self.loc_and_seg = loc_and_seg
         self.llm_client = LLMClient()
         self.attr_scorer = AttributeScorer(zs_predictor)
 
-    ################
-    # Segmentation #
-    ################
-    def predict_image(self, image: Image):
-        pass
+        self.cached_predictions = []
 
     ##############
     # Prediction #
     ##############
+    def clear_cached_predictions(self):
+        self.cached_predictions = []
+
+    def predict_concept(self, image: Image, unk_threshold: float = .1):
+        prediction = self.trainer.predict(image_data=image, unk_threshold=unk_threshold)
+        self.cached_predictions.append(prediction)
+
+        img = plot_predicted_classes(prediction, threshold=unk_threshold, return_img=True)
+        predicted_label = prediction['predicted_label']
+        predicted_label = predicted_label if predicted_label != self.trainer.UNK_LABEL else 'unknown'
+
+        return {
+            'predicted_label': predicted_label,
+            'plot': img
+        }
+
+    def localize_and_segment(
+        self,
+        image: Image,
+        concept_name: str = '',
+        concept_parts: list[str] = [],
+        remove_background: bool = True,
+        return_crops: bool = True
+    ):
+        return self.loc_and_seg.localize_and_segment(
+            image=image,
+            concept_name=concept_name,
+            concept_parts=concept_parts,
+            remove_background=remove_background,
+            return_crops=return_crops
+        )
+
     def predict_from_zs_attributes(
         self,
         image: Image,

@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from image_processing import LocalizerAndSegmenter
 from torch.utils.data import DataLoader, Dataset
-from model.concept import ConceptKB
+from model.concept import ConceptKB, Concept
 from model.concept_predictor import ConceptPredictorOutput
 from model.features import ImageFeatures
 from wandb.sdk.wandb_run import Run
@@ -129,22 +129,28 @@ class ConceptKBTrainer:
         }
 
     @torch.inference_mode()
-    def predict(self, predict_dl: DataLoader, unk_threshold: float = 0.):
+    def predict(
+        self,
+        predict_dl: DataLoader = None,
+        image_data: Union[Image, dict] = None,
+        unk_threshold: float = 0.
+    ) -> Union[list[dict], dict]:
         '''
             unk_threshold: Number between [0,1]. If sigmoid(max concept score) is less than this,
                 outputs self.label_to_index[self.UNK_LABEL] as the predicted label.
+
+            Returns: List of prediction dicts if predict_dl is provided, else a single prediction dict.
         '''
+        if not ((predict_dl is None) ^ (image_data is None)):
+            raise ValueError('Exactly one of predict_dl or image_data must be provided')
+
         self.concept_kb.eval()
-
         predictions = []
-        data_key = 'segmentations' if isinstance(predict_dl.dataset, PresegmentedDataset) else 'image'
 
-        for batch in tqdm(predict_dl, desc='Prediction'):
-            image, text_label = batch[data_key], batch['label']
-            outputs = self.forward_pass(image[0], text_label[0])
-
+        def process_outputs(outputs: dict):
             # Compute predictions
-            true_ind = self.label_to_index[text_label[0]] # int
+            if predict_dl is not None:
+                true_ind = self.label_to_index[text_label[0]] # int
 
             scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
             pred_ind = scores.argmax(dim=0).item() # int
@@ -154,20 +160,36 @@ class ConceptKBTrainer:
                 pred_ind = self.label_to_index[self.UNK_LABEL]
 
             predictions.append({
+                'concept_names': outputs['concept_names'],
                 'predictors_scores': scores.cpu(),
                 'predicted_index': pred_ind,
                 'predicted_label': self.index_to_label[pred_ind],
                 'predicted_concept_outputs': outputs['predictors_outputs'][pred_ind].cpu(),
-                'true_index': true_ind,
-                'true_concept_outputs': outputs['predictors_outputs'][true_ind].cpu() if true_ind >= 0 else None
+                'true_index': true_ind if predict_dl is not None else None,
+                'true_concept_outputs': None if predict_dl is None or true_ind < 0 else outputs['predictors_outputs'][true_ind].cpu()
             })
 
-        return predictions
+        if predict_dl is not None:
+            data_key = 'segmentations' if isinstance(predict_dl.dataset, PresegmentedDataset) else 'image'
+
+            for batch in tqdm(predict_dl, desc='Prediction'):
+                image, text_label = batch[data_key], batch['label']
+                outputs = self.forward_pass(image[0], text_label[0])
+                process_outputs(outputs)
+
+            return predictions
+
+        else: # image_data is not None
+            outputs = self.forward_pass(image_data)
+            process_outputs(outputs)
+
+            return predictions[0]
 
     def forward_pass(
         self,
         image_data: Union[Image, dict],
-        text_label: str,
+        text_label: str = None,
+        concepts: list[Concept] = None,
         do_backward: bool = False,
         backward_every_n_concepts: int = None
     ):
@@ -203,7 +225,8 @@ class ConceptKBTrainer:
         visual_features = None
         trained_attr_scores = None
 
-        for i, concept in enumerate(self.concept_kb, start=1):
+        concepts = concepts if concepts is not None else self.concept_kb
+        for i, concept in enumerate(concepts, start=1):
             zs_attrs = [attr.query for attr in concept.zs_attributes]
 
             # Compute image features
@@ -228,11 +251,13 @@ class ConceptKBTrainer:
             score = output.cum_score
 
             # Compute loss and potentially perform backward pass
-            binary_label = torch.tensor(int(concept.name == text_label), dtype=score.dtype, device=score.device)
-            concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(self.concept_kb)
+            if text_label is not None:
+                binary_label = torch.tensor(int(concept.name == text_label), dtype=score.dtype, device=score.device)
+                concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(self.concept_kb)
 
-            curr_loss += concept_loss
-            total_loss += concept_loss.item()
+                curr_loss += concept_loss
+                total_loss += concept_loss.item()
+
             outputs.append(output.to('cpu'))
 
             if (
@@ -246,8 +271,9 @@ class ConceptKBTrainer:
             curr_loss.backward()
 
         return {
-            'loss': total_loss,
-            'predictors_outputs': outputs
+            'loss': total_loss if text_label is not None else None,
+            'predictors_outputs': outputs,
+            'concept_names': [concept.name for concept in concepts]
         }
 
     def log(self, *args, **kwargs):

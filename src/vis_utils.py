@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 import torch
-import torchvision.ops
 from torchvision.transforms.functional import to_pil_image
 from torchvision.utils import draw_segmentation_masks
-from typing import Union, List, Optional
+from typing import Union, List
+import PIL
 from PIL.Image import Image
 import skimage
 import cv2
@@ -115,6 +116,7 @@ def image_from_masks(
         masks = masks.numpy()
 
     return masks
+
 def masks_to_boxes(masks:torch.Tensor):
     """
     Copy of torvision.ops.masks_to_boxes
@@ -150,3 +152,39 @@ def mask_and_crop_image(image_file:str,mask:List):
     x1,y1,x2,y2 = segmented_box
     segmented_image = segmented_image[int(y1):int(y2),int(x1):int(x2)]
     return segmented_image
+
+def plot_predicted_classes(
+    prediction: dict,
+    n_classes: int = 5,
+    threshold: float = 0.,
+    return_img=False
+) -> Union[tuple[plt.Figure, plt.Axes], Image]:
+    '''
+        Takes a of Trainer.predict dict and plots the top scoring classes.
+    '''
+    scores: torch.Tensor = prediction['predictors_scores'].sigmoid() # (n,)
+    names: list = prediction['concept_names']
+
+    values, indices = scores.topk(n_classes)
+    names = [names[i] for i in indices]
+
+    # Reverse for plot so highest score is at top
+    values = list(reversed(values.tolist()))
+    names = list(reversed(names))
+
+    fig, ax = plt.subplots()
+    ax.barh(names, values, color='blue')
+
+    # Plot vertical dashed red line at threshold
+    ax.axvline(x=threshold, color='red', linestyle='--')
+
+    # Get xlim
+
+    ax.set_title(f'Top {n_classes} Predicted Classes')
+    ax.set_xlim(-.001, ax.get_xlim()[1])
+
+    if return_img:
+        fig.canvas.draw()
+        return PIL.Image.frombytes('RGB', fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
+
+    return fig, ax

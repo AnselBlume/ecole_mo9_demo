@@ -1,8 +1,8 @@
 import os
 import pickle
 from torch.utils.data import Dataset
+from image_processing import LocalizerAndSegmenter
 from PIL import Image
-from controller import Controller
 from tqdm import tqdm
 
 def list_collate(batch):
@@ -58,7 +58,7 @@ class PresegmentedDataset(Dataset):
             'label': label
         }
 
-def preprocess_segmentations(img_dir: str, out_dir: str, controller: Controller):
+def preprocess_segmentations(img_dir: str, out_dir: str, controller: LocalizerAndSegmenter):
     '''
         Preprocesses segmentations for a directory of images and saves them to a directory.
         If a segmentation file already exists, it will be skipped.
@@ -91,9 +91,6 @@ if __name__ == '__main__':
     in_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data'
     out_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data_segmentations'
 
-    controller = Controller(
-        build_localizer_and_segmenter(build_sam(), build_desco())
-        None
-    )
+    loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
 
-    preprocess_segmentations(in_dir, out_dir, controller)
+    preprocess_segmentations(in_dir, out_dir, loc_and_seg)
