@@ -14,7 +14,7 @@ from rembg import remove, new_session
 from torchvision.transforms.functional import crop, to_pil_image, pil_to_tensor
 from torchvision.ops import box_convert
 import numpy as np
-from localize import bbox_from_mask
+from image_processing.localize import bbox_from_mask
 import logging
 logger = logging.getLogger(__name__)
 
@@ -159,7 +159,7 @@ if __name__ == '__main__':
     import PIL
     from vis_utils import image_from_masks, show
     from feature_extraction import build_sam, build_desco
-    from localize import Localizer
+    from mo9_demo.src.image_processing.localize import Localizer
     from torchvision.utils import draw_bounding_boxes
     from torchvision.transforms.functional import pil_to_tensor
 

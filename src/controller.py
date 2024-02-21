@@ -5,8 +5,8 @@ if __name__ == '__main__': # TODO Delete me after debugging
 
 from score import AttributeScorer
 from model.concept import ConceptKB, Concept
-from segment import Segmenter
-from localize import Localizer, bbox_from_mask
+from image_processing.segment import Segmenter
+from image_processing.localize import Localizer, bbox_from_mask
 from PIL.Image import Image
 import logging, coloredlogs
 from feature_extraction import build_sam, build_desco, Sam, GLIPDemo
