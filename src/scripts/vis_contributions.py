@@ -1,7 +1,5 @@
 # %%
-import sys
 import os
-sys.path.append('/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src')
 import torch
 import json
 from tqdm import tqdm
