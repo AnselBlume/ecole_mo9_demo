@@ -1,10 +1,10 @@
-
 import torch
 from PIL.Image import Image
 import logging
 from image_processing import Segmenter, Localizer, bbox_from_mask
 from feature_extraction import Sam, GLIPDemo
 from utils import ArticleDeterminer
+from torchvision.transforms.functional import pil_to_tensor
 
 logger = logging.getLogger(__name__)
 
