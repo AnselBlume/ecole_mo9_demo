@@ -68,10 +68,10 @@ if __name__ == '__main__':
         build_desco,
         build_sam,
     )
+    from image_processing import build_localizer_and_segmenter
 
     controller = Controller(
-        build_sam(),
-        build_desco(),
+        build_localizer_and_segmenter(build_sam(), build_desco()),
         ConceptKB(),
         zs_predictor=build_zero_shot_attr_predictor(*build_clip())
     )

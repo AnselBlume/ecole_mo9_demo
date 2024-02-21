@@ -12,6 +12,7 @@ import PIL
 from llm.attr_retrieval import retrieve_attributes
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from vis_utils import image_from_masks, show
+from utils import ArticleDeterminer
 import math
 from tqdm import tqdm
 import logging
@@ -44,10 +45,10 @@ if __name__ == '__main__':
         build_desco,
         build_sam,
     )
+    from image_processing import build_localizer_and_segmenter
 
     controller = Controller(
-        build_sam(),
-        build_desco(),
+        build_localizer_and_segmenter(build_sam(), build_desco()),
         build_zero_shot_attr_predictor(*build_clip()),
         ConceptKB()
     )
@@ -64,6 +65,7 @@ if __name__ == '__main__':
 
     # Attributes for all classes
     all_classes = get_all_classes(in_dir)
+    article_det = ArticleDeterminer()
 
     class_to_zs_attrs = {
         class_name : retrieve_attributes(class_name, controller.llm_client)
@@ -78,7 +80,7 @@ if __name__ == '__main__':
     if encode_class_in_attr:
         class_to_zs_attrs = { # Encode class name to disambiguate attribute/class collisions
             class_name : [
-                f'{attr} of {controller._get_article(class_name)}{class_name}'
+                f'{attr} of {article_det.determine(class_name)}{class_name}'
                 for attr in attrs
             ]
             for class_name, attrs in class_to_zs_attrs.items()

@@ -73,14 +73,14 @@ if __name__ == '__main__':
         build_desco,
         build_sam,
     )
+    from image_processing import build_localizer_and_segmenter
 
     # %% Split images into train, val, test
     (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_directory(args.img_dir)
 
     # Build controller for segmentation
     controller = Controller(
-        build_sam(),
-        build_desco(),
+        build_localizer_and_segmenter(build_sam(), build_desco())
         concept_kb
     )
 

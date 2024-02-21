@@ -86,13 +86,13 @@ if __name__ == '__main__':
         build_desco,
         build_sam,
     )
+    from image_processing import build_localizer_and_segmenter
 
     in_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data'
     out_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data_segmentations'
 
     controller = Controller(
-        build_sam(),
-        build_desco(),
+        build_localizer_and_segmenter(build_sam(), build_desco())
         None
     )
 
