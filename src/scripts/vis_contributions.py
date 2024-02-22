@@ -44,10 +44,8 @@ def prediction_contributions(output: ConceptPredictorOutput, trained_attrs: list
     # Values may be None depending on whether we're using the full image or regions; this method helps reduce
     # lots of explicit if checks in the code
     def set_value_if_not_none(d: dict, dict_key: str, optional_tensor, sum_tensor: bool = False):
-        if optional_tensor is None:
-            return
-
-        d[dict_key] = optional_tensor.sum() if sum_tensor else optional_tensor
+        if optional_tensor is not None:
+            d[dict_key] = optional_tensor.sum() if sum_tensor else optional_tensor
 
     # Cumulative feature scores
     total_scores = {}
