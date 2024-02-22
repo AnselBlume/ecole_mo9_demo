@@ -33,7 +33,7 @@ def get_parser():
                         help='Path to output directory')
 
     parser.add_argument('--ckpt_path',
-                        default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_20-08:02:42_abs_img_scale/concept_kb_epoch_15.pt',
+                        default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_22-00:47:36-s1roip9b/concept_kb_epoch_15.pt',
                         help='Path to model checkpoint')
 
     return parser
@@ -41,45 +41,67 @@ def get_parser():
 def prediction_contributions(output: ConceptPredictorOutput, trained_attrs: list[str] = [], zs_attrs: list[str] = []):
     ret_dict = {}
 
+    # Values may be None depending on whether we're using the full image or regions; this method helps reduce
+    # lots of explicit if checks in the code
+    def set_value_if_not_none(d: dict, dict_key: str, optional_tensor, sum_tensor: bool = False):
+        if optional_tensor is None:
+            return
+
+        d[dict_key] = optional_tensor.sum() if sum_tensor else optional_tensor
+
     # Cumulative feature scores
     total_scores = {}
-    total_scores['Image Features'] = output.img_score
-    total_scores['Region Features'] = output.region_score
-    total_scores['Trained Attributes: Image'] = output.trained_attr_img_scores.sum()
-    total_scores['Trained Attributes: Regions'] = output.trained_attr_region_scores.sum()
-    total_scores['Zero-shot Attributes: Image'] = output.zs_attr_img_scores.sum()
-    total_scores['Zero-shot Attributes: Regions'] = output.zs_attr_region_scores.sum()
+    set_value_if_not_none(total_scores, 'Image Features', output.img_score)
+    set_value_if_not_none(total_scores, 'Region Features', output.region_score)
+
+    if trained_attrs != []:
+        set_value_if_not_none(total_scores, 'Trained Attributes: Image', output.trained_attr_img_scores, sum_tensor=True)
+        set_value_if_not_none(total_scores, 'Trained Attributes: Regions', output.trained_attr_region_scores, sum_tensor=True)
+
+    if zs_attrs != []:
+        set_value_if_not_none(total_scores, 'Zero-shot Attributes: Image', output.zs_attr_img_scores, sum_tensor=True)
+        set_value_if_not_none(total_scores, 'Zero-shot Attributes: Regions', output.zs_attr_region_scores, sum_tensor=True)
 
     total_mass = sum(map(lambda v: v.abs(), total_scores.values()))
-    total_scores = {k : v.sgn() * v.abs() / total_mass for k, v in total_scores.items()}
+    total_scores = {k : v / total_mass for k, v in total_scores.items()}
 
     ret_dict['total_scores'] = total_scores
 
     # Trained attribute contributions
+    uses_full_img = output.img_score is not None
+    uses_regions = output.region_score is not None
+
     if trained_attrs != []:
-        t_attr_img_scores = {trained_attrs[i] : v for i, v in enumerate(output.trained_attr_img_scores)}
-        t_attr_img_mass = output.trained_attr_img_scores.abs().sum()
-        t_attr_img_scores = {k : v / t_attr_img_mass for k, v in t_attr_img_scores.items()}
+        if uses_full_img:
+            t_attr_img_scores = {trained_attrs[i] : v for i, v in enumerate(output.trained_attr_img_scores)}
+            t_attr_img_mass = output.trained_attr_img_scores.abs().sum()
+            t_attr_img_scores = {k : v / t_attr_img_mass for k, v in t_attr_img_scores.items()}
 
-        t_attr_region_scores = {trained_attrs[i] : v.sum() for i, v in enumerate(output.trained_attr_region_scores.T)}
-        t_attr_region_mass = output.trained_attr_region_scores.abs().sum()
-        t_attr_region_scores = {k : v / t_attr_region_mass for k, v in t_attr_region_scores.items()}
+            ret_dict['trained_attr_img_scores'] = t_attr_img_scores
 
-        ret_dict['trained_attr_img_scores'] = t_attr_img_scores
-        ret_dict['trained_attr_region_scores'] = t_attr_region_scores
+        if uses_regions:
+            t_attr_region_scores = {trained_attrs[i] : v.sum() for i, v in enumerate(output.trained_attr_region_scores.T)}
+            t_attr_region_mass = output.trained_attr_region_scores.abs().sum()
+            t_attr_region_scores = {k : v / t_attr_region_mass for k, v in t_attr_region_scores.items()}
+
+            ret_dict['trained_attr_region_scores'] = t_attr_region_scores
+
 
     # Zero-shot attribute contributions
     if zs_attrs != []:
-        zs_attr_img_scores = {zs_attrs[i] : v for i, v in enumerate(output.zs_attr_img_scores)}
-        zs_attr_img_mass = output.zs_attr_img_scores.abs().sum()
-        zs_attr_img_scores = {k : v.sgn() * v.abs() / zs_attr_img_mass for k, v in zs_attr_img_scores.items()}
+        if uses_full_img:
+            zs_attr_img_scores = {zs_attrs[i] : v for i, v in enumerate(output.zs_attr_img_scores)}
+            zs_attr_img_mass = output.zs_attr_img_scores.abs().sum()
+            zs_attr_img_scores = {k : v.sgn() * v.abs() / zs_attr_img_mass for k, v in zs_attr_img_scores.items()}
 
-        zs_attr_region_scores = {zs_attrs[i] : v.sum() for i, v in enumerate(output.zs_attr_region_scores.T)}
-        zs_attr_region_mass = output.zs_attr_region_scores.abs().sum()
-        zs_attr_region_scores = {k : v.sgn() * v.abs() / zs_attr_region_mass for k, v in zs_attr_region_scores.items()}
+            ret_dict['zs_attr_img_scores'] = zs_attr_img_scores
 
-        ret_dict['zs_attr_img_scores'] = zs_attr_img_scores
-        ret_dict['zs_attr_region_scores'] = zs_attr_region_scores
+        if uses_regions:
+            zs_attr_region_scores = {zs_attrs[i] : v.sum() for i, v in enumerate(output.zs_attr_region_scores.T)}
+            zs_attr_region_mass = output.zs_attr_region_scores.abs().sum()
+            zs_attr_region_scores = {k : v.sgn() * v.abs() / zs_attr_region_mass for k, v in zs_attr_region_scores.items()}
+
+            ret_dict['zs_attr_region_scores'] = zs_attr_region_scores
 
     def tensors_to_nums(d: dict):
         for k, v in d.items():
@@ -98,7 +120,12 @@ def prediction_contributions(output: ConceptPredictorOutput, trained_attrs: list
 
     return ret_dict
 
-def visualize_prediction_contributions(img: Image, region_img: Image, prediction_contribs: dict, figsize=(15,8)):
+def visualize_prediction_contributions(
+    img: Image,
+    region_img: Image,
+    prediction_contribs: dict,
+    figsize=(15,8)
+):
     def plot_signed_hbar(ax, data: dict, top_k: int = None):
         labels = np.array(list(reversed(data.keys())))
         scores = np.array(list(reversed(data.values())))
@@ -111,36 +138,41 @@ def visualize_prediction_contributions(img: Image, region_img: Image, prediction
         colors = ['red' if s < 0 else 'blue' for s in scores]
         ax.barh(labels, scores, color=colors)
 
-    has_img = any('img_scores' in k for k in prediction_contribs.keys())
+    uses_full_img = any('image' in k.lower() for k in prediction_contribs['total_scores'].keys())
+    uses_regions = any('regions' in k.lower() for k in prediction_contribs['total_scores'].keys())
     has_zs = any('zs_attr' in k for k in prediction_contribs.keys())
 
-    n_rows = 1 + has_img
+    n_rows = 1 + (uses_full_img and uses_regions)
     n_cols = 3 + has_zs # Image, total, trained attrs
 
     # Total scores
     fig = plt.figure(figsize=figsize, constrained_layout=True) # See https://stackoverflow.com/a/53642319
     gs = GridSpec(nrows=n_rows, ncols=n_cols, figure=fig, hspace=.08, wspace=.08)
 
-    # Build region row
-    ax = fig.add_subplot(gs[1 if has_img else 0, 0])
-    ax.imshow(region_img)
-    ax.axis('off')
-    ax.set_title('Regions')
-
-    ax = fig.add_subplot(gs[0:2 if has_img else 0, 1])
+    if uses_full_img and uses_regions:
+        ax = fig.add_subplot(gs[0:2, 1])
+    else:
+        ax = fig.add_subplot(gs[0, 1])
     plot_signed_hbar(ax, prediction_contribs['total_scores'])
     ax.set_title('Total Scores')
 
-    ax = fig.add_subplot(gs[1 if has_img else 0, 2])
-    plot_signed_hbar(ax, prediction_contribs['trained_attr_region_scores'], top_k=5)
-    ax.set_title('Trained Attributes: Regions')
+    # Build region row
+    if uses_regions:
+        ax = fig.add_subplot(gs[1 if uses_full_img else 0, 0])
+        ax.imshow(region_img)
+        ax.axis('off')
+        ax.set_title('Regions')
 
-    if has_zs:
-        ax = fig.add_subplot(gs[1 if has_img else 0, 3])
-        plot_signed_hbar(ax, prediction_contribs['zs_attr_region_scores'], top_k=5)
-        ax.set_title('Zero-shot Attributes: Regions')
+        ax = fig.add_subplot(gs[1 if uses_full_img else 0, 2])
+        plot_signed_hbar(ax, prediction_contribs['trained_attr_region_scores'], top_k=5)
+        ax.set_title('Trained Attributes: Regions')
 
-    if has_img:
+        if has_zs:
+            ax = fig.add_subplot(gs[1 if uses_full_img else 0, 3])
+            plot_signed_hbar(ax, prediction_contribs['zs_attr_region_scores'], top_k=5)
+            ax.set_title('Zero-shot Attributes: Regions')
+
+    if uses_full_img:
         ax = fig.add_subplot(gs[0, 0])
         ax.imshow(img)
         ax.axis('off')
