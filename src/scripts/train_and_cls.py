@@ -92,6 +92,7 @@ if __name__ == '__main__':
         n_trained_attrs=N_ATTRS_SUBSET,
         use_ln=args.predictor.use_ln,
         use_full_img=args.predictor.use_full_img,
+        use_regions=args.predictor.use_regions
     ), llm_client=LLMClient())
     # )) # Uncomment me and comment above to test with no ZS attributes to avoid paying Altman
 
