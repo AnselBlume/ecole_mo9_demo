@@ -136,11 +136,11 @@ class ConceptPredictor(nn.Module):
                     trained_attr_region_scores = trained_attr_region_scores * region_weights * self.region_scale.abs() # (n_regions, n_trained_attrs)
                     trained_attr_region_score = trained_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_trained_attrs)
                 else:
-                    trained_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
+                    trained_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             else:
                 trained_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
-                trained_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
+                trained_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             # Zero shot attributes
             if self.n_zs_attrs > 0:
