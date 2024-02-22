@@ -182,7 +182,7 @@ if __name__ == '__main__':
     coloredlogs.install(level=logging.INFO)
 
     img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data/fork_1_2.jpg'
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_20-08:02:42_abs_img_scale/concept_kb_epoch_15.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_22-00:47:36-s1roip9b-two_scales/concept_kb_epoch_15.pt'
 
     # %%
     loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
@@ -192,7 +192,7 @@ if __name__ == '__main__':
     controller = Controller(loc_and_seg, kb, fe)
 
     # %% Run the prediction
-    img = PIL.Image.open(img_path)
+    img = PIL.Image.open(img_path).convert('RGB')
     result = controller.predict_concept(img, unk_threshold=.1)
 
     logger.info(f'Predicted label: {result["predicted_label"]}')
