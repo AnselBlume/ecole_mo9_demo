@@ -47,6 +47,11 @@ class ConceptKBConfig:
     n_trained_attrs: int = None
     use_ln: bool = True
     use_full_img: bool = True
+    use_regions: bool = True
+
+    def __post_init__(self):
+        if not self.use_full_img and not self.use_regions:
+            raise ValueError('At least one of use_full_img and use_regions must be True.')
 
 class ConceptKB:
     def __init__(self, concepts: list[Concept] = []):
@@ -114,7 +119,7 @@ class ConceptKB:
 
         # Get zero-shot attributes
         if llm_client is not None:
-            self._init_zs_attrs(llm_client, cfg.encode_class_in_zs_attr)
+            self.init_zs_attrs(llm_client, cfg.encode_class_in_zs_attr)
 
         # Build predictors
         self._init_predictors()
@@ -123,21 +128,30 @@ class ConceptKB:
         logger.info('Initializing concept predictors')
 
         for concept in tqdm(self.concepts):
-            concept.predictor = ConceptPredictor(
-                img_feature_dim=self.cfg.img_feature_dim,
-                region_feature_dim=self.cfg.img_feature_dim,
-                n_trained_attrs=self.cfg.n_trained_attrs,
-                n_zs_attrs=len(concept.zs_attributes),
-                use_ln=self.cfg.use_ln,
-                use_full_img=self.cfg.use_full_img
-            )
+            self.init_predictor(concept)
 
-    def _init_zs_attrs(self, llm_client: LLMClient, encode_class: bool):
+    def init_predictor(self, concept: Concept):
+        concept.predictor = ConceptPredictor(
+            img_feature_dim=self.cfg.img_feature_dim,
+            region_feature_dim=self.cfg.img_feature_dim,
+            n_trained_attrs=self.cfg.n_trained_attrs,
+            n_zs_attrs=len(concept.zs_attributes),
+            use_ln=self.cfg.use_ln,
+            use_full_img=self.cfg.use_full_img,
+            use_regions=self.cfg.use_regions
+        )
+
+    def init_zs_attrs(self, llm_client: LLMClient, encode_class: bool, concept: Concept = None):
+        '''
+            Initializes zero-shot attributes for ConceptKB's concepts.
+            If concept is not None, only initializes zs attributes for that concept.
+        '''
         logger.info('Initializing zero-shot attributes from an LLM')
 
         determiner = ArticleDeterminer()
 
-        for concept in tqdm(self.concepts):
+        concepts = self.concepts if concept is None else [concept]
+        for concept in tqdm(concepts):
             zs_attr_dict = retrieve_attributes(concept.name, llm_client)
 
             for attr_type in ['required', 'likely']:

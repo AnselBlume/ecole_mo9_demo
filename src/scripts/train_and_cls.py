@@ -5,6 +5,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+from llm import LLMClient
 from kb_ops import kb_from_img_dir
 from model.concept import ConceptKBConfig
 from controller import Controller
@@ -43,13 +44,14 @@ def get_parser():
 
     parser.add_argument('--predictor.use_ln', type=bool, default=True, help='Whether to use LayerNorm')
     parser.add_argument('--predictor.use_full_img', type=bool, default=True, help='Whether to use full image as input')
+    parser.add_argument('--predictor.use_regions', type=bool, default=True, help='Whether to use regions as input')
     parser.add_argument('--predictor.encode_class_in_zs_attr', type=bool, default=False, help='Whether to encode class in zero-shot attributes')
 
-    parser.add_argument('--train.n_epochs', type=int, default=10, help='Number of training epochs')
+    parser.add_argument('--train.n_epochs', type=int, default=15, help='Number of training epochs')
     parser.add_argument('--train.lr', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--train.backward_every_n_concepts', type=int, default=None, help='Number of concepts to accumulate gradients over')
+    parser.add_argument('--train.backward_every_n_concepts', type=int, default=10, help='Number of concepts to add losses for between backward calls. Higher values are faster but consume more memory')
     parser.add_argument('--train.imgs_per_optim_step', type=int, default=4, help='Number of images to accumulate gradients over before stepping optimizer')
-    parser.add_argument('--train.ckpt_every_n_epochs', type=int, default=1, help='Number of epochs to save model')
+    parser.add_argument('--train.ckpt_every_n_epochs', type=int, default=1, help='Number of epochs between checkpoints')
     parser.add_argument('--train.ckpt_dir', type=str, default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb', help='Directory to save model checkpoints')
 
     return parser
@@ -78,13 +80,9 @@ if __name__ == '__main__':
     # %% Split images into train, val, test
     (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_directory(args.img_dir)
 
-    # Build controller for segmentation
-    controller = Controller(
-        build_localizer_and_segmenter(build_sam(), build_desco())
-        concept_kb
-    )
 
     # %%
+    loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
     feature_extractor = build_feature_extractor()
 
     # %%
@@ -94,11 +92,11 @@ if __name__ == '__main__':
         n_trained_attrs=N_ATTRS_SUBSET,
         use_ln=args.predictor.use_ln,
         use_full_img=args.predictor.use_full_img,
-    ), llm_client=controller.llm_client)
+    ), llm_client=LLMClient())
     # )) # Uncomment me and comment above to test with no ZS attributes to avoid paying Altman
 
     # %% Train concept detectors
-    trainer = ConceptKBTrainer(concept_kb, feature_extractor, controller, run)
+    trainer = ConceptKBTrainer(concept_kb, feature_extractor, loc_and_seg, run)
 
     # %%
     if args.presegmented_dir:
@@ -115,7 +113,7 @@ if __name__ == '__main__':
     concept_kb.to('cuda')
 
     # Save arguments as yaml
-    checkpoint_dir = os.path.join(args.train.ckpt_dir, get_timestr())
+    checkpoint_dir = os.path.join(args.train.ckpt_dir, f'{get_timestr()}-{run.id}')
     os.makedirs(checkpoint_dir)
 
     parser.save(args, os.path.join(checkpoint_dir, 'args.yaml'))
