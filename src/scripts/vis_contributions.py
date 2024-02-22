@@ -33,7 +33,7 @@ def get_parser():
                         help='Path to output directory')
 
     parser.add_argument('--ckpt_path',
-                        default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_22-00:47:36-s1roip9b/concept_kb_epoch_15.pt',
+                        default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_22-00:47:36-s1roip9b-two_scales/concept_kb_epoch_15.pt',
                         help='Path to model checkpoint')
 
     return parser
