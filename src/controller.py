@@ -10,7 +10,7 @@ from llm import LLMClient
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
 from utils import to_device
-from vis_utils import plot_predicted_classes
+from vis_utils import plot_predicted_classes, plot_differences
 
 logger = logging.getLogger(__name__)
 
@@ -30,20 +30,64 @@ class Controller:
         self.attr_scorer = AttributeScorer(zs_predictor)
 
         self.cached_predictions = []
+        self.cached_images = []
 
     ##############
     # Prediction #
     ##############
-    def clear_cached_predictions(self):
+    def clear_cache(self):
         self.cached_predictions = []
+        self.cached_images = []
 
-    def predict_concept(self, image: Image, unk_threshold: float = .1):
+    def diff_between_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None) -> Image:
+        if not ((images is None) ^ (indices is None)):
+            raise ValueError('Exactly one of imgs or idxs must be provided.')
+
+        if images is not None:
+            if len(images) != 2:
+                raise ValueError('imgs must be a tuple of length 2.')
+
+            # Cache predictions
+            # NOTE This can be optimized, since running through all concept predictors when only need to
+            # 1) Localize and segment
+            # 2) Compute image features
+            # 3) Compute trained attribute predictions
+            self.predict_concept(images[0], unk_threshold=0)
+            self.predict_concept(images[1], unk_threshold=0)
+
+            trained_attr_scores1 = self.cached_predictions[-2]['trained_attr_scores']
+            trained_attr_scores2 = self.cached_predictions[-1]['trained_attr_scores']
+
+        else: # idxs is not None
+            if len(indices) != 2:
+                raise ValueError('idxs must be a tuple of length 2.')
+
+            images = (self.cached_images[indices[0]], self.cached_images[indices[1]])
+
+            trained_attr_scores1 = self.cached_predictions[indices[0]]['predicted_concept_outputs'].trained_attr_img_scores
+            trained_attr_scores2 = self.cached_predictions[indices[1]]['predicted_concept_outputs'].trained_attr_img_scores
+
+        attr_names = self.trainer.feature_extractor.trained_clip_attr_predictor.attr_names
+
+        return plot_differences(*images, trained_attr_scores1, trained_attr_scores2, attr_names, return_img=True)
+
+    def explain_prediction(self, index: int = -1):
+        pass
+
+    def predict_concept(self, image: Image, unk_threshold: float = .1) -> dict:
         '''
         Predicts the concept of an image and returns the predicted label and a plot of the predicted classes.
 
         Returns: dict with keys 'predicted_label' and 'plot' of types str and PIL.Image, respectively.
         '''
-        prediction = self.trainer.predict(image_data=image, unk_threshold=unk_threshold)
+        self.cached_images.append(image)
+
+        prediction = self.trainer.predict(
+            image_data=image,
+            unk_threshold=unk_threshold,
+            return_trained_attr_scores=True
+        )
+
         self.cached_predictions.append(prediction)
 
         img = plot_predicted_classes(prediction, threshold=unk_threshold, return_img=True)
@@ -181,7 +225,7 @@ if __name__ == '__main__':
 
     coloredlogs.install(level=logging.INFO)
 
-    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data/fork_1_2.jpg'
+    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
     ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_22-00:47:36-s1roip9b-two_scales/concept_kb_epoch_15.pt'
 
     # %%
@@ -197,5 +241,13 @@ if __name__ == '__main__':
 
     logger.info(f'Predicted label: {result["predicted_label"]}')
     result['plot']
+
+    # %% Explain difference
+    img_path2 = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/fork_2_9.jpg'
+    img2 = PIL.Image.open(img_path2).convert('RGB')
+    controller.predict_concept(img2)
+
+    logger.info('Explaining difference between predictions...')
+    controller.diff_between_predictions(indices=(-2,-1))
 
 # %%

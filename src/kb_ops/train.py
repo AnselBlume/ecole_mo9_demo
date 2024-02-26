@@ -133,7 +133,8 @@ class ConceptKBTrainer:
         self,
         predict_dl: DataLoader = None,
         image_data: Union[Image, dict] = None,
-        unk_threshold: float = 0.
+        unk_threshold: float = 0.,
+        **forward_kwargs
     ) -> Union[list[dict], dict]:
         '''
             unk_threshold: Number between [0,1]. If sigmoid(max concept score) is less than this,
@@ -154,6 +155,7 @@ class ConceptKBTrainer:
 
             scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
             pred_ind = scores.argmax(dim=0).item() # int
+            predicted_concept_outputs = outputs['predictors_outputs'][pred_ind].cpu()
 
             # If max score is less than threshold, predict UNK_LABEL
             if unk_threshold > 0 and scores[pred_ind].sigmoid() < unk_threshold:
@@ -162,9 +164,9 @@ class ConceptKBTrainer:
             predictions.append({
                 'concept_names': outputs['concept_names'],
                 'predictors_scores': scores.cpu(),
-                'predicted_index': pred_ind,
-                'predicted_label': self.index_to_label[pred_ind],
-                'predicted_concept_outputs': outputs['predictors_outputs'][pred_ind].cpu(),
+                'predicted_index': pred_ind, # This can be -1 if UNK_LABEL is predicted
+                'predicted_label': self.index_to_label[pred_ind], # This can be UNK_LABEL
+                'predicted_concept_outputs': predicted_concept_outputs, # This will always be maximizing concept
                 'true_index': true_ind if predict_dl is not None else None,
                 'true_concept_outputs': None if predict_dl is None or true_ind < 0 else outputs['predictors_outputs'][true_ind].cpu()
             })
@@ -174,13 +176,13 @@ class ConceptKBTrainer:
 
             for batch in tqdm(predict_dl, desc='Prediction'):
                 image, text_label = batch[data_key], batch['label']
-                outputs = self.forward_pass(image[0], text_label[0])
+                outputs = self.forward_pass(image[0], text_label[0], **forward_kwargs)
                 process_outputs(outputs)
 
             return predictions
 
         else: # image_data is not None
-            outputs = self.forward_pass(image_data)
+            outputs = self.forward_pass(image_data, **forward_kwargs)
             process_outputs(outputs)
 
             return predictions[0]
@@ -191,7 +193,9 @@ class ConceptKBTrainer:
         text_label: str = None,
         concepts: list[Concept] = None,
         do_backward: bool = False,
-        backward_every_n_concepts: int = None
+        backward_every_n_concepts: int = None,
+        return_segmentations: bool = False,
+        return_trained_attr_scores: bool = False
     ):
         # TODO Make an actual Segmentations data type and have localize_and_segment return it
 
@@ -270,11 +274,20 @@ class ConceptKBTrainer:
         if do_backward and backward_every_n_concepts is None: # Backward if we weren't doing it every K concepts
             curr_loss.backward()
 
-        return {
+        # Return results
+        ret_dict = {
             'loss': total_loss if text_label is not None else None,
             'predictors_outputs': outputs,
             'concept_names': [concept.name for concept in concepts]
         }
+
+        if return_segmentations:
+            ret_dict['segmentations'] = segmentations
+
+        if return_trained_attr_scores:
+            ret_dict['trained_attr_scores'] = trained_attr_scores.cpu()
+
+        return ret_dict
 
     def log(self, *args, **kwargs):
         if self.run is not None:

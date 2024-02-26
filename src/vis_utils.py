@@ -153,6 +153,14 @@ def mask_and_crop_image(image_file:str,mask:List):
     segmented_image = segmented_image[int(y1):int(y2),int(x1):int(x2)]
     return segmented_image
 
+######################
+# Plotting functions #
+######################
+
+def fig_to_img(fig: plt.Figure) -> Image:
+    fig.canvas.draw()
+    return PIL.Image.frombytes('RGB', fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
+
 def plot_predicted_classes(
     prediction: dict,
     n_classes: int = 5,
@@ -184,7 +192,79 @@ def plot_predicted_classes(
     ax.set_xlim(-.001, ax.get_xlim()[1])
 
     if return_img:
-        fig.canvas.draw()
-        return PIL.Image.frombytes('RGB', fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
+        return fig_to_img(fig)
 
     return fig, ax
+
+def plot_rectangle(
+    ax: plt.Axes,
+    color: str = 'red',
+    line_width=10
+):
+    x_lim = ax.get_xlim()
+    y_lim = ax.get_ylim()
+
+    width = x_lim[1] - x_lim[0]
+    height = y_lim[1] - y_lim[0]
+    rect = plt.Rectangle((x_lim[0], y_lim[0]), width, height, linewidth=line_width, edgecolor=color, facecolor='none')
+    ax.add_patch(rect)
+
+def plot_differences(
+    img1: Image,
+    img2: Image,
+    attr_scores1: torch.Tensor,
+    attr_scores2: torch.Tensor,
+    attr_names: List[str],
+    top_k=5,
+    figsize=(10,7),
+    color1='orange',
+    color2='blue',
+    return_img=False
+):
+    # Compute top attribute probability differences
+    probs1 = attr_scores1.squeeze().sigmoid()
+    probs2 = attr_scores2.squeeze().sigmoid()
+
+    diffs = (probs1 - probs2).abs()
+    top_diffs, top_inds = diffs.topk(top_k)
+    top_inds = np.array(list(reversed(top_inds))) # Put highest diff at top
+
+    top_attr_names = [attr_names[i] for i in top_inds]
+
+    # Plot
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    grid = GridSpec(2, 2, figure=fig, wspace=.05, hspace=.05)
+
+    # Image 1
+    img1_ax = fig.add_subplot(grid[0,0])
+    img1_ax.imshow(img1)
+    img1_ax.axis('off')
+    plot_rectangle(img1_ax, color=color1)
+
+    # Image 2
+    img2_ax = fig.add_subplot(grid[1,0])
+    img2_ax.imshow(img2)
+    img2_ax.axis('off')
+    plot_rectangle(img2_ax, color=color2)
+
+    # Attribute differences
+    diffs_ax = fig.add_subplot(grid[:,1])
+    probs1 = probs1[top_inds]
+    probs2 = probs2[top_inds]
+
+    # See tutorial here https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html
+    bar_width = .25
+    label_loc_offsets = np.arange(top_k) * 3 * bar_width
+    for label_offset, prob1, prob2 in zip(label_loc_offsets, probs1, probs2):
+        diffs_ax.barh(label_offset, prob2, bar_width, color=color2)
+        diffs_ax.barh(label_offset + bar_width, prob1, bar_width, color=color1)
+
+    diffs_ax.set_yticks(label_loc_offsets + bar_width / 2, top_attr_names)
+
+    # Bold, larger font
+    fig.suptitle('Top Detected Attribute Differences', fontsize=16, fontweight='bold', y=1.05)
+
+    if return_img:
+        return fig_to_img(fig)
+
+    return fig
