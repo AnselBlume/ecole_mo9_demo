@@ -55,8 +55,8 @@ class Controller:
             self.predict_concept(images[0], unk_threshold=0)
             self.predict_concept(images[1], unk_threshold=0)
 
-            trained_attr_scores1 = self.cached_predictions[-2]['trained_attr_scores']
-            trained_attr_scores2 = self.cached_predictions[-1]['trained_attr_scores']
+            trained_attr_scores1 = self.cached_predictions[-2]['predicted_concept_outputs'].trained_attr_img_scores
+            trained_attr_scores1 = self.cached_predictions[-2]['predicted_concept_outputs'].trained_attr_img_scores
 
         else: # idxs is not None
             if len(indices) != 2:
