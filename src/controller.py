@@ -55,8 +55,7 @@ class Controller:
             self.predict_concept(images[0], unk_threshold=0)
             self.predict_concept(images[1], unk_threshold=0)
 
-            trained_attr_scores1 = self.cached_predictions[-2]['predicted_concept_outputs'].trained_attr_img_scores
-            trained_attr_scores1 = self.cached_predictions[-2]['predicted_concept_outputs'].trained_attr_img_scores
+            indices = (-2, -1)
 
         else: # idxs is not None
             if len(indices) != 2:
@@ -64,8 +63,8 @@ class Controller:
 
             images = (self.cached_images[indices[0]], self.cached_images[indices[1]])
 
-            trained_attr_scores1 = self.cached_predictions[indices[0]]['predicted_concept_outputs'].trained_attr_img_scores
-            trained_attr_scores2 = self.cached_predictions[indices[1]]['predicted_concept_outputs'].trained_attr_img_scores
+        trained_attr_scores1 = self.cached_predictions[indices[0]]['predicted_concept_outputs'].trained_attr_img_scores
+        trained_attr_scores2 = self.cached_predictions[indices[1]]['predicted_concept_outputs'].trained_attr_img_scores
 
         attr_names = self.trainer.feature_extractor.trained_clip_attr_predictor.attr_names
 
