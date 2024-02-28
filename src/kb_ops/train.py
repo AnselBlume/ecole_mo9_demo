@@ -114,6 +114,65 @@ class ConceptKBTrainer:
 
         return ret_dict
 
+    def _sample_negative_examples(
+        self,
+        n_pos_examples: int,
+        neg_concepts: list[Concept],
+        min_neg_ratio: float = 1.0,
+        rng: np.random.Generator = None
+    ):
+        # Decide how many negatives to sample per concept
+        if min_neg_ratio < 1:
+            raise ValueError('min_neg_ratio must be >= 1')
+
+        n_neg_per_concept = int(n_pos_examples * min_neg_ratio / len(neg_concepts))
+
+        if n_neg_per_concept < 1:
+            n_neg_per_concept = 1
+            logger.warning(f'Too many negative concepts to satisfy min_neg_ratio; using 1 negative example per concept')
+
+        actual_ratio = n_neg_per_concept * len(neg_concepts) / n_pos_examples
+        logger.info(f'Attempting to sample {n_neg_per_concept} negative examples per concept')
+
+        if not rng:
+            rng = np.random.default_rng()
+
+        negatives = []
+        for neg_concept in neg_concepts:
+            try:
+                neg_examples = rng.choice(neg_concept.examples, n_neg_per_concept, replace=False)
+
+            except ValueError: # Not enough negative examples
+                logger.warning(f'Not enough examples to sample from for concept {neg_concept.name}; using all examples')
+                neg_examples = neg_concept.examples
+
+            negatives.extend(neg_examples)
+
+        actual_ratio = len(negatives) / n_pos_examples
+        logger.info(f'Actual negative example ratio: {actual_ratio:.2f}')
+
+        return negatives
+
+    def train_concept(
+        self,
+        concept: Concept,
+        until_correct_example_paths: list[str] = None,
+        prob_margin: float = .1,
+        do_validate: bool = False
+    ):
+        '''
+
+        '''
+        if do_validate:
+            # TODO implement some way to perform validation as a stopping condition
+            raise NotImplementedError('Validation is not yet implemented')
+
+        else:
+            # Train until correct
+            while True:
+                pass
+
+
     @torch.inference_mode()
     def validate(self, val_dl: DataLoader):
         self.concept_kb.eval()
