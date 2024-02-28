@@ -10,7 +10,7 @@ class RetrievedConcept:
 
 class CLIPConceptRetriever:
     def __init__(self, concepts: list[Concept], clip_model: CLIPModel, clip_processor: CLIPProcessor):
-        self.concepts = concepts
+        self.concepts = concepts # TODO Feel free to change this to whatever data structure is best
         self.clip_model = clip_model
         self.clip_processor = clip_processor
 
@@ -23,7 +23,8 @@ class CLIPConceptRetriever:
 
     def retrieve(self, query: str, top_k: int) -> list[RetrievedConcept]:
         '''
-            Returns the Concepts in decreasing order of scores based on the query and the Concepts' names.
+            Returns the Concepts in decreasing order of match scores (increasing distance) based on
+            the query and the Concepts' names.
         '''
         pass
 
