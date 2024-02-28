@@ -9,7 +9,8 @@ from model.features import ImageFeatures
 from wandb.sdk.wandb_run import Run
 from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset
 from feature_extraction import FeatureExtractor
-from typing import Union
+from typing import Union, Optional
+import numpy as np
 from tqdm import tqdm
 from PIL.Image import Image
 from torchmetrics import Accuracy
@@ -38,28 +39,36 @@ class ConceptKBTrainer:
         self.feature_extractor = feature_extractor
         self.run = wandb_run
 
-    def get_dataloader(self, dataset: Dataset, is_train: bool):
+    def _get_dataloader(self, dataset: Dataset, is_train: bool):
         return DataLoader(dataset, batch_size=1, shuffle=is_train, collate_fn=list_collate, num_workers=3, pin_memory=True)
+
+    def _get_ckpt_path(self, ckpt_dir: str, ckpt_fmt: str, epoch: int):
+        return os.path.join(ckpt_dir, ckpt_fmt.format(epoch=epoch))
 
     def train(
         self,
         train_ds: Union[ImageDataset, PresegmentedDataset],
-        val_ds: Union[ImageDataset, PresegmentedDataset],
+        val_ds: Optional[Union[ImageDataset, PresegmentedDataset]],
         n_epochs: int,
         lr: float,
         backward_every_n_concepts: int = None,
         imgs_per_optim_step: int = 4,
         ckpt_every_n_epochs: int = 1,
-        ckpt_dir: str = 'checkpoints'
+        ckpt_dir: str = 'checkpoints',
+        ckpt_fmt: str = 'concept_kb_epoch_{epoch}.pt'
     ):
 
-        os.makedirs(ckpt_dir, exist_ok=True)
+        if ckpt_dir:
+            os.makedirs(ckpt_dir, exist_ok=True)
 
         is_presegmented = isinstance(train_ds, PresegmentedDataset)
         data_key = 'segmentations' if is_presegmented else 'image'
 
-        train_dl = self.get_dataloader(train_ds, is_train=True)
-        val_dl = self.get_dataloader(val_ds, is_train=False)
+        train_dl = self._get_dataloader(train_ds, is_train=True)
+
+        val_dl = self._get_dataloader(val_ds, is_train=False) if val_ds else None
+        val_losses = [] if val_ds else None
+
         optimizer = torch.optim.Adam(self.concept_kb.parameters(), lr=lr)
 
         for epoch in range(1, n_epochs + 1):
@@ -81,18 +90,29 @@ class ConceptKBTrainer:
                     optimizer.step()
                     optimizer.zero_grad()
 
-            if epoch % ckpt_every_n_epochs == 0:
-                ckpt_path = os.path.join(ckpt_dir, f'concept_kb_epoch_{epoch}.pt')
+            if epoch % ckpt_every_n_epochs == 0 and ckpt_dir:
+                ckpt_path = self._get_ckpt_path(ckpt_dir, ckpt_fmt, epoch)
                 self.concept_kb.save(ckpt_path)
                 logger.info(f'Saved checkpoint at {ckpt_path}')
 
             # Validate
-            outputs = self.validate(val_dl)
+            if val_dl:
+                outputs = self.validate(val_dl)
+                val_losses.append(outputs['val_loss'])
 
-            self.log({'val_loss': outputs['val_loss'], 'val_acc': outputs['val_acc'], 'epoch': epoch})
-            logger.info(f'Validation loss: {outputs["val_loss"]}, Validation accuracy: {outputs["val_acc"]}')
+                self.log({'val_loss': val_losses[-1], 'val_acc': outputs['val_acc'], 'epoch': epoch})
+                logger.info(f'Validation loss: {outputs["val_loss"]}, Validation accuracy: {outputs["val_acc"]}')
 
-        return self.concept_kb
+        # Construct return dictionary
+        best_ckpt_epoch = np.argmin(val_losses) if val_losses else None
+        best_ckpt_path = self._get_ckpt_path(ckpt_dir, ckpt_fmt, best_ckpt_epoch) if val_losses else None
+
+        ret_dict = {
+            'best_ckpt_epoch': best_ckpt_epoch,
+            'best_ckpt_path': best_ckpt_path
+        }
+
+        return ret_dict
 
     @torch.inference_mode()
     def validate(self, val_dl: DataLoader):
