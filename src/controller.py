@@ -6,6 +6,7 @@ import logging, coloredlogs
 from feature_extraction import FeatureExtractor
 from image_processing import LocalizerAndSegmenter
 from kb_ops.train import ConceptKBTrainer
+from kb_ops.retrieve import CLIPConceptRetriever
 from llm import LLMClient
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
@@ -20,12 +21,14 @@ class Controller:
         loc_and_seg: LocalizerAndSegmenter,
         concept_kb: ConceptKB,
         feature_extractor: FeatureExtractor,
+        retriever: CLIPConceptRetriever = None,
         zs_predictor: CLIPAttributePredictor = None
     ):
         self.concepts = concept_kb
         self.trainer = ConceptKBTrainer(concept_kb, feature_extractor, loc_and_seg)
 
         self.loc_and_seg = loc_and_seg
+        self.retriever = retriever
         self.llm_client = LLMClient()
         self.attr_scorer = AttributeScorer(zs_predictor)
 
@@ -130,7 +133,7 @@ class Controller:
             return_crops=True
         )
 
-        region_crops = segmentations['part_crops']
+        region_crops = segmentations.part_crops
         if region_crops == []:
             region_crops = [image]
 
@@ -198,6 +201,55 @@ class Controller:
     ########################
     # Concept Modification #
     ########################
+    def train(self):
+        '''
+            Trains all concepts in the concept knowledge base from each concept's example_imgs.
+        '''
+        pass
+
+    def train_concept(self, concept_name: str, until_correct_example_paths: list[str] = []):
+        '''
+            Retrains the concept until it correctly predicts the given example images.
+        '''
+        concept: Concept = None # Retrieve concept
+
+        # Extend set of concept's examples if until_correct_example_paths are not included
+        if not until_correct_example_paths:
+            logger.info('No examples provided; considering all concept examples as those to ')
+
+        examples = dict.fromkeys(concept.examples)
+        for path in until_correct_example_paths:
+            if path not in examples:
+                examples[path] = None
+
+        concept.examples = list(examples)
+
+        # TODO Call trainer method
+
+
+    def set_zs_attributes(self, concept_name: str, zs_attrs: list[str]):
+        concept = self.retrieve_concept(concept_name)
+        concept.zs_attributes = zs_attrs
+
+        # TODO retrain concept
+
+    def retrieve_concept(self, concept_name: str, max_retrieval_distance: float = .5):
+        concept_name = concept_name.strip()
+
+        if concept_name in self.concepts:
+            return self.concepts[concept_name]
+
+        elif concept_name.lower() in self.concepts:
+            return self.concepts[concept_name]
+
+        else:
+            retrieved_concept = self.retriever.retrieve(concept_name, 1)[0]
+            logger.debug(f'Retrieved concept "{retrieved_concept.concept.name}" with distance: {retrieved_concept.distance}')
+            if retrieved_concept.distance > max_retrieval_distance:
+                raise RuntimeError(f'No concept found for "{concept_name}".')
+
+            return retrieved_concept.concept
+
     def add_zs_attribute(self, concept_name: str, zs_attr_name: str, weight: float):
         pass
 
@@ -218,21 +270,26 @@ class Controller:
 
 # %%
 if __name__ == '__main__':
+    import os
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
     import PIL
     from feature_extraction import build_feature_extractor, build_sam, build_desco
     from image_processing import build_localizer_and_segmenter
 
     coloredlogs.install(level=logging.INFO)
 
+    # %%
     img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_22-00:47:36-s1roip9b-two_scales/concept_kb_epoch_15.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_29-01:56:41-b1fr1pbu-new_conceptkb/concept_kb_epoch_15.pt'
 
     # %%
     loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
     fe = build_feature_extractor()
 
     kb = ConceptKB.load(ckpt_path)
-    controller = Controller(loc_and_seg, kb, fe)
+    retriever = CLIPConceptRetriever(kb.concepts, fe.clip, fe.processor)
+    controller = Controller(loc_and_seg, kb, fe, retriever)
 
     # %% Run the prediction
     img = PIL.Image.open(img_path).convert('RGB')
