@@ -7,6 +7,7 @@ from llm import LLMClient, retrieve_attributes
 from tqdm import tqdm
 import logging
 from utils import ArticleDeterminer
+from image_processing import LocalizeAndSegmentOutput
 from .features import ImageFeatures
 from PIL.Image import Image
 
@@ -22,6 +23,16 @@ class StoredExample:
     image_path: str = field(
         default=None,
         metadata={'description': 'Path to this example\'s image'}
+    )
+
+    image_segmentations: list[LocalizeAndSegmentOutput] = field(
+        default=None,
+        metadata={'description': 'Segmentations for the example'}
+    )
+
+    image_segmentations_path: list[str] = field(
+        default=None,
+        metadata={'description': 'Paths to segmentations for the example'}
     )
 
     image_features: ImageFeatures = field(
