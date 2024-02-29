@@ -9,7 +9,7 @@ from model.features import ImageFeatures
 from wandb.sdk.wandb_run import Run
 from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset
 from feature_extraction import FeatureExtractor
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, Literal
 import numpy as np
 from tqdm import tqdm
 from PIL.Image import Image
@@ -44,6 +44,12 @@ class ConceptKBTrainer:
 
     def _get_ckpt_path(self, ckpt_dir: str, ckpt_fmt: str, epoch: int):
         return os.path.join(ckpt_dir, ckpt_fmt.format(epoch=epoch))
+
+    def _cache_segmentations(self, concept: Concept, cache_sub_dir='segmentations'):
+        pass
+
+    def _cache_features(self, concept: Concept, cache_sub_dir='features'):
+        pass
 
     def train(
         self,
@@ -171,10 +177,10 @@ class ConceptKBTrainer:
     def train_concept(
         self,
         concept: Concept,
+        stopping_condition: Literal['until_correct', 'n_epochs', 'validation'] = 'until_correct',
         until_correct_example_paths: list[str] = [],
         min_prob_margin: float = .1,
-        n_epochs: int = None,
-        do_validate: bool = False,
+        n_epochs: int = 10,
         sampling_seed: int = 42
     ):
         '''
@@ -182,15 +188,24 @@ class ConceptKBTrainer:
             examples in until_correct_example_paths.
 
             Arguments:
-                concept: Concept to train
-                until_correct_example_paths: List of paths to example images that the concept should correctly predict
+                concept: Concept to train.
+
+                stopping_condition: One of 'until_correct', 'n_epochs', or 'validation'.
+                    If 'until_correct', training stops when the concept correctly predicts the examples in
+                    until_correct_example_paths with a probability margin of at least min_prob_margin.
+                    If 'n_epochs', training will stop after n_epochs.
+
+                until_correct_example_paths: List of paths to example images that the concept should correctly predict if
+                    stopping_condition is 'until_correct'.
+
                 min_prob_margin: Margin of probability (computed via softmax) over other concepts that the true concept must have
-                    for each example in until_correct_example_paths
-                n_epochs: Number of epochs to train for, if provided
-                do_validate: Whether to perform validation to select the best model
-                sampling_seed: Seed for random number generator used for sampling negative examples
+                    for each example in until_correct_example_paths if stopping_condition is 'until_correct'.
+
+                n_epochs: Number of epochs to train for if stopping_condition is 'n_epochs'.
+
+                sampling_seed: Seed for random number generator used for sampling negative examples.
         '''
-        if do_validate:
+        if stopping_condition == 'validation':
             # TODO implement some way to perform validation as a stopping condition
             raise NotImplementedError('Validation is not yet implemented')
 
@@ -205,6 +220,7 @@ class ConceptKBTrainer:
             all_labels = [concept.name] * len(concept.examples) + neg_concept_names
 
             # Create dataset
+            # TODO handle the case where some examples are presegmented and some are not with _cache...
             if all_samples[0].endswith('.pkl'):
                 train_ds = PresegmentedDataset(all_samples, all_labels)
                 val_ds = PresegmentedDataset(until_correct_example_paths, [concept.name] * len(until_correct_example_paths))
@@ -216,11 +232,10 @@ class ConceptKBTrainer:
             val_dl = self._get_dataloader(val_ds, is_train=False)
 
             # Train for fixed number of epochs
-            if n_epochs:
+            if stopping_condition == 'n_epochs':
                 self.train(train_dl, None, n_epochs=n_epochs, lr=1e-3, concepts=[concept], ckpt_dir=None)
 
-            # Train until examples are predicted correctly
-            else:
+            else: # stopping_condition == 'until_correct'
                 curr_epoch = 0
                 target_concept_index = self.label_to_index[concept.name]
 
@@ -340,19 +355,11 @@ class ConceptKBTrainer:
 
             return predictions[0]
 
-    def forward_pass(
+    def _get_image_and_segmentations(
         self,
-        image_data: Union[Image, LocalizeAndSegmentOutput],
-        text_label: str = None,
-        concepts: list[Concept] = None,
-        do_backward: bool = False,
-        backward_every_n_concepts: int = None,
-        return_segmentations: bool = False,
-        return_trained_attr_scores: bool = False
-    ):
-        # TODO Make an actual Segmentations data type and have localize_and_segment return it
+        image_data: Union[Image, LocalizeAndSegmentOutput]
+    ) -> tuple[Image, LocalizeAndSegmentOutput]:
 
-        # Get region crops
         if isinstance(image_data, Image):
             if self.loc_and_seg is None:
                 raise ValueError('LocalizerAndSegmenter is required for online localization and segmentation')
@@ -363,15 +370,60 @@ class ConceptKBTrainer:
                 concept_parts=[],
                 remove_background=True
             )
+
             image = image_data
 
-        else: # Assume they're preprocessed segmentations
+        else:
+            assert isinstance(image_data, LocalizeAndSegmentOutput)
             segmentations = image_data
             image = segmentations.input_image
 
+        return image, segmentations
+
+    def _get_features(
+        self,
+        image: Image,
+        segmentations: LocalizeAndSegmentOutput,
+        zs_attrs: list[str],
+        cached_visual_features: Optional[torch.Tensor] = None,
+        cached_trained_attr_scores: Optional[torch.Tensor] = None
+    ):
+        # Get region crops
         region_crops = segmentations.part_crops
         if region_crops == []:
             region_crops = [image]
+
+        with torch.no_grad():
+            features: ImageFeatures = self.feature_extractor(
+                image,
+                region_crops,
+                zs_attrs,
+                cached_visual_features=cached_visual_features,
+                cached_trained_attr_scores=cached_trained_attr_scores
+            )
+
+        return features
+
+    def forward_pass(
+        self,
+        image_data: Union[Image, LocalizeAndSegmentOutput, list[ImageFeatures]],
+        text_label: str = None,
+        concepts: list[Concept] = None,
+        do_backward: bool = False,
+        backward_every_n_concepts: int = None,
+        return_segmentations: bool = False,
+        return_trained_attr_scores: bool = False,
+        return_features: bool = False
+    ):
+
+        if isinstance(image_data, list):
+            assert isinstance(list[0], ImageFeatures)
+            assert len(image_data) == len(concepts), 'Number of features must match number of concepts'
+            features_were_provided = True
+
+        else: # Not using features
+            image, segmentations = self._get_image_and_segmentations(image_data)
+            features_were_provided = False
 
         # Get all concept predictions
         total_loss = 0
@@ -379,29 +431,35 @@ class ConceptKBTrainer:
         outputs = []
 
         # Cache to avoid recomputation for each image
-        visual_features = None
-        trained_attr_scores = None
+        cached_visual_features = None
+        cached_trained_attr_scores = None
+        all_features = []
 
         concepts = concepts if concepts is not None else self.concept_kb
         for i, concept in enumerate(concepts, start=1):
-            zs_attrs = [attr.query for attr in concept.zs_attributes]
+            if features_were_provided:
+                features = image_data[i - 1]
 
-            # Compute image features
-            with torch.no_grad():
-                features: ImageFeatures = self.feature_extractor(
+            else: # Features not provided; compute from segmentations
+                zs_attrs = [attr.query for attr in concept.zs_attributes]
+
+                features = self._get_features(
                     image,
-                    region_crops,
+                    segmentations,
                     zs_attrs,
-                    cached_visual_features=visual_features,
-                    cached_trained_attr_scores=trained_attr_scores
+                    cached_visual_features=cached_visual_features,
+                    cached_trained_attr_scores=cached_trained_attr_scores
                 )
 
-            # Cache visual features and trained attribute scores
-            if visual_features is None:
-                visual_features = torch.cat([features.image_features, features.region_features], dim=0)
+                # Cache visual features and trained attribute scores
+                if cached_visual_features is None:
+                    cached_visual_features = torch.cat([features.image_features, features.region_features], dim=0)
 
-            if trained_attr_scores is None:
-                trained_attr_scores = torch.cat([features.trained_attr_img_scores, features.trained_attr_region_scores], dim=0)
+                if cached_trained_attr_scores is None:
+                    cached_trained_attr_scores = torch.cat([features.trained_attr_img_scores, features.trained_attr_region_scores], dim=0)
+
+            if return_features:
+                all_features.append(features)
 
             # Compute concept predictor outputs
             output: ConceptPredictorOutput = concept.predictor(features)
@@ -438,7 +496,10 @@ class ConceptKBTrainer:
             ret_dict['segmentations'] = segmentations
 
         if return_trained_attr_scores:
-            ret_dict['trained_attr_scores'] = trained_attr_scores.cpu()
+            ret_dict['trained_attr_scores'] = cached_trained_attr_scores.cpu()
+
+        if return_features:
+            ret_dict['all_concept_features'] = all_features
 
         return ret_dict
 
