@@ -1,7 +1,7 @@
 import os
 import torch
 import torch.nn.functional as F
-from image_processing import LocalizerAndSegmenter
+from image_processing import LocalizerAndSegmenter, LocalizeAndSegmentOutput
 from torch.utils.data import DataLoader, Dataset
 from model.concept import ConceptKB, Concept
 from model.concept_predictor import ConceptPredictorOutput
@@ -9,7 +9,7 @@ from model.features import ImageFeatures
 from wandb.sdk.wandb_run import Run
 from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset
 from feature_extraction import FeatureExtractor
-from typing import Union, Optional
+from typing import Union, Optional, Any
 import numpy as np
 from tqdm import tqdm
 from PIL.Image import Image
@@ -51,6 +51,7 @@ class ConceptKBTrainer:
         val_ds: Optional[Union[ImageDataset, PresegmentedDataset]],
         n_epochs: int,
         lr: float,
+        concepts: list[Concept] = None,
         backward_every_n_concepts: int = None,
         imgs_per_optim_step: int = 4,
         ckpt_every_n_epochs: int = 1,
@@ -80,6 +81,7 @@ class ConceptKBTrainer:
                 outputs = self.forward_pass(
                     image_data[0],
                     text_label[0],
+                    concepts=concepts,
                     do_backward=True,
                     backward_every_n_concepts=backward_every_n_concepts
                 )
@@ -120,7 +122,18 @@ class ConceptKBTrainer:
         neg_concepts: list[Concept],
         min_neg_ratio: float = 1.0,
         rng: np.random.Generator = None
-    ):
+    ) -> tuple[list[Any], list[str]]:
+        '''
+            Samples negative examples from the given negative concepts, trying to match the given ratio.
+
+            Arguments:
+                n_pos_examples: Number of positive examples
+                neg_concepts: List of negative concepts to sample at least one example of each from
+                min_neg_ratio: Minimum ratio of negative examples to positive examples
+                rng: Random number generator used for sampling from negative concepts
+
+            Returns: Tuple of (sampled_examples, sampled_concept_names)
+        '''
         # Decide how many negatives to sample per concept
         if min_neg_ratio < 1:
             raise ValueError('min_neg_ratio must be >= 1')
@@ -137,7 +150,8 @@ class ConceptKBTrainer:
         if not rng:
             rng = np.random.default_rng()
 
-        negatives = []
+        sampled_examples = []
+        sampled_concept_names = []
         for neg_concept in neg_concepts:
             try:
                 neg_examples = rng.choice(neg_concept.examples, n_neg_per_concept, replace=False)
@@ -146,32 +160,92 @@ class ConceptKBTrainer:
                 logger.warning(f'Not enough examples to sample from for concept {neg_concept.name}; using all examples')
                 neg_examples = neg_concept.examples
 
-            negatives.extend(neg_examples)
+            sampled_examples.extend(neg_examples)
+            sampled_concept_names.extend([neg_concept.name] * len(neg_examples))
 
-        actual_ratio = len(negatives) / n_pos_examples
+        actual_ratio = len(sampled_examples) / n_pos_examples
         logger.info(f'Actual negative example ratio: {actual_ratio:.2f}')
 
-        return negatives
+        return sampled_examples, sampled_concept_names
 
     def train_concept(
         self,
         concept: Concept,
-        until_correct_example_paths: list[str] = None,
-        prob_margin: float = .1,
-        do_validate: bool = False
+        until_correct_example_paths: list[str] = [],
+        min_prob_margin: float = .1,
+        n_epochs: int = None,
+        do_validate: bool = False,
+        sampling_seed: int = 42
     ):
         '''
+            Trains the given concept for n_epochs if provided, else until it correctly predicts the
+            examples in until_correct_example_paths.
 
+            Arguments:
+                concept: Concept to train
+                until_correct_example_paths: List of paths to example images that the concept should correctly predict
+                min_prob_margin: Margin of probability (computed via softmax) over other concepts that the true concept must have
+                    for each example in until_correct_example_paths
+                n_epochs: Number of epochs to train for, if provided
+                do_validate: Whether to perform validation to select the best model
+                sampling_seed: Seed for random number generator used for sampling negative examples
         '''
         if do_validate:
             # TODO implement some way to perform validation as a stopping condition
             raise NotImplementedError('Validation is not yet implemented')
 
+        # Train for a fixed number of epochs or until examples are predicted correctly
         else:
-            # Train until correct
-            while True:
-                pass
+            # Create examples and labels
+            rng = np.random.default_rng(sampling_seed)
+            neg_concepts = [c for c in self.concept_kb if c != concept]
+            neg_examples, neg_concept_names = self._sample_negative_examples(len(concept.examples), neg_concepts, rng=rng)
 
+            all_samples = concept.examples + neg_examples
+            all_labels = [concept.name] * len(concept.examples) + neg_concept_names
+
+            # Create dataset
+            if all_samples[0].endswith('.pkl'):
+                train_ds = PresegmentedDataset(all_samples, all_labels)
+                val_ds = PresegmentedDataset(until_correct_example_paths, [concept.name] * len(until_correct_example_paths))
+            else:
+                train_ds = ImageDataset(all_samples, all_labels)
+                val_ds = ImageDataset(until_correct_example_paths, [concept.name] * len(until_correct_example_paths))
+
+            train_dl = self._get_dataloader(train_ds, is_train=True)
+            val_dl = self._get_dataloader(val_ds, is_train=False)
+
+            # Train for fixed number of epochs
+            if n_epochs:
+                self.train(train_dl, None, n_epochs=n_epochs, lr=1e-3, concepts=[concept], ckpt_dir=None)
+
+            # Train until examples are predicted correctly
+            else:
+                curr_epoch = 0
+                target_concept_index = self.label_to_index[concept.name]
+
+                while True:
+                    # Train for one epoch then check the probability margins
+                    curr_epoch += 1
+                    self.train(train_dl, None, n_epochs=1, lr=1e-3, concepts=[concept], ckpt_dir=None)
+
+                    predictions = self.predict(val_dl)
+
+                    # Check probability margin of each example for stopping condition
+                    all_scores = torch.stack([pred['predictors_scores'] for pred in predictions])
+                    normalized_scores = F.softmax(all_scores, dim=1)
+                    values, indices = normalized_scores.topk(2, dim=1) # Each of values, indices are (n_examples, 2) tensors
+
+                    if not (indices[:, 0] == target_concept_index).all(): # Not all examples are correctly predicted
+                        continue
+
+                    prob_margins = values[:, 0] - values[:, 1] # Top prediction prob - 2nd prediction prob
+                    logger.debug(f'Concept {concept.name} predicted examples with margins {prob_margins}')
+
+                    if (prob_margins >= min_prob_margin).all():
+                        break
+
+                logger.info(f'Concept {concept.name} correctly predicted examples with margins {prob_margins} after {curr_epoch} epochs')
 
     @torch.inference_mode()
     def validate(self, val_dl: DataLoader):
@@ -211,7 +285,7 @@ class ConceptKBTrainer:
     def predict(
         self,
         predict_dl: DataLoader = None,
-        image_data: Union[Image, dict] = None,
+        image_data: Union[Image, LocalizeAndSegmentOutput] = None,
         unk_threshold: float = 0.,
         **forward_kwargs
     ) -> Union[list[dict], dict]:
@@ -268,7 +342,7 @@ class ConceptKBTrainer:
 
     def forward_pass(
         self,
-        image_data: Union[Image, dict],
+        image_data: Union[Image, LocalizeAndSegmentOutput],
         text_label: str = None,
         concepts: list[Concept] = None,
         do_backward: bool = False,
@@ -293,9 +367,9 @@ class ConceptKBTrainer:
 
         else: # Assume they're preprocessed segmentations
             segmentations = image_data
-            image = segmentations['image']
+            image = segmentations.input_image
 
-        region_crops = segmentations['part_crops']
+        region_crops = segmentations.part_crops
         if region_crops == []:
             region_crops = [image]
 
