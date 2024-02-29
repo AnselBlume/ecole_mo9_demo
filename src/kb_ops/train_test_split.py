@@ -50,7 +50,7 @@ def split_from_directory(
     stratified = True,
     label_from_path=label_from_path,
     seed: int = 42
-) -> tuple[list,list,list]:
+):
     '''
         Splits images in a directory into train, validation, and test sets.
 
@@ -65,12 +65,41 @@ def split_from_directory(
         Returns: Tuple of 2-tuples, each containing a list of paths and a list of labels. 2-tuples are returned
             in the order (train, validation, test).
     '''
-    paths = sorted([
+    paths = [
         os.path.join(img_dir, f)
         for f in os.listdir(img_dir)
         if os.path.splitext(f)[1] in exts
-    ])
+    ]
 
+    return split_from_paths(
+        paths=paths,
+        split=split,
+        stratified=stratified,
+        label_from_path=label_from_path,
+        seed=seed
+    )
+
+def split_from_paths(
+    paths: list[str],
+    split: tuple[float,float,float] = (0.6,0.2,0.2),
+    stratified = True,
+    label_from_path=label_from_path,
+    seed: int = 42
+) -> tuple[tuple[list,list], tuple[list,list], tuple[list,list]]:
+    '''
+        Splits images in a directory into train, validation, and test sets.
+
+        Arguments:
+            img_dir (str): Directory containing images.
+            split (tuple[float,float,float]): Proportions for train, validation, and test sets.
+            stratified (bool): Whether to stratify the split by label.
+            label_from_path (Callable): Function to extract label from path.
+            seed (int): Random seed for reproducibility.
+
+        Returns: 3-Tuple of 2-tuples, each containing a list of paths and a list of labels. 2-tuples are returned
+            in the order (train, validation, test).
+    '''
+    paths = sorted(paths)
     labels = [label_from_path(p) for p in paths]
 
     if stratified:
