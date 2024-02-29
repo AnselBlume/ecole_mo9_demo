@@ -222,10 +222,10 @@ if __name__ == '__main__':
         prediction = predictions[index]
 
         # Create images
-        img = instance['segmentations']['image']
+        img = instance['segmentations'].input_image
         region_img = to_pil_image(
-            image_from_masks(instance['segmentations']['part_masks'], superimpose_on_image=pil_to_tensor(img), superimpose_alpha=.7)
-        ) if instance['segmentations']['part_masks'].shape[0] > 0 else img
+            image_from_masks(instance['segmentations'].part_masks, superimpose_on_image=pil_to_tensor(img), superimpose_alpha=.7)
+        ) if instance['segmentations'].part_masks.shape[0] > 0 else img
 
         # Attribute scores
         predicted_concept_outputs = prediction['predicted_concept_outputs']
@@ -249,7 +249,7 @@ if __name__ == '__main__':
         fig.suptitle(f'Prediction: {pred_label} ({max_score * 100:.2f}%). Ground Truth: {true_label}', fontsize=24, fontweight='bold', y=1.1)
 
         # Save figure
-        file_path = os.path.splitext(os.path.basename(instance['segmentations']['image_path']))[0]
+        file_path = os.path.splitext(os.path.basename(instance['segmentations'].input_image_path))[0]
         out_path = os.path.join(args.output_dir, f'{file_path}.jpg')
         fig.savefig(out_path, bbox_inches='tight') # Recompute fig dims when saving because of raised suptitle
         plt.close(fig)

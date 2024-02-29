@@ -6,11 +6,54 @@ from image_processing.localize import Localizer, bbox_from_mask
 from feature_extraction import Sam, GLIPDemo
 from utils import ArticleDeterminer
 from torchvision.transforms.functional import pil_to_tensor
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
 def build_localizer_and_segmenter(sam: Sam, desco: GLIPDemo):
     return LocalizerAndSegmenter(Localizer(sam, desco), Segmenter(sam))
+
+@dataclass
+class LocalizeAndSegmentOutput:
+    input_image: Image = field(
+        default=None,
+        metadata={'description': 'Input image'}
+    )
+
+    input_image_path: str = field(
+        default=None,
+        metadata={'description': 'Path corresponding to input image'}
+    )
+
+    input_kwargs: dict = field(
+        default=None,
+        metadata={'description': 'Input keyword arguments'}
+    )
+
+    part_masks: torch.BoolTensor = field(
+        default=None,
+        metadata={'description': 'Boolean array of shape (n_detections, h, w) representing the segmentation masks of the parts'}
+    )
+
+    rle_part_masks: list[dict] = field(
+        default=None,
+        metadata={'description': 'RLE-encoded masks output by pycocotools.mask.encode; currently unused'}
+    )
+
+    localized_bbox: torch.IntTensor = field(
+        default=None,
+        metadata={'description': 'Bounding box of the localized concept in XYXY format with shape (4,)'}
+    )
+
+    part_crops: list[Image] = field(
+        default=None,
+        metadata={'description': 'List of cropped part images, if return_crops is True'}
+    )
+
+    localized_part_bboxes: torch.IntTensor = field(
+        default=None,
+        metadata={'description': 'Tensor of shape (n_part_detections, 4) of bboxes of localized parts in XYXY format, if concept_parts is provided.'}
+    )
 
 class LocalizerAndSegmenter:
     def __init__(self, localizer: Localizer, segmenter: Segmenter):
@@ -27,7 +70,7 @@ class LocalizerAndSegmenter:
         concept_parts: list[str] = [],
         remove_background: bool = True,
         return_crops: bool = True
-    ) -> dict:
+    ) -> LocalizeAndSegmentOutput:
         '''
             Localizes and segments the concept in the image in to parts.
 
@@ -39,11 +82,13 @@ class LocalizerAndSegmenter:
                 return_crops (bool): If true, returns images of the cropped parts (possibly with background removed) under the key 'part_crops'.
 
             Returns:
-                dict: Dictionary containing the following keys:
+                LocalizeAndSegmentOutput
                     'part_masks' (torch.BoolTensor): Boolean array of shape (n_detections, h, w) representing the segmentation masks of the parts
                     'localized_bbox' (torch.IntTensor): Bounding box of the localized concept in XYXY format with shape (4,).
                     'localized_part_bboxes' (torch.IntTensor): Tensor of shape (n_part_detections, 4) of bounding boxes of the localized parts in XYXY format.
                     'part_crops' (list[PIL.Image.Image]): List of cropped part images, if return_crops is True
+                    'localized_part_bboxes' (torch.IntTensor): Tensor of shape (n_part_detections, 4) of bounding boxes of the localized parts in XYXY format,
+                        if concept_parts is provided.
         '''
         # Localize the concept
         caption = self._get_parts_caption(concept_name, concept_parts) if concept_parts else concept_name
@@ -101,10 +146,10 @@ class LocalizerAndSegmenter:
             part_masks = self.segmenter.segment(image, bboxes[0], remove_background=remove_background)
 
         # Construct return dictionary
-        ret_dict = {
-            'part_masks': part_masks,
-            'localized_bbox': bboxes[0],
-        }
+        output = LocalizeAndSegmentOutput(
+            part_masks=part_masks,
+            localized_bbox=bboxes[0],
+        )
 
         if return_crops:
             part_crops = self.segmenter.crops_from_masks(image, part_masks, only_mask=remove_background)
@@ -114,20 +159,18 @@ class LocalizerAndSegmenter:
             filtered_crop_parts = []
             for i, crop in enumerate(part_crops):
                 if crop.size[0] == 0 or crop.size[1] == 0:
-                    logger.warning(f'Part crop {i} has a zero-dimension; adding None to part_crops instead of crop')
-                    filtered_crop_parts.append(None)
+                    logger.warning(f'Part crop {i} has a zero-dimension; skipping. This will cause a mismatch with part masks.')
+                    continue
 
                 else:
                     filtered_crop_parts.append(crop)
 
-            ret_dict['part_crops'] = filtered_crop_parts
+            output.part_crops = filtered_crop_parts
 
         if concept_parts:
-            ret_dict['localized_part_bboxes'] = bbox_from_mask(part_masks)
+            output.localized_part_bboxes = bbox_from_mask(part_masks)
 
-        ret_dict = {k : ret_dict[k] for k in sorted(ret_dict.keys())}
-
-        return ret_dict
+        return output
 
     def _get_parts_caption(self, concept_name: str, component_parts: list[str]):
         '''

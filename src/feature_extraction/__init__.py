@@ -1,13 +1,29 @@
+import logging
+logger = logging.getLogger(__name__)
 
 ##########################
 # Segment Anything Model #
 ##########################
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+# TODO Experiment with MobileSAMv2
 from segment_anything.modeling import Sam
 
+USE_MOBILE_SAM = True
 DEFAULT_SAM_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/sam/sam_vit_h_4b8939.pth'
+DEFAULT_MOBILE_SAM_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/sam/mobile_sam/mobile_sam.pt'
 
-def build_sam(model_name: str = 'vit_h', ckpt_path: str = DEFAULT_SAM_CKPT_PATH, device: str = 'cuda') -> Sam:
+if USE_MOBILE_SAM:
+    from mobile_sam import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+    SAM_CKPT_PATH = DEFAULT_MOBILE_SAM_CKPT_PATH
+    SAM_MODEL_TYPE = 'vit_t'
+    logger.info('Using Mobile-SAM model')
+
+else:
+    from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+    SAM_CKPT_PATH = DEFAULT_SAM_CKPT_PATH
+    SAM_MODEL_TYPE = 'vit_h'
+    logger.info('Using standard SAM model')
+
+def build_sam(model_name: str = SAM_MODEL_TYPE, ckpt_path: str = SAM_CKPT_PATH, device: str = 'cuda') -> Sam:
     return sam_model_registry[model_name](checkpoint=ckpt_path).to(device)
 
 def build_sam_predictor(model: Sam = None):
