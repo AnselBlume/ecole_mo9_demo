@@ -147,7 +147,6 @@ class ConceptKB:
         with open(path, 'rb') as f:
             dt = pickle.load(f)
 
-        assert isinstance(dt, ConceptKB)
         return dt
 
     def initialize(self, cfg: ConceptKBConfig, llm_client: LLMClient = None):
