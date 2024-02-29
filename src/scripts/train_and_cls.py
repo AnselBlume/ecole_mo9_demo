@@ -10,7 +10,7 @@ from kb_ops import kb_from_img_dir
 from model.concept import ConceptKBConfig
 from controller import Controller
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
-from kb_ops.train_test_split import split_from_directory
+from kb_ops.train_test_split import split_from_directory, split_from_paths
 from vis_utils import image_from_masks
 from kb_ops.dataset import ImageDataset, PresegmentedDataset
 import logging, coloredlogs
@@ -19,6 +19,7 @@ from kb_ops.train import ConceptKBTrainer
 import wandb
 from datetime import datetime
 import jsonargparse as argparse
+from itertools import chain
 
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
@@ -77,10 +78,6 @@ if __name__ == '__main__':
     )
     from image_processing import build_localizer_and_segmenter
 
-    # %% Split images into train, val, test
-    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_directory(args.img_dir)
-
-
     # %%
     loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
     feature_extractor = build_feature_extractor()
@@ -101,15 +98,31 @@ if __name__ == '__main__':
 
     # %%
     if args.presegmented_dir:
-        trn_p = [os.path.join(args.presegmented_dir, os.path.basename(os.path.splitext(p)[0]) + '.pkl') for p in trn_p]
-        val_p = [os.path.join(args.presegmented_dir, os.path.basename(os.path.splitext(p)[0]) + '.pkl') for p in val_p]
+        # Store presegmented paths in concept examples
+        for concept in concept_kb:
+            for example in concept.examples:
+                basename = os.path.basename(os.path.splitext(example.image_path)[0]) + '.pkl'
+                example.image_segmentations_path = os.path.join(args.presegmented_dir, basename)
 
-        train_ds = PresegmentedDataset(trn_p, trn_l)
-        val_ds = PresegmentedDataset(val_p, val_l)
+        # Collect all segmentation paths we just added
+        all_paths = list(chain.from_iterable([
+            [ex.image_segmentations_path for ex in c.examples]
+            for c in concept_kb
+        ]))
+
+        DatasetClass = PresegmentedDataset
 
     else:
-        train_ds = ImageDataset(trn_p, trn_l)
-        val_ds = ImageDataset(val_p, val_l)
+        all_paths = list(chain.from_iterable([
+            [ex.image_path for ex in c.examples]
+            for c in concept_kb
+        ]))
+
+        DatasetClass = ImageDataset
+
+    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_paths(all_paths)
+    train_ds = DatasetClass(trn_p, trn_l)
+    val_ds = DatasetClass(val_p, val_l)
 
     concept_kb.to('cuda')
 
