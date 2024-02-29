@@ -1,16 +1,17 @@
-import sys
-# TODO Remove / revise the path to src in the line below
-sys.path.append('/home/jk100/code/ecole_mo9_demo/src')
-
+# %%
 from model.concept import Concept
-from transformers import CLIPProcessor, CLIPModel, CLIPTextModelWithProjection
+from transformers import CLIPProcessor, CLIPModel
 from dataclasses import dataclass
 from typing import List
+from utils import to_device
 
 import numpy as np
 import faiss
 import torch
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class RetrievedConcept:
@@ -18,38 +19,53 @@ class RetrievedConcept:
     distance: float = None
 
 class CLIPConceptRetriever:
-    def __init__(self, concepts: List[Concept], clip_model: CLIPModel, clip_processor: CLIPProcessor, device='cpu'):
+    def __init__(
+        self,
+        concepts: List[Concept],
+        clip_model: CLIPModel,
+        clip_processor: CLIPProcessor,
+        cache_path: str = None
+    ):
         self._concepts = concepts
         self.clip_model = clip_model
         self.clip_processor = clip_processor
+        self.cache_path = cache_path
         self._index = None
         self._concept_idx2lbl = {idx: concept_lbl.name.lower().strip() for idx, concept_lbl in enumerate(concepts)}
         self._concept_lbl2idx = {concept_lbl.name.lower().strip(): idx for idx, concept_lbl in enumerate(concepts)}
 
         # Compute text embeddings and cache them so they dont have to be recomputed every time
         # the clip_model will probably be on a GPU, but for now let's store the computed embeds on the CPU
-        _cache_dir = f"cache_faiss"
-        self._cache_path = os.path.join(_cache_dir, f"demo_concepts_index_cached.pth")  # TODO: You can change the file name to suit your needs
 
-        if not os.path.exists(_cache_dir):
-            os.mkdir(_cache_dir)
+        # Cache path provided and exists on disk, so load it
+        if cache_path and os.path.exists(self.cache_path):
+            logger.info(f"[ Loading cached FAISS index from {self.cache_path} ]")
+            self._index = torch.load(self.cache_path)
 
-        if not os.path.exists(self._cache_path) and self._index is None:
+        # No cache path specified, or cache doesn't exist yet. Compute index and possibly persist
+        else:
+            logger.info('[ Computing text embeddings for FAISS index ]')
             concept_names = [c.name.strip() for c in concepts]
-            inputs = clip_processor(text=concept_names, images=None, return_tensors='pt', padding=True)
-            outputs = clip_model(**inputs)
-            text_embeds = outputs.text_embeds.detach().numpy()  # Convert to 'numpy.ndarray' to process with faiss.normalize_L2
+            text_embeds = self._get_text_embeds(concept_names)  # Convert to 'numpy.ndarray' to process with faiss.normalize_L2
 
             # Construct FAISS index
+            logger.info('[ Building FAISS index ]')
             embed_dim = text_embeds.shape[1]
             self._index = faiss.IndexFlatL2(embed_dim)
             faiss.normalize_L2(text_embeds)
             self._index.add(text_embeds)
-            torch.save(self._index, self._cache_path)  # Cache index to 'cache_path'
-        else:
-            print(f"[ Loading cached FAISS index from {self._cache_path} ]")
-            self._index = torch.load(self._cache_path)
 
+            if cache_path:
+                os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                torch.save(self._index, self.cache_path)  # Cache index to 'cache_path'
+
+    def _get_text_embeds(self, queries: list[str]):
+        inputs = self.clip_processor(text=queries, images=None, return_tensors='pt', padding=True)
+
+        with torch.inference_mode():
+            outputs = self.clip_model.get_text_features(**to_device(inputs, self.clip_model.device))
+
+        return outputs.cpu().numpy()
 
     def retrieve(self, query: str, top_k: int) -> List[RetrievedConcept]:
         '''
@@ -57,12 +73,16 @@ class CLIPConceptRetriever:
             the query and the Concepts' names.
         '''
         # Create a search vector and search for 'top_k'
-        inputs = self.clip_processor(text=[query], images=None, return_tensors='pt', padding=True)
-        outputs = self.clip_model(**inputs)
-        _query_embeds = outputs.text_embeds.detach().numpy()
+        _query_embeds = self._get_text_embeds([query])
         faiss.normalize_L2(_query_embeds)
-        distances, nn = self._index.search(_query_embeds, k=top_k)
-        return distances, nn
+        distances, nn = self._index.search(_query_embeds, k=top_k) # Each is of shape (1, top_k) as only one query
+
+        retrieved_concepts = [
+            RetrievedConcept(concept=self._concepts[concept_idx], distance=dist)
+            for concept_idx, dist in zip(nn[0], distances[0])
+        ]
+
+        return retrieved_concepts
 
     def add_concept(self, concept: Concept, update_cache=False):
         # Add to faiss index (and concept list)
@@ -70,49 +90,66 @@ class CLIPConceptRetriever:
         outputs = self.clip_model(**inputs)
         self.concepts.append(concept)  # Update the 'self._concepts' list
         self._index.add(outputs.text_embeds.detach().numpy())  # Update the faiss index
+
         if update_cache:
-            print(f"[ Added new concept ({concept.name}) into {self._cached_path}]")
+            if not self.cache_path:
+                raise ValueError("Cache path not provided. Cannot update cache.")
+
             self._concept_idx2lbl[len(self._concept_idx2lbl)] = concept.name.lower().strip()
             self._concept_lbl2idx[concept.name.lower().strip()] = len(self._concept_lbl2idx)
-            torch.save(self._index, self._cache_path)
+            torch.save(self._index, self.cache_path)
+            logger.info(f"[ Added new concept ({concept.name}) into {self.cache_path}]")
 
     def remove_concept(self, concept_name: str, update_cache=False):
         # Remove from faiss index (and concept list)
         rid = self._concept_lbl2idx[concept_name.lower().strip()]
         rid = np.array([rid], dtype=np.int64)
         self._index.remove_ids(rid)
-        print(f"[ {concept_name} removed from FAISS index ]")
+        logger.info(f"[ {concept_name} removed from FAISS index ]")
+
         if update_cache:
-            print(f"[ Removed concept ({concept.name}) from {self._cached_path}]")
+            if not self.cache_path:
+                raise ValueError("Cache path not provided. Cannot update cache.")
+
             self._concept_idx2lbl[len(self._concept_idx2lbl)] = concept.name.lower().strip()
             self._concept_lbl2idx[concept.name.lower().strip()] = len(self._concept_lbl2idx)
-            torch.save(self._index, self._cache_path)
+            torch.save(self._index, self.cache_path)
+            logger.info(f"[ Removed concept ({concept.name}) from {self.cache_path}]")
 
-
+# %%
 if __name__ == "__main__":
     '''
     Running 'python retrieve.py' will return a list of top-k concepts according to the given query input
     '''
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    from feature_extraction import build_clip
+    import coloredlogs
+    coloredlogs.install(logging.INFO)
+
+    # %%
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
     concept_names = [
         "Spoon", "Knife", "Hammer", "Fork", "Spatula", "Tongs", "Screwdriver", "Wrench", "Ladle", "Peeler"
     ]
-    query = input("Enter a query string >> ")
     concepts = []
     for cname in concept_names:
         concept = Concept()
         concept.name = cname
         concepts.append(concept)
 
-    encoder = CLIPTextModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
-    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    clip_model, clip_processor = build_clip(device=device)
+    retriever = CLIPConceptRetriever(concepts,
+                                     clip_model=clip_model,
+                                     clip_processor=clip_processor)
 
-    retriever = CLIPConceptRetriever(concepts, 
-                                     clip_model=encoder,
-                                     clip_processor=processor)
-    k = 3
-    topk_distances, topk_concepts = retriever.retrieve(query, top_k=k)
-    print(f"[ Top-K concepts retrieved (Query :: {query}) ]")
-    print("top-k distances >> ", topk_distances)
-    print("top-k concepts >> ", topk_concepts)
+    # %%
+    while True:
+        k = 3
+        query = input("Enter a query string >> ")
+        if query.lower().strip() in ['exit', '']:
+            break
+
+        retrieved = retriever.retrieve(query, top_k=k)
+        logger.info(f"[ Top-K concepts retrieved (Query :: {query}) ]")
+        logger.info([f"{r.concept.name} ({r.distance:.2f})" for r in retrieved])
+# %%
