@@ -7,8 +7,37 @@ from llm import LLMClient, retrieve_attributes
 from tqdm import tqdm
 import logging
 from utils import ArticleDeterminer
+from .features import ImageFeatures
+from PIL.Image import Image
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class StoredExample:
+    image: Image = field(
+        default=None,
+        metadata={'description': 'Example\'s image'}
+    )
+
+    image_path: str = field(
+        default=None,
+        metadata={'description': 'Path to this example\'s image'}
+    )
+
+    image_features: ImageFeatures = field(
+        default=None,
+        metadata={'description': 'Image features for the example'}
+    )
+
+    image_features_path: str = field(
+        default=None,
+        metadata={'description': 'Path to image features for this example'}
+    )
+
+    feature_extractor_id: str = field(
+        default=None,
+        metadata={'description': 'String uniquely identifying the feature extractor used to extract the features'}
+    )
 
 @dataclass
 class Concept:
@@ -38,7 +67,7 @@ class Concept:
         metadata={'help': 'Predictor for this concept.'}
     )
 
-    examples: list = field(default_factory=list, metadata={'help': 'Paths to example images.'})
+    examples: list[StoredExample] = field(default_factory=list, metadata={'help': 'Stored example data'})
 
 @dataclass
 class ConceptKBConfig:
@@ -115,11 +144,14 @@ class ConceptKB:
             Initializes the ConceptKB with zero-shot attributes and concept predictors.
         '''
         self.cfg = cfg
-        self.used_zs_attrs_from_llm = llm_client is not None
+
+        # Determine if we've already, or will, use zero-shot attributes from an LLM
+        if not hasattr(self, 'used_zs_attrs_from_llm'):
+            self.used_zs_attrs_from_llm = llm_client is not None
 
         # Get zero-shot attributes
         if llm_client is not None:
-            self.init_zs_attrs(llm_client, cfg.encode_class_in_zs_attr)
+            self._init_zs_attrs(llm_client, cfg.encode_class_in_zs_attr)
 
         # Build predictors
         self._init_predictors()
@@ -141,23 +173,35 @@ class ConceptKB:
             use_regions=self.cfg.use_regions
         )
 
-    def init_zs_attrs(self, llm_client: LLMClient, encode_class: bool, concept: Concept = None):
+    def _init_zs_attrs(self, llm_client: LLMClient, encode_class: bool):
         '''
             Initializes zero-shot attributes for ConceptKB's concepts.
-            If concept is not None, only initializes zs attributes for that concept.
         '''
         logger.info('Initializing zero-shot attributes from an LLM')
 
         determiner = ArticleDeterminer()
+        for concept in tqdm(self.concepts):
+            self.init_zs_attrs(concept, llm_client, encode_class, determiner)
 
-        concepts = self.concepts if concept is None else [concept]
-        for concept in tqdm(concepts):
-            zs_attr_dict = retrieve_attributes(concept.name, llm_client)
+    def init_zs_attrs(
+        self,
+        concept: Concept,
+        llm_client: LLMClient,
+        encode_class: bool,
+        determiner: ArticleDeterminer = None
+    ):
+        '''
+            Initializes zero-shot attributes for a specified Concept.
+        '''
+        if determiner is None and encode_class:
+            determiner = ArticleDeterminer()
 
-            for attr_type in ['required', 'likely']:
-                for attr in zs_attr_dict[attr_type]:
-                    query = f'{attr} of {determiner.determine(attr)}{concept.name}' if encode_class else attr
-                    concept.zs_attributes.append(Attribute(attr, is_necessary=attr_type == 'required', query=query))
+        zs_attr_dict = retrieve_attributes(concept.name, llm_client)
+
+        for attr_type in ['required', 'likely']:
+            for attr in zs_attr_dict[attr_type]:
+                query = f'{attr} of {determiner.determine(attr)}{concept.name}' if encode_class else attr
+                concept.zs_attributes.append(Attribute(attr, is_necessary=attr_type == 'required', query=query))
 
     def add_concept(self, concept: Concept):
         self._concepts[concept.name] = concept
