@@ -45,7 +45,7 @@ class CLIPConceptRetriever:
         # No cache path specified, or cache doesn't exist yet. Compute index and possibly persist
         else:
             logger.info('[ Computing text embeddings for FAISS index ]')
-            concept_names = [c.name.strip() for c in concepts]
+            concept_names = [c.name.lower().strip() for c in concepts]
             text_embeds = self._get_text_embeds(concept_names)  # Convert to 'numpy.ndarray' to process with faiss.normalize_L2
 
             # Construct FAISS index
