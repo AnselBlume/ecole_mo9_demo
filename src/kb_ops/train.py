@@ -18,6 +18,143 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+class ConceptKBFeatureCacher:
+    def __init__(
+        self,
+        concept_kb: ConceptKB,
+        feature_extractor: FeatureExtractor,
+        loc_and_seg: LocalizerAndSegmenter = None
+    ):
+        self.concept_kb = concept_kb
+        self.feature_extractor = feature_extractor
+        self.loc_and_seg = loc_and_seg
+
+    def cache_segmentations(self, concept: Concept, cache_sub_dir='segmentations'):
+        pass
+
+    def cache_features(self, concept: Concept, cache_sub_dir='features'):
+        pass
+
+class ConceptKBFeaturePipeline:
+    def __init__(
+        self,
+        concept_kb: ConceptKB,
+        feature_extractor: FeatureExtractor,
+        loc_and_seg: LocalizerAndSegmenter = None
+    ):
+        self.concept_kb = concept_kb
+        self.feature_extractor = feature_extractor
+        self.loc_and_seg = loc_and_seg
+
+    def get_image_and_segmentations(
+        self,
+        image_data: Union[Image, LocalizeAndSegmentOutput]
+    ) -> tuple[Image, LocalizeAndSegmentOutput]:
+
+        if isinstance(image_data, Image):
+            if self.loc_and_seg is None:
+                raise ValueError('LocalizerAndSegmenter is required for online localization and segmentation')
+
+            segmentations = self.loc_and_seg.localize_and_segment(
+                image=image_data,
+                concept_name='',
+                concept_parts=[],
+                remove_background=True
+            )
+
+            image = image_data
+
+        else:
+            assert isinstance(image_data, LocalizeAndSegmentOutput)
+            segmentations = image_data
+            image = segmentations.input_image
+
+        return image, segmentations
+
+    def get_features(
+        self,
+        image: Image,
+        segmentations: LocalizeAndSegmentOutput,
+        zs_attrs: list[str],
+        cached_visual_features: Optional[torch.Tensor] = None,
+        cached_trained_attr_scores: Optional[torch.Tensor] = None
+    ):
+        # Get region crops
+        region_crops = segmentations.part_crops
+        if region_crops == []:
+            region_crops = [image]
+
+        with torch.no_grad():
+            features: ImageFeatures = self.feature_extractor(
+                image,
+                region_crops,
+                zs_attrs,
+                cached_visual_features=cached_visual_features,
+                cached_trained_attr_scores=cached_trained_attr_scores
+            )
+
+        return features
+
+class ConceptKBExampleSampler:
+    def __init__(
+        self,
+        concept_kb: ConceptKB,
+        random_seed: int = 42
+    ):
+        self.concept_kb = concept_kb
+        self.rng = np.random.default_rng(random_seed)
+
+    def sample_negative_examples(
+        self,
+        n_pos_examples: int,
+        neg_concepts: list[Concept],
+        min_neg_ratio: float = 1.0
+    ) -> tuple[list[Any], list[str]]:
+        '''
+            Samples negative examples from the given negative concepts, trying to match the given ratio.
+
+            Arguments:
+                n_pos_examples: Number of positive examples
+                neg_concepts: List of negative concepts to sample at least one example of each from
+                min_neg_ratio: Minimum ratio of negative examples to positive examples
+                rng: Random number generator used for sampling from negative concepts
+
+            Returns: Tuple of (sampled_examples, sampled_concept_names)
+        '''
+        # Decide how many negatives to sample per concept
+        if min_neg_ratio < 1:
+            raise ValueError('min_neg_ratio must be >= 1')
+
+        n_neg_per_concept = int(n_pos_examples * min_neg_ratio / len(neg_concepts))
+
+        if n_neg_per_concept < 1:
+            n_neg_per_concept = 1
+            logger.warning(f'Too many negative concepts to satisfy min_neg_ratio; using 1 negative example per concept')
+
+        actual_ratio = n_neg_per_concept * len(neg_concepts) / n_pos_examples
+        logger.info(f'Attempting to sample {n_neg_per_concept} negative examples per concept')
+
+        if not rng:
+            rng = np.random.default_rng()
+
+        sampled_examples = []
+        sampled_concept_names = []
+        for neg_concept in neg_concepts:
+            try:
+                neg_examples = rng.choice(neg_concept.examples, n_neg_per_concept, replace=False)
+
+            except ValueError: # Not enough negative examples
+                logger.warning(f'Not enough examples to sample from for concept {neg_concept.name}; using all examples')
+                neg_examples = neg_concept.examples
+
+            sampled_examples.extend(neg_examples)
+            sampled_concept_names.extend([neg_concept.name] * len(neg_examples))
+
+        actual_ratio = len(sampled_examples) / n_pos_examples
+        logger.info(f'Actual negative example ratio: {actual_ratio:.2f}')
+
+        return sampled_examples, sampled_concept_names
+
 class ConceptKBTrainer:
     UNK_LABEL = '[UNK]'
 
@@ -35,8 +172,9 @@ class ConceptKBTrainer:
         self.label_to_index[self.UNK_LABEL] = -1 # For unknown labels
         self.index_to_label: dict[int,str] = {v : k for k, v in self.label_to_index.items()}
 
-        self.loc_and_seg = loc_and_seg
-        self.feature_extractor = feature_extractor
+        self.feature_pipeline = ConceptKBFeaturePipeline(concept_kb, feature_extractor, loc_and_seg)
+        self.sampler = ConceptKBExampleSampler(concept_kb)
+
         self.run = wandb_run
 
     def _get_dataloader(self, dataset: Dataset, is_train: bool):
@@ -44,12 +182,6 @@ class ConceptKBTrainer:
 
     def _get_ckpt_path(self, ckpt_dir: str, ckpt_fmt: str, epoch: int):
         return os.path.join(ckpt_dir, ckpt_fmt.format(epoch=epoch))
-
-    def _cache_segmentations(self, concept: Concept, cache_sub_dir='segmentations'):
-        pass
-
-    def _cache_features(self, concept: Concept, cache_sub_dir='features'):
-        pass
 
     def train(
         self,
@@ -122,58 +254,6 @@ class ConceptKBTrainer:
 
         return ret_dict
 
-    def _sample_negative_examples(
-        self,
-        n_pos_examples: int,
-        neg_concepts: list[Concept],
-        min_neg_ratio: float = 1.0,
-        rng: np.random.Generator = None
-    ) -> tuple[list[Any], list[str]]:
-        '''
-            Samples negative examples from the given negative concepts, trying to match the given ratio.
-
-            Arguments:
-                n_pos_examples: Number of positive examples
-                neg_concepts: List of negative concepts to sample at least one example of each from
-                min_neg_ratio: Minimum ratio of negative examples to positive examples
-                rng: Random number generator used for sampling from negative concepts
-
-            Returns: Tuple of (sampled_examples, sampled_concept_names)
-        '''
-        # Decide how many negatives to sample per concept
-        if min_neg_ratio < 1:
-            raise ValueError('min_neg_ratio must be >= 1')
-
-        n_neg_per_concept = int(n_pos_examples * min_neg_ratio / len(neg_concepts))
-
-        if n_neg_per_concept < 1:
-            n_neg_per_concept = 1
-            logger.warning(f'Too many negative concepts to satisfy min_neg_ratio; using 1 negative example per concept')
-
-        actual_ratio = n_neg_per_concept * len(neg_concepts) / n_pos_examples
-        logger.info(f'Attempting to sample {n_neg_per_concept} negative examples per concept')
-
-        if not rng:
-            rng = np.random.default_rng()
-
-        sampled_examples = []
-        sampled_concept_names = []
-        for neg_concept in neg_concepts:
-            try:
-                neg_examples = rng.choice(neg_concept.examples, n_neg_per_concept, replace=False)
-
-            except ValueError: # Not enough negative examples
-                logger.warning(f'Not enough examples to sample from for concept {neg_concept.name}; using all examples')
-                neg_examples = neg_concept.examples
-
-            sampled_examples.extend(neg_examples)
-            sampled_concept_names.extend([neg_concept.name] * len(neg_examples))
-
-        actual_ratio = len(sampled_examples) / n_pos_examples
-        logger.info(f'Actual negative example ratio: {actual_ratio:.2f}')
-
-        return sampled_examples, sampled_concept_names
-
     def train_concept(
         self,
         concept: Concept,
@@ -212,9 +292,8 @@ class ConceptKBTrainer:
         # Train for a fixed number of epochs or until examples are predicted correctly
         else:
             # Create examples and labels
-            rng = np.random.default_rng(sampling_seed)
             neg_concepts = [c for c in self.concept_kb if c != concept]
-            neg_examples, neg_concept_names = self._sample_negative_examples(len(concept.examples), neg_concepts, rng=rng)
+            neg_examples, neg_concept_names = self.sampler.sample_negative_examples(len(concept.examples), neg_concepts)
 
             all_samples = concept.examples + neg_examples
             all_labels = [concept.name] * len(concept.examples) + neg_concept_names
@@ -355,55 +434,6 @@ class ConceptKBTrainer:
 
             return predictions[0]
 
-    def _get_image_and_segmentations(
-        self,
-        image_data: Union[Image, LocalizeAndSegmentOutput]
-    ) -> tuple[Image, LocalizeAndSegmentOutput]:
-
-        if isinstance(image_data, Image):
-            if self.loc_and_seg is None:
-                raise ValueError('LocalizerAndSegmenter is required for online localization and segmentation')
-
-            segmentations = self.loc_and_seg.localize_and_segment(
-                image=image_data,
-                concept_name='',
-                concept_parts=[],
-                remove_background=True
-            )
-
-            image = image_data
-
-        else:
-            assert isinstance(image_data, LocalizeAndSegmentOutput)
-            segmentations = image_data
-            image = segmentations.input_image
-
-        return image, segmentations
-
-    def _get_features(
-        self,
-        image: Image,
-        segmentations: LocalizeAndSegmentOutput,
-        zs_attrs: list[str],
-        cached_visual_features: Optional[torch.Tensor] = None,
-        cached_trained_attr_scores: Optional[torch.Tensor] = None
-    ):
-        # Get region crops
-        region_crops = segmentations.part_crops
-        if region_crops == []:
-            region_crops = [image]
-
-        with torch.no_grad():
-            features: ImageFeatures = self.feature_extractor(
-                image,
-                region_crops,
-                zs_attrs,
-                cached_visual_features=cached_visual_features,
-                cached_trained_attr_scores=cached_trained_attr_scores
-            )
-
-        return features
-
     def forward_pass(
         self,
         image_data: Union[Image, LocalizeAndSegmentOutput, list[ImageFeatures]],
@@ -422,7 +452,7 @@ class ConceptKBTrainer:
             features_were_provided = True
 
         else: # Not using features
-            image, segmentations = self._get_image_and_segmentations(image_data)
+            image, segmentations = self.feature_pipeline.get_image_and_segmentations(image_data)
             features_were_provided = False
 
         # Get all concept predictions
@@ -443,7 +473,7 @@ class ConceptKBTrainer:
             else: # Features not provided; compute from segmentations
                 zs_attrs = [attr.query for attr in concept.zs_attributes]
 
-                features = self._get_features(
+                features = self.feature_pipeline.get_features(
                     image,
                     segmentations,
                     zs_attrs,
