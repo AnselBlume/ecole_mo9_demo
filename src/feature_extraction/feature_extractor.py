@@ -47,7 +47,10 @@ class FeatureExtractor(nn.Module):
             zs_scores = torch.tensor([[]]) # This will be a nop in the indexing below
 
         if cached_trained_attr_scores is None:
-            trained_attr_scores = self.trained_clip_attr_predictor.predict_from_features(visual_features) # (1 + n_regions, n_learned_attrs)
+            if len(self.trained_clip_attr_predictor.attr_names):
+                trained_attr_scores = self.trained_clip_attr_predictor.predict_from_features(visual_features) # (1 + n_regions, n_learned_attrs)
+            else:
+                trained_attr_scores = torch.tensor([[]]) # (1, 0); nop in the indexing below
         else:
             trained_attr_scores = cached_trained_attr_scores
 
