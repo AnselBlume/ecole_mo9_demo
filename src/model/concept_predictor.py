@@ -125,7 +125,7 @@ class ConceptPredictor(nn.Module):
                 img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             if self.use_regions:
-                region_scores = region_scores * region_weights # (n_regions, 1)
+                region_scores = self.region_features_predictor(region_scores) * region_weights # (n_regions, 1)
                 region_score = region_scores.sum(dim=0, keepdim=True) # (1, 1)
             else:
                 region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
