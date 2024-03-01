@@ -9,6 +9,7 @@ from model.features import ImageFeatures
 from wandb.sdk.wandb_run import Run
 from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset
 from feature_extraction import FeatureExtractor
+from .feature_pipeline import ConceptKBFeaturePipeline
 from typing import Union, Optional, Any, Literal
 import numpy as np
 from tqdm import tqdm
@@ -17,83 +18,6 @@ from torchmetrics import Accuracy
 import logging
 
 logger = logging.getLogger(__name__)
-
-class ConceptKBFeatureCacher:
-    def __init__(
-        self,
-        concept_kb: ConceptKB,
-        feature_extractor: FeatureExtractor,
-        loc_and_seg: LocalizerAndSegmenter = None
-    ):
-        self.concept_kb = concept_kb
-        self.feature_extractor = feature_extractor
-        self.loc_and_seg = loc_and_seg
-
-    def cache_segmentations(self, concept: Concept, cache_sub_dir='segmentations'):
-        pass
-
-    def cache_features(self, concept: Concept, cache_sub_dir='features'):
-        pass
-
-class ConceptKBFeaturePipeline:
-    def __init__(
-        self,
-        concept_kb: ConceptKB,
-        feature_extractor: FeatureExtractor,
-        loc_and_seg: LocalizerAndSegmenter = None
-    ):
-        self.concept_kb = concept_kb
-        self.feature_extractor = feature_extractor
-        self.loc_and_seg = loc_and_seg
-
-    def get_image_and_segmentations(
-        self,
-        image_data: Union[Image, LocalizeAndSegmentOutput]
-    ) -> tuple[Image, LocalizeAndSegmentOutput]:
-
-        if isinstance(image_data, Image):
-            if self.loc_and_seg is None:
-                raise ValueError('LocalizerAndSegmenter is required for online localization and segmentation')
-
-            segmentations = self.loc_and_seg.localize_and_segment(
-                image=image_data,
-                concept_name='',
-                concept_parts=[],
-                remove_background=True
-            )
-
-            image = image_data
-
-        else:
-            assert isinstance(image_data, LocalizeAndSegmentOutput)
-            segmentations = image_data
-            image = segmentations.input_image
-
-        return image, segmentations
-
-    def get_features(
-        self,
-        image: Image,
-        segmentations: LocalizeAndSegmentOutput,
-        zs_attrs: list[str],
-        cached_visual_features: Optional[torch.Tensor] = None,
-        cached_trained_attr_scores: Optional[torch.Tensor] = None
-    ):
-        # Get region crops
-        region_crops = segmentations.part_crops
-        if region_crops == []:
-            region_crops = [image]
-
-        with torch.no_grad():
-            features: ImageFeatures = self.feature_extractor(
-                image,
-                region_crops,
-                zs_attrs,
-                cached_visual_features=cached_visual_features,
-                cached_trained_attr_scores=cached_trained_attr_scores
-            )
-
-        return features
 
 class ConceptKBExampleSampler:
     def __init__(
@@ -158,13 +82,7 @@ class ConceptKBExampleSampler:
 class ConceptKBTrainer:
     UNK_LABEL = '[UNK]'
 
-    def __init__(
-        self,
-        concept_kb: ConceptKB,
-        feature_extractor: FeatureExtractor,
-        loc_and_seg: LocalizerAndSegmenter = None,
-        wandb_run: Run = None
-    ):
+    def __init__(self, concept_kb: ConceptKB, feature_pipeline: ConceptKBFeaturePipeline, wandb_run: Run = None):
 
         self.concept_kb = concept_kb
 
@@ -172,7 +90,7 @@ class ConceptKBTrainer:
         self.label_to_index[self.UNK_LABEL] = -1 # For unknown labels
         self.index_to_label: dict[int,str] = {v : k for k, v in self.label_to_index.items()}
 
-        self.feature_pipeline = ConceptKBFeaturePipeline(concept_kb, feature_extractor, loc_and_seg)
+        self.feature_pipeline = feature_pipeline
         self.sampler = ConceptKBExampleSampler(concept_kb)
 
         self.run = wandb_run

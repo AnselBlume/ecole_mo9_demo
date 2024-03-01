@@ -10,6 +10,7 @@ from kb_ops.retrieve import CLIPConceptRetriever
 from llm import LLMClient
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
+from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 from utils import to_device
 from vis_utils import plot_predicted_classes, plot_differences
 
@@ -25,9 +26,9 @@ class Controller:
         zs_predictor: CLIPAttributePredictor = None
     ):
         self.concepts = concept_kb
+        self.feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
         self.trainer = ConceptKBTrainer(concept_kb, feature_extractor, loc_and_seg)
 
-        self.loc_and_seg = loc_and_seg
         self.retriever = retriever
         self.llm_client = LLMClient()
         self.attr_scorer = AttributeScorer(zs_predictor)
@@ -41,6 +42,16 @@ class Controller:
     def clear_cache(self):
         self.cached_predictions = []
         self.cached_images = []
+
+    def diff_between_concepts(self, concept_name1: str, concept_name2: str):
+        concept1 = self.retrieve_concept(concept_name1)
+        concept2 = self.retrieve_concept(concept_name2)
+
+        predictor1 = concept1.predictor
+        predictor2 = concept2.predictor
+
+        weights1 = predictor1.zs_attr_predictor.weight.data
+        weights2 = predictor2.zs_attr_predictor.weight.data
 
     def diff_between_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None) -> Image:
         if not ((images is None) ^ (indices is None)):
@@ -109,7 +120,7 @@ class Controller:
         remove_background: bool = True,
         return_crops: bool = True
     ):
-        return self.loc_and_seg.localize_and_segment(
+        return self.feature_pipeline.get_segmentations(
             image=image,
             concept_name=concept_name,
             concept_parts=concept_parts,
@@ -125,7 +136,7 @@ class Controller:
         remove_background: bool = True,
         zs_attrs: list[str] = []
     ) -> dict:
-        segmentations = self.loc_and_seg.localize_and_segment(
+        segmentations = self.feature_pipeline.get_segmentations(
             image=image,
             concept_name=concept_name,
             concept_parts=concept_parts,
