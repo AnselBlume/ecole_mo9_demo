@@ -14,7 +14,7 @@ from PIL.Image import Image
 logger = logging.getLogger(__name__)
 
 @dataclass
-class StoredExample:
+class ConceptExample:
     image: Image = field(
         default=None,
         metadata={'description': 'Example\'s image'}
@@ -78,7 +78,7 @@ class Concept:
         metadata={'help': 'Predictor for this concept.'}
     )
 
-    examples: list[StoredExample] = field(default_factory=list, metadata={'help': 'Stored example data'})
+    examples: list[ConceptExample] = field(default_factory=list, metadata={'help': 'Stored example data'})
 
 @dataclass
 class ConceptKBConfig:

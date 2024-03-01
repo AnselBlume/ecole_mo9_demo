@@ -1,5 +1,5 @@
 import os
-from model.concept import Concept, ConceptKB, StoredExample
+from model.concept import Concept, ConceptKB, ConceptExample
 
 def label_from_path(path):
     return os.path.basename(path).split('_')[0].lower()
@@ -22,6 +22,6 @@ def kb_from_img_dir(img_dir: str) -> ConceptKB:
         if label not in kb:
             kb.add_concept(Concept(label))
 
-        kb.get_concept(label).examples.append(StoredExample(image_path=img_path))
+        kb.get_concept(label).examples.append(ConceptExample(image_path=img_path))
 
     return kb
