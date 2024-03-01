@@ -24,7 +24,7 @@ class ConceptKBFeaturePipeline:
         concept_parts: list[str] = [],
         remove_background: bool = True,
         return_crops: bool = True
-    ):
+    ) -> LocalizeAndSegmentOutput:
 
         return self.loc_and_seg.localize_and_segment(
             image=image,
@@ -58,7 +58,7 @@ class ConceptKBFeaturePipeline:
         zs_attrs: list[str],
         cached_visual_features: Optional[torch.Tensor] = None,
         cached_trained_attr_scores: Optional[torch.Tensor] = None
-    ):
+    ) -> ImageFeatures:
         # Get region crops
         region_crops = segmentations.part_crops
         if region_crops == []:

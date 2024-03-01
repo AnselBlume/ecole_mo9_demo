@@ -28,7 +28,7 @@ class ImageFeatures:
     #############################################
     # Features computed via batched calculation #
     #############################################
-    # Tensor of shape (1 + 1 + n_learned_attrs + n_zs_attrs,) where the first and second elmts are
+    # Tensor of shape (1 + 1 + 2*n_learned_attrs + 2*n_zs_attrs,) where the first and second elmts are
     # the image and region scores, respectively
     all_scores: torch.Tensor = None
 
