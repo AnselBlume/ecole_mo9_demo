@@ -130,6 +130,7 @@ def masks_to_boxes(masks:torch.Tensor):
 
     return bounding_boxes
 
+
 def mask_and_crop_image(image_file:str,mask:List):
     """
     Mask out part of image not in polygon and crop to bounding box created from mask.
