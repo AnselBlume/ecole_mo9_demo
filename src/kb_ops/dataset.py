@@ -3,6 +3,7 @@ import pickle
 from torch.utils.data import Dataset
 from image_processing import LocalizerAndSegmenter
 from image_processing.localize_and_segment import LocalizeAndSegmentOutput
+from kb_ops.cache import CachedImageFeatures
 from PIL import Image
 from tqdm import tqdm
 
@@ -71,7 +72,7 @@ class FeatureDataset(Dataset):
 
     def __getitem__(self, idx):
         with open(self.feature_paths[idx], 'rb') as f:
-            features = pickle.load(f)
+            features: CachedImageFeatures = pickle.load(f)
 
         return {
             'features': features,
