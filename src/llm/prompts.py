@@ -65,7 +65,7 @@ These attributes should be such that they could be a caption for a part of the i
 would not be a reasonable caption for the part of the image showing the children. Instead, say:
 - school children
 
-In the same way, don't say for a bowl
+In the same way, don't say words like "typically" or "usually." For example, for a "bowl" don't say
 - typically made of ceramic or glass
 
 Instead, just list the attributes separately as
