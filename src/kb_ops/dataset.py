@@ -3,7 +3,7 @@ import pickle
 from torch.utils.data import Dataset
 from image_processing import LocalizerAndSegmenter
 from image_processing.localize_and_segment import LocalizeAndSegmentOutput
-from kb_ops.cache import CachedImageFeatures
+from kb_ops.feature_cache import CachedImageFeatures
 from PIL import Image
 from tqdm import tqdm
 

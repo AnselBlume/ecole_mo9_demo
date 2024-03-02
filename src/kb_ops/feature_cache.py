@@ -1,10 +1,11 @@
 import os
 import torch
 from tqdm import tqdm
-from model.concept import ConceptKB
+from model.concept import ConceptKB, Concept
 from .feature_pipeline import ConceptKBFeaturePipeline
 from model.features import ImageFeatures
 from dataclasses import dataclass
+from typing import Literal
 from model.concept import ConceptExample
 from PIL.Image import open as open_image
 from PIL.Image import Image
@@ -61,9 +62,19 @@ class ConceptKBFeatureCacher:
 
         return open_image(example.image_path).convert('RGB')
 
-    def _get_all_examples(self):
+    def _get_uncached_or_dirty_examples(self, type: Literal['segmentations', 'features']):
+        dirty_attr_name = 'are_features_dirty' if type == 'features' else 'are_segmentations_dirty'
+        path_attr_name = 'image_features_path' if type == 'features' else 'image_segmentations_path'
+
         return [
             example for concept in self.concept_kb
+            for example in concept.examples
+            if getattr(example, path_attr_name) is None or getattr(example, dirty_attr_name)
+        ]
+
+    def _examples_from_concepts(self, concepts: list[Concept]):
+        return [
+            example for concept in concepts
             for example in concept.examples
         ]
 
@@ -82,33 +93,36 @@ class ConceptKBFeatureCacher:
 
         example.image_segmentations_path = cache_path
 
-    def cache_segmentations(self, **loc_and_seg_kwargs):
+    def cache_segmentations(self, concepts: list[Concept] = None, **loc_and_seg_kwargs):
         '''
-            Caches LocalizeAndSegmentOutput pickles to disk for all ConceptExamples in the ConceptKB.
+            Caches LocalizeAndSegmentOutput pickles to disk for all ConceptExamples in the specified
+            concepts list.
+
+            If concepts are not provided, all examples in the ConceptKB will be cached which do not have
+            cached segmentations or which are dirty.
         '''
         os.makedirs(f'{self.cache_dir}/{self.segmentations_sub_dir}', exist_ok=True)
 
-        for example in tqdm(self._get_all_examples()):
-            if example.image_segmentations_path is not None:
-                continue
-
+        examples = self._get_uncached_or_dirty_examples('segmentations') if concepts is None else self._examples_from_concepts(concepts)
+        for example in tqdm(examples):
             self._cache_segmentation(example, **loc_and_seg_kwargs)
 
     def _get_features_cache_path(self, example: ConceptExample):
         file_name = os.path.splitext(os.path.basename(example.image_path))[0]
         return f'{self.cache_dir}/{self.features_sub_dir}/{file_name}.pkl'
 
-    def cache_features(self):
+    def cache_features(self, concepts: list[Concept] = None):
         '''
-            Caches CachedImageFeatures pickles to disk for all ConceptExamples in the ConceptKB.
+            Caches CachedImageFeatures pickles to disk for all ConceptExamples in the specified
+            concepts list.
+
+            If concepts are not provided, all examples in the ConceptKB will be cached which do not have
+            cached features or which are dirty.
         '''
         os.makedirs(f'{self.cache_dir}/{self.features_sub_dir}', exist_ok=True)
 
-        for example in tqdm(self._get_all_examples()):
-            # Check if already exists or if we need to cache segmentations first
-            if example.image_features_path is not None:
-                continue
-
+        examples = self._get_uncached_or_dirty_examples('features') if concepts is None else self._examples_from_concepts(concepts)
+        for example in tqdm(examples):
             if example.image_segmentations_path is None:
                 raise RuntimeError('Segmentations must be cached before features can be cached.')
 

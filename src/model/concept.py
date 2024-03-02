@@ -35,6 +35,8 @@ class ConceptExample:
         metadata={'description': 'Paths to segmentations for the example'}
     )
 
+    are_segmentations_dirty: bool = False # Whether the segmentations need to be recomputed (e.g. due to a changed seg method)
+
     image_features: ImageFeatures = field(
         default=None,
         metadata={'description': 'Image features for the example'}
@@ -44,6 +46,8 @@ class ConceptExample:
         default=None,
         metadata={'description': 'Path to image features for this example'}
     )
+
+    are_features_dirty: bool = False # Whether the features need to be recomputed (e.g. due to changed zs attributes)
 
     feature_extractor_id: str = field(
         default=None,
