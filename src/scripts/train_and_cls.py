@@ -77,8 +77,7 @@ if __name__ == '__main__':
     from image_processing import build_localizer_and_segmenter
 
     # %%
-    # loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
-    loc_and_seg = build_localizer_and_segmenter(build_sam(), None) # TODO Comment me and use above when not testing
+    loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
     feature_extractor = build_feature_extractor()
     feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
 
