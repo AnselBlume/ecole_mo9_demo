@@ -15,15 +15,12 @@ import logging, coloredlogs
 from feature_extraction.trained_attrs import N_ATTRS_SUBSET
 from kb_ops.train import ConceptKBTrainer
 import wandb
-from datetime import datetime
 import jsonargparse as argparse
 from itertools import chain
+from .utils import set_feature_paths, get_timestr
 
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
-
-def get_timestr():
-    return datetime.now().strftime('%Y_%m_%d-%H:%M:%S')
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -96,21 +93,11 @@ if __name__ == '__main__':
     trainer = ConceptKBTrainer(concept_kb, feature_pipeline, run)
 
     # %% Set cached segmentation, feature paths if they are provided and exist
-    features_dir = os.path.join(args.cache.root, args.cache.features)
-    if os.path.exists(features_dir):
-        # Store pre-computed feature paths in concept examples
-        for concept in concept_kb:
-            for example in concept.examples:
-                basename = os.path.basename(os.path.splitext(example.image_path)[0]) + '.pkl'
-                example.image_features_path = os.path.join(features_dir, basename)
-
+    # NOTE Must recompute features every time we train a new model, as the number of zero-shot attributes
+    # is nondeterministic from the LLM
+    # features_dir = os.path.join(args.cache.root, args.cache.features)
     segmentations_dir = os.path.join(args.cache.root, args.cache.segmentations)
-    if os.path.exists(segmentations_dir):
-        # Store presegmented paths in concept examples
-        for concept in concept_kb:
-            for example in concept.examples:
-                basename = os.path.basename(os.path.splitext(example.image_path)[0]) + '.pkl'
-                example.image_segmentations_path = os.path.join(segmentations_dir, basename)
+    set_feature_paths(concept_kb, segmentations_dir=segmentations_dir)
 
     # Pre-cache features
     cacher = ConceptKBFeatureCacher(
