@@ -81,7 +81,10 @@ class ConceptKBExampleSampler:
 class ConceptKBTrainer:
     UNK_LABEL = '[UNK]'
 
-    def __init__(self, concept_kb: ConceptKB, feature_pipeline: ConceptKBFeaturePipeline, wandb_run: Run = None):
+    def __init__(self, concept_kb: ConceptKB, feature_pipeline: ConceptKBFeaturePipeline = None, wandb_run: Run = None):
+        '''
+            feature_pipeline must be provided if not using a FeatureDataset.
+        '''
 
         self.concept_kb = concept_kb
 
@@ -306,7 +309,7 @@ class ConceptKBTrainer:
     def predict(
         self,
         predict_dl: DataLoader = None,
-        image_data: Union[Image, LocalizeAndSegmentOutput] = None,
+        image_data: Union[Image, LocalizeAndSegmentOutput, CachedImageFeatures] = None,
         unk_threshold: float = 0.,
         **forward_kwargs
     ) -> Union[list[dict], dict]:
