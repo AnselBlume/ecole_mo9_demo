@@ -1,14 +1,13 @@
 import os
 import torch
 import torch.nn.functional as F
-from image_processing import LocalizerAndSegmenter, LocalizeAndSegmentOutput
+from image_processing import LocalizeAndSegmentOutput
 from torch.utils.data import DataLoader, Dataset
 from model.concept import ConceptKB, Concept
 from model.concept_predictor import ConceptPredictorOutput
-from model.features import ImageFeatures
+from .feature_cache import CachedImageFeatures
 from wandb.sdk.wandb_run import Run
-from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset
-from feature_extraction import FeatureExtractor
+from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset, FeatureDataset
 from .feature_pipeline import ConceptKBFeaturePipeline
 from typing import Union, Optional, Any, Literal
 import numpy as np
@@ -101,10 +100,21 @@ class ConceptKBTrainer:
     def _get_ckpt_path(self, ckpt_dir: str, ckpt_fmt: str, epoch: int):
         return os.path.join(ckpt_dir, ckpt_fmt.format(epoch=epoch))
 
+    def _determine_data_key(self, dataset: Union[ImageDataset, PresegmentedDataset, FeatureDataset]):
+        if isinstance(dataset, FeatureDataset):
+            return 'features'
+
+        elif isinstance(dataset, PresegmentedDataset):
+            return 'segmentations'
+
+        else:
+            assert isinstance(dataset, ImageDataset)
+            return 'image'
+
     def train(
         self,
-        train_ds: Union[ImageDataset, PresegmentedDataset],
-        val_ds: Optional[Union[ImageDataset, PresegmentedDataset]],
+        train_ds: Union[ImageDataset, PresegmentedDataset, FeatureDataset],
+        val_ds: Optional[Union[ImageDataset, PresegmentedDataset, FeatureDataset]],
         n_epochs: int,
         lr: float,
         concepts: list[Concept] = None,
@@ -118,9 +128,7 @@ class ConceptKBTrainer:
         if ckpt_dir:
             os.makedirs(ckpt_dir, exist_ok=True)
 
-        is_presegmented = isinstance(train_ds, PresegmentedDataset)
-        data_key = 'segmentations' if is_presegmented else 'image'
-
+        data_key = self._determine_data_key(train_ds)
         train_dl = self._get_dataloader(train_ds, is_train=True)
 
         val_dl = self._get_dataloader(val_ds, is_train=False) if val_ds else None
@@ -181,6 +189,7 @@ class ConceptKBTrainer:
         n_epochs: int = 10,
         sampling_seed: int = 42
     ):
+        # TODO update me
         '''
             Trains the given concept for n_epochs if provided, else until it correctly predicts the
             examples in until_correct_example_paths.
@@ -266,7 +275,7 @@ class ConceptKBTrainer:
         total_loss = 0
         predicted_concept_outputs = []
         acc = Accuracy(task='multiclass', num_classes=len(self.concept_kb))
-        data_key = 'segmentations' if isinstance(val_dl.dataset, PresegmentedDataset) else 'image'
+        data_key = self._determine_data_key(val_dl.dataset)
 
         for batch in tqdm(val_dl, desc='Validation'):
             image, text_label = batch[data_key], batch['label']
@@ -337,7 +346,7 @@ class ConceptKBTrainer:
             })
 
         if predict_dl is not None:
-            data_key = 'segmentations' if isinstance(predict_dl.dataset, PresegmentedDataset) else 'image'
+            data_key = self._determine_data_key(predict_dl.dataset)
 
             for batch in tqdm(predict_dl, desc='Prediction'):
                 image, text_label = batch[data_key], batch['label']
@@ -354,7 +363,7 @@ class ConceptKBTrainer:
 
     def forward_pass(
         self,
-        image_data: Union[Image, LocalizeAndSegmentOutput, list[ImageFeatures]],
+        image_data: Union[Image, LocalizeAndSegmentOutput, CachedImageFeatures],
         text_label: str = None,
         concepts: list[Concept] = None,
         do_backward: bool = False,
@@ -364,9 +373,7 @@ class ConceptKBTrainer:
         return_features: bool = False
     ):
 
-        if isinstance(image_data, list):
-            assert isinstance(list[0], ImageFeatures)
-            assert len(image_data) == len(concepts), 'Number of features must match number of concepts'
+        if isinstance(image_data, CachedImageFeatures):
             features_were_provided = True
 
         else: # Not using features
@@ -386,7 +393,8 @@ class ConceptKBTrainer:
         concepts = concepts if concepts is not None else self.concept_kb
         for i, concept in enumerate(concepts, start=1):
             if features_were_provided:
-                features = image_data[i - 1]
+                device = concept.predictor.img_features_predictor.weight.device
+                features = image_data.get_image_features(concept.name).to(device)
 
             else: # Features not provided; compute from segmentations
                 zs_attrs = [attr.query for attr in concept.zs_attributes]

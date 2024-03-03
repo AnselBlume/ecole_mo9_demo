@@ -106,11 +106,11 @@ class ConceptPredictor(nn.Module):
         self.region_features_predictor = nn.Linear(region_feature_dim, 1, bias=use_bias) # This will only be used if use_regions is True
         self.region_features_weight = nn.Linear(1, 1, bias=use_bias) if self.use_regions else nn.Identity()
 
-        self.img_trained_attr_weights = Hadamard(n_trained_attrs, bias=use_bias) if len(n_trained_attrs) else nn.Identity()
-        self.regions_trained_attr_weights = Hadamard(n_trained_attrs, bias=use_bias) if len(n_trained_attrs) else nn.Identity()
+        self.img_trained_attr_weights = Hadamard(n_trained_attrs, bias=use_bias) if n_trained_attrs else nn.Identity()
+        self.regions_trained_attr_weights = Hadamard(n_trained_attrs, bias=use_bias) if n_trained_attrs else nn.Identity()
 
-        self.img_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if len(n_zs_attrs) else nn.Identity()
-        self.regions_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if len(n_zs_attrs) else nn.Identity()
+        self.img_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if n_zs_attrs else nn.Identity()
+        self.regions_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if n_zs_attrs else nn.Identity()
 
         self.feature_groups = nn.ModuleDict()
 
@@ -125,7 +125,8 @@ class ConceptPredictor(nn.Module):
                 img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             if self.use_regions:
-                region_scores = self.region_features_predictor(region_scores) * region_weights # (n_regions, 1)
+                region_scores = self.region_features_predictor(img_feats.region_features) # (n_regions, 1)
+                region_scores = region_scores * region_weights # (n_regions, 1)
                 region_score = region_scores.sum(dim=0, keepdim=True) # (1, 1)
             else:
                 region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
@@ -138,7 +139,7 @@ class ConceptPredictor(nn.Module):
                 trained_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             if self.use_regions:
-                trained_attr_region_scores = trained_attr_region_scores * region_weights # (n_regions, n_trained_attrs); possibly (n_regions, 0)
+                trained_attr_region_scores = img_feats.trained_attr_region_scores * region_weights # (n_regions, n_trained_attrs); possibly (n_regions, 0)
                 trained_attr_region_score = trained_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_trained_attrs)
             else:
                 trained_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
@@ -151,7 +152,7 @@ class ConceptPredictor(nn.Module):
                 zs_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             if self.use_regions:
-                zs_attr_region_scores = zs_attr_region_scores * region_weights # (n_regions, n_zs_attrs); possibly (n_regions, 0)
+                zs_attr_region_scores = img_feats.zs_attr_region_scores * region_weights # (n_regions, n_zs_attrs); possibly (n_regions, 0)
                 zs_attr_region_score = zs_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_zs_attrs)
             else:
                 zs_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
@@ -170,8 +171,8 @@ class ConceptPredictor(nn.Module):
 
             # Split scores and apply weights of linear model
             img_score, region_score, trained_attr_img_score, trained_attr_region_score, zs_attr_img_score, zs_attr_region_score = all_scores.split((
-                self.use_full_img, # 1 or 0
-                self.use_regions, # 1 or 0
+                int(self.use_full_img), # 1 or 0
+                int(self.use_regions), # 1 or 0
                 self.use_full_img * self.n_trained_attrs, # n_trained_attrs or 0
                 self.use_regions * self.n_trained_attrs, # n_trained_attrs or 0
                 self.use_full_img * self.n_zs_attrs, # n_zs_attrs or 0

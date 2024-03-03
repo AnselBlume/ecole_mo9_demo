@@ -4,12 +4,15 @@ from tqdm import tqdm
 from model.concept import ConceptKB, Concept
 from .feature_pipeline import ConceptKBFeaturePipeline
 from model.features import ImageFeatures
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 from model.concept import ConceptExample
 from PIL.Image import open as open_image
 from PIL.Image import Image
 import pickle
+import logging
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class CachedImageFeatures:
@@ -21,8 +24,8 @@ class CachedImageFeatures:
     trained_attr_img_scores: torch.Tensor = None # (1, n_trained_attrs)
     trained_attr_region_scores: torch.Tensor = None # (n_regions, n_trained_attrs,)
 
-    concept_to_zs_attr_img_scores: dict[str, torch.Tensor] = {} # (1, n_zs_attrs)
-    concept_to_zs_attr_region_scores: dict[str, torch.Tensor] = {} # (n_regions, n_zs_attrs)
+    concept_to_zs_attr_img_scores: dict[str, torch.Tensor] = field(default_factory=dict) # (1, n_zs_attrs)
+    concept_to_zs_attr_region_scores: dict[str, torch.Tensor] = field(default_factory=dict) # (n_regions, n_zs_attrs)
 
     def get_image_features(self, concept_name: str):
         return ImageFeatures(
@@ -57,8 +60,8 @@ class ConceptKBFeatureCacher:
         self.features_sub_dir = features_sub_dir
 
     def _image_from_example(self, example: ConceptExample) -> Image:
-        if example.example_image is not None:
-            return example.example_image
+        if example.image is not None:
+            return example.image
 
         return open_image(example.image_path).convert('RGB')
 
@@ -101,7 +104,9 @@ class ConceptKBFeatureCacher:
             If concepts are not provided, all examples in the ConceptKB will be cached which do not have
             cached segmentations or which are dirty.
         '''
-        os.makedirs(f'{self.cache_dir}/{self.segmentations_sub_dir}', exist_ok=True)
+        cache_dir = f'{self.cache_dir}/{self.segmentations_sub_dir}'
+        os.makedirs(cache_dir, exist_ok=True)
+        logger.info(f'Caching segmentations at {cache_dir}')
 
         examples = self._get_uncached_or_dirty_examples('segmentations') if concepts is None else self._examples_from_concepts(concepts)
         for example in tqdm(examples):
@@ -119,7 +124,9 @@ class ConceptKBFeatureCacher:
             If concepts are not provided, all examples in the ConceptKB will be cached which do not have
             cached features or which are dirty.
         '''
-        os.makedirs(f'{self.cache_dir}/{self.features_sub_dir}', exist_ok=True)
+        cache_dir = f'{self.cache_dir}/{self.features_sub_dir}'
+        os.makedirs(cache_dir, exist_ok=True)
+        logger.info(f'Caching features at {cache_dir}')
 
         examples = self._get_uncached_or_dirty_examples('features') if concepts is None else self._examples_from_concepts(concepts)
         for example in tqdm(examples):
@@ -130,35 +137,33 @@ class ConceptKBFeatureCacher:
             with open(example.image_segmentations_path, 'rb') as f:
                 segmentations = pickle.load(f)
 
-            region_crops = segmentations.part_crops
-            if region_crops == []:
-                region_crops = [self._image_from_example(example)]
-
             # Generate zero-shot attributes for each concept
             cached_features = CachedImageFeatures()
             cached_visual_features = None
             cached_trained_attr_scores = None
 
             for concept in self.concept_kb:
+                # TODO batched feature computation
                 feats = self.feature_pipeline.get_features(
                     self._image_from_example(example),
-                    region_crops,
-                    concept.zs_attributes,
+                    segmentations,
+                    [attr.query for attr in concept.zs_attributes],
                     cached_visual_features=cached_visual_features,
                     cached_trained_attr_scores=cached_trained_attr_scores
                 )
-
-                # Store zero-shot features
-                cached_features.concept_to_zs_attr_img_scores[concept.name] = feats.zs_attr_img_scores
-                cached_features.concept_to_zs_attr_region_scores[concept.name] = feats.zs_attr_region_scores
-
                 if cached_visual_features is None:
                     cached_visual_features = torch.cat([feats.image_features, feats.region_features], dim=0)
 
                 if cached_trained_attr_scores is None:
                     cached_trained_attr_scores = torch.cat([feats.trained_attr_img_scores, feats.trained_attr_region_scores], dim=0)
 
+                # Store zero-shot features
+                cached_features.concept_to_zs_attr_img_scores[concept.name] = feats.zs_attr_img_scores.cpu()
+                cached_features.concept_to_zs_attr_region_scores[concept.name] = feats.zs_attr_region_scores.cpu()
+
+
             # Store non-unique features
+            feats.cpu()
             cached_features.image_features = feats.image_features
             cached_features.region_features = feats.region_features
             cached_features.region_weights = feats.region_weights
@@ -169,3 +174,5 @@ class ConceptKBFeatureCacher:
             cache_path = self._get_features_cache_path(example)
             with open(cache_path, 'wb') as f:
                 pickle.dump(cached_features, f)
+
+            example.image_features_path = cache_path
