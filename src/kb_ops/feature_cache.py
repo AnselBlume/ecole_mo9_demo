@@ -109,6 +109,10 @@ class ConceptKBFeatureCacher:
         logger.info(f'Caching segmentations at {cache_dir}')
 
         examples = self._get_uncached_or_dirty_examples('segmentations') if concepts is None else self._examples_from_concepts(concepts)
+
+        if not len(examples):
+            return
+
         for example in tqdm(examples):
             self._cache_segmentation(example, **loc_and_seg_kwargs)
 
@@ -129,6 +133,10 @@ class ConceptKBFeatureCacher:
         logger.info(f'Caching features at {cache_dir}')
 
         examples = self._get_uncached_or_dirty_examples('features') if concepts is None else self._examples_from_concepts(concepts)
+
+        if not len(examples):
+            return
+
         for example in tqdm(examples):
             if example.image_segmentations_path is None:
                 raise RuntimeError('Segmentations must be cached before features can be cached.')
