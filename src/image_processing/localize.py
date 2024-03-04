@@ -84,7 +84,7 @@ def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool =
     return boxes
 
 class Localizer:
-    def __init__(self, sam: Sam, desco: GLIPDemo, rembg_model_name: str = 'sam_prompt'):
+    def __init__(self, sam: Sam, desco: GLIPDemo, rembg_model_name: str = 'isnet-general-use'):
         self.rembg_session = new_session(model_name=rembg_model_name)
         self.desco = desco
         self.sam = build_sam_predictor(model=sam)
