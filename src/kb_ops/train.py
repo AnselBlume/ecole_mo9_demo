@@ -94,7 +94,15 @@ class ConceptKBTrainer:
         self.run = wandb_run
 
     def _get_dataloader(self, dataset: Dataset, is_train: bool):
-        return DataLoader(dataset, batch_size=1, shuffle=is_train, collate_fn=list_collate, num_workers=3, pin_memory=True)
+        return DataLoader(
+            dataset,
+            batch_size=1,
+            shuffle=is_train,
+            collate_fn=list_collate,
+            num_workers=0,
+            pin_memory=True,
+            # persistent_workers=True
+        )
 
     def _get_ckpt_path(self, ckpt_dir: str, ckpt_fmt: str, epoch: int):
         return os.path.join(ckpt_dir, ckpt_fmt.format(epoch=epoch))
