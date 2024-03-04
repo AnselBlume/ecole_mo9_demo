@@ -3,3 +3,4 @@ from .feature_cache import ConceptKBFeatureCacher
 from .train import ConceptKBTrainer
 from .feature_pipeline import ConceptKBFeaturePipeline
 from .dataset import ImageDataset, PresegmentedDataset, FeatureDataset
+from .retrieve import CLIPConceptRetriever
