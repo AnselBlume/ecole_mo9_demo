@@ -1,6 +1,6 @@
 # %%
 from score import AttributeScorer
-from model.concept import ConceptKB, Concept
+from model.concept import ConceptKB, Concept, ConceptExample
 from PIL.Image import Image
 import logging, coloredlogs
 from feature_extraction import FeatureExtractor
@@ -11,6 +11,7 @@ from llm import LLMClient
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
 from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
+from kb_ops.feature_cache import ConceptKBFeatureCacher
 from utils import to_device
 from vis_utils import plot_predicted_classes, plot_differences
 
@@ -23,11 +24,13 @@ class Controller:
         concept_kb: ConceptKB,
         feature_extractor: FeatureExtractor,
         retriever: CLIPConceptRetriever = None,
+        cache_dir: str = 'feature_cache',
         zs_predictor: CLIPAttributePredictor = None
     ):
         self.concepts = concept_kb
         self.feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
-        self.trainer = ConceptKBTrainer(concept_kb, feature_extractor, loc_and_seg)
+        self.trainer = ConceptKBTrainer(concept_kb, self.feature_pipeline)
+        self.cacher = ConceptKBFeatureCacher(concept_kb, self.feature_pipeline, cache_dir=cache_dir)
 
         self.retriever = retriever
         self.llm_client = LLMClient()
@@ -42,50 +45,6 @@ class Controller:
     def clear_cache(self):
         self.cached_predictions = []
         self.cached_images = []
-
-    def diff_between_concepts(self, concept_name1: str, concept_name2: str):
-        concept1 = self.retrieve_concept(concept_name1)
-        concept2 = self.retrieve_concept(concept_name2)
-
-        predictor1 = concept1.predictor
-        predictor2 = concept2.predictor
-
-        weights1 = predictor1.zs_attr_predictor.weight.data
-        weights2 = predictor2.zs_attr_predictor.weight.data
-
-    def diff_between_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None) -> Image:
-        if not ((images is None) ^ (indices is None)):
-            raise ValueError('Exactly one of imgs or idxs must be provided.')
-
-        if images is not None:
-            if len(images) != 2:
-                raise ValueError('imgs must be a tuple of length 2.')
-
-            # Cache predictions
-            # NOTE This can be optimized, since running through all concept predictors when only need to
-            # 1) Localize and segment
-            # 2) Compute image features
-            # 3) Compute trained attribute predictions
-            self.predict_concept(images[0], unk_threshold=0)
-            self.predict_concept(images[1], unk_threshold=0)
-
-            indices = (-2, -1)
-
-        else: # idxs is not None
-            if len(indices) != 2:
-                raise ValueError('idxs must be a tuple of length 2.')
-
-            images = (self.cached_images[indices[0]], self.cached_images[indices[1]])
-
-        trained_attr_scores1 = self.cached_predictions[indices[0]]['predicted_concept_outputs'].trained_attr_img_scores
-        trained_attr_scores2 = self.cached_predictions[indices[1]]['predicted_concept_outputs'].trained_attr_img_scores
-
-        attr_names = self.trainer.feature_extractor.trained_clip_attr_predictor.attr_names
-
-        return plot_differences(*images, trained_attr_scores1, trained_attr_scores2, attr_names, return_img=True)
-
-    def explain_prediction(self, index: int = -1):
-        pass
 
     def predict_concept(self, image: Image, unk_threshold: float = .1) -> dict:
         '''
@@ -187,24 +146,42 @@ class Controller:
     # Concept Removal #
     ###################
     def clear_concepts(self):
-        pass
+        for concept in self.concepts:
+            self.concepts.remove_concept(concept.name)
 
     def remove_concept(self, concept_name: str):
-        pass
+        try:
+            concept = self.retrieve_concept(concept_name, max_retrieval_distance=0.)
+        except RuntimeError as e:
+            logger.info(f'No exact match for concept with name "{concept_name}". Not removing concept to be safe.')
+            raise(e)
+
+        self.concepts.remove_concept(concept.name)
 
     ####################
     # Concept Addition #
     ####################
-    def add_concept(self, concept: Concept):
+    def add_concept(self, concept_name: str = None, concept: Concept = None):
+        if concept_name is None and concept is None:
+            raise ValueError('Either concept_name or concept must be provided.')
+
+        if concept is None:
+            concept = Concept(concept_name)
+
         # Get zero shot attributes (query LLM)
+        self.concepts.init_zs_attrs(
+            concept,
+            self.llm_client,
+            encode_class=self.concepts.cfg.encode_class_in_zs_attr
+        )
 
-        # Determine if it has any obvious parent or child concepts
+        self.concepts.init_predictor(concept)
 
-        # Get likely learned attributes
+        # TODO Determine if it has any obvious parent or child concepts
 
-        # Add concept
-
-        pass
+        self.concepts.add_concept(concept)
+        concept.predictor.cuda() # Assumes all other predictors are also on cuda
+        self.trainer.recompute_labels()
 
     def _get_zs_attributes(self, concept_name: str):
         pass
@@ -218,31 +195,53 @@ class Controller:
         '''
         pass
 
-    def train_concept(self, concept_name: str, until_correct_example_paths: list[str] = []):
+    def train_concept(self, concept_name: str, until_correct_examples: list[ConceptExample] = []):
         '''
             Retrains the concept until it correctly predicts the given example images.
         '''
-        concept: Concept = None # Retrieve concept
+        # Try to retrieve concept
+        try:
+            concept = self.retrieve_concept(concept_name, max_retrieval_distance=.3)
+            logger.info(f'Retrieved concept with name: "{concept.name}"')
+        except:
+            logger.info(f'No concept found for "{concept_name}". Creating new concept.')
+            concept = Concept(concept_name.lower())
+            self.add_concept(concept)
 
-        # Extend set of concept's examples if until_correct_example_paths are not included
-        if not until_correct_example_paths:
-            logger.info('No examples provided; considering all concept examples as those to ')
+        # If until_correct_examples are not already in the Concept, add them to the examples list
+        if not until_correct_examples:
+            logger.info('No examples provided; considering all concept examples as stopping condition via correctness')
 
-        examples = dict.fromkeys(concept.examples)
-        for path in until_correct_example_paths:
-            if path not in examples:
-                examples[path] = None
+        else: # Identify concept examples by their image_paths
+            image_paths = {ex.image_path for ex in concept.examples}
+            for example in until_correct_examples:
+                if example.image_path not in image_paths:
+                    concept.examples.append(example)
 
-        concept.examples = list(examples)
+        # Ensure features are prepared
+        self.cacher.cache_features([concept]) # Ensure features are generated
 
-        # TODO Call trainer method
+        # Hook to recache zs_attr_features after negative examples have been sampled
+        # This is faster than calling recache_zs_attr_features on all examples in the concept_kb
+        cache_hook = lambda exs: self.cacher.recache_zs_attr_features(concept, examples=exs)
 
+        # Train concept
+        self.trainer.train_concept(
+            concept,
+            stopping_condition='until_correct',
+            until_correct_examples=until_correct_examples,
+            sample_all_negatives=False,
+            post_sampling_hook=cache_hook,
+            n_epochs_between_predictions=7,
+            lr=1e-2 # high learning rate so hopefully doesn't take too long to reach margins
+        )
 
     def set_zs_attributes(self, concept_name: str, zs_attrs: list[str]):
         concept = self.retrieve_concept(concept_name)
         concept.zs_attributes = zs_attrs
 
-        # TODO retrain concept
+        self.cacher.recache_zs_attr_features(concept) # Recompute zero-shot attribute scores
+        self.train_concept(concept.name, until_correct_examples=concept.examples)
 
     def retrieve_concept(self, concept_name: str, max_retrieval_distance: float = .5):
         concept_name = concept_name.strip()
@@ -276,7 +275,48 @@ class Controller:
     ##################
     # Interpretation #
     ##################
-    def compare_concepts(self, concept1_name: str, concept2_name: str):
+    def compare_concepts(self, concept_name1: str, concept_name2: str):
+        concept1 = self.retrieve_concept(concept_name1)
+        concept2 = self.retrieve_concept(concept_name2)
+
+        predictor1 = concept1.predictor
+        predictor2 = concept2.predictor
+
+        weights1 = predictor1.zs_attr_predictor.weight.data
+        weights2 = predictor2.zs_attr_predictor.weight.data
+
+    def compare_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None) -> Image:
+        if not ((images is None) ^ (indices is None)):
+            raise ValueError('Exactly one of imgs or idxs must be provided.')
+
+        if images is not None:
+            if len(images) != 2:
+                raise ValueError('imgs must be a tuple of length 2.')
+
+            # Cache predictions
+            # NOTE This can be optimized, since running through all concept predictors when only need to
+            # 1) Localize and segment
+            # 2) Compute image features
+            # 3) Compute trained attribute predictions
+            self.predict_concept(images[0], unk_threshold=0)
+            self.predict_concept(images[1], unk_threshold=0)
+
+            indices = (-2, -1)
+
+        else: # idxs is not None
+            if len(indices) != 2:
+                raise ValueError('idxs must be a tuple of length 2.')
+
+            images = (self.cached_images[indices[0]], self.cached_images[indices[1]])
+
+        trained_attr_scores1 = self.cached_predictions[indices[0]]['predicted_concept_outputs'].trained_attr_img_scores
+        trained_attr_scores2 = self.cached_predictions[indices[1]]['predicted_concept_outputs'].trained_attr_img_scores
+
+        attr_names = self.trainer.feature_extractor.trained_clip_attr_predictor.attr_names
+
+        return plot_differences(*images, trained_attr_scores1, trained_attr_scores2, attr_names, return_img=True)
+
+    def explain_prediction(self, index: int = -1):
         pass
 
 # %%
@@ -315,6 +355,6 @@ if __name__ == '__main__':
     controller.predict_concept(img2)
 
     logger.info('Explaining difference between predictions...')
-    controller.diff_between_predictions(indices=(-2,-1))
+    controller.compare_predictions(indices=(-2,-1))
 
 # %%

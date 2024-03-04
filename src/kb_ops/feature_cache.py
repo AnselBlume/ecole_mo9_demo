@@ -3,6 +3,7 @@ import torch
 from tqdm import tqdm
 from model.concept import ConceptKB, Concept
 from .feature_pipeline import ConceptKBFeaturePipeline
+from image_processing import LocalizeAndSegmentOutput
 from model.features import ImageFeatures
 from dataclasses import dataclass, field
 from typing import Literal
@@ -58,6 +59,14 @@ class ConceptKBFeatureCacher:
         self.cache_dir = cache_dir
         self.segmentations_sub_dir = segmentations_sub_dir
         self.features_sub_dir = features_sub_dir
+
+    @property
+    def segmentations_dir(self):
+        return f'{self.cache_dir}/{self.segmentations_sub_dir}'
+
+    @property
+    def features_dir(self):
+        return f'{self.cache_dir}/{self.features_sub_dir}'
 
     def _image_from_example(self, example: ConceptExample) -> Image:
         if example.image is not None:
@@ -184,3 +193,54 @@ class ConceptKBFeatureCacher:
                 pickle.dump(cached_features, f)
 
             example.image_features_path = cache_path
+
+    def recache_zs_attr_features(self, concept: Concept, only_not_present: bool = False, examples: list[ConceptExample] = None):
+        '''
+            Recaches zero-shot attribute features for the specified Concept across all Concepts' examples in the
+            ConceptKB.
+
+            If only_not_present is True, only recaches features for examples which do not have the specified
+            concept's zero-shot attribute features. So this will not overwrite existing zs attribute features.
+
+            If examples are provided, only recaches features for the specified examples (to save time instead of
+            recaching for all in the concept_kb).
+        '''
+        # TODO This needs to be updated when we have separate image features and CLIP features for zs attributes
+        examples = self._examples_from_concepts(list(self.concept_kb)) if examples is None else examples
+        for example in examples:
+            if example.image_features_path is None:
+                continue
+
+            with open(example.image_features_path, 'rb') as f:
+                cached_features: CachedImageFeatures = pickle.load(f)
+
+            if (
+                not only_not_present
+                or concept.name not in cached_features.concept_to_zs_attr_img_scores
+                or concept.name not in cached_features.concept_to_zs_attr_region_scores
+            ):
+                # Generate zero-shot attribute scores for the new concept
+                with open(example.image_segmentations_path, 'rb') as f:
+                    segmentations: LocalizeAndSegmentOutput = pickle.load(f)
+
+                # Extract cached features
+                device = self.feature_pipeline.feature_extractor.clip.device
+                visual_features = torch.cat([cached_features.image_features, cached_features.region_features], dim=0).to(device)
+                trained_attr_scores = torch.cat([cached_features.trained_attr_img_scores, cached_features.trained_attr_region_scores], dim=0).to(device)
+
+                feats = self.feature_pipeline.get_features(
+                    None, # Don't need to pass image since passing visual features
+                    segmentations,
+                    [attr.query for attr in concept.zs_attributes],
+                    cached_visual_features=visual_features,
+                    cached_trained_attr_scores=trained_attr_scores
+                )
+
+                cached_features.concept_to_zs_attr_img_scores[concept.name] = feats.zs_attr_img_scores.cpu()
+                cached_features.concept_to_zs_attr_region_scores[concept.name] = feats.zs_attr_region_scores.cpu()
+
+                # Update cached features
+                with open(example.image_features_path, 'wb') as f:
+                    pickle.dump(cached_features, f)
+
+                logger.debug(f'Added concept {concept.name} to cached features for example {example.image_path}')
