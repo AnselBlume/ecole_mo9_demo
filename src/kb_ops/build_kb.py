@@ -8,6 +8,32 @@ def label_from_path(path):
 def label_from_directory(path):
     return os.path.basename(os.path.dirname(path)).lower()
 
+def list_paths(
+    root_dir: str,
+    exts: list[str] = None,
+):
+    '''
+        Lists all files in a directory with a given extension.
+
+        Arguments:
+            root_dir (str): Directory to search.
+            exts (list[str]): List of file extensions to consider.
+
+        Returns: List of paths.
+    '''
+    exts = set(exts) if exts else None
+    paths = []
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        for filename in filenames:
+            path = os.path.join(dirpath, filename)
+
+            if exts and os.path.splitext(path)[1] in exts:
+                paths.append(path)
+
+    paths = sorted(paths)
+
+    return paths
+
 def kb_from_img_dir(
     img_dir: str,
     label_from_path_fn: Callable[[str],str] = label_from_path,
@@ -22,18 +48,13 @@ def kb_from_img_dir(
         Returns: ConceptKB
     '''
     kb = ConceptKB()
-    exts = set(exts)
 
-    for dirpath, dirnames, filenames in os.walk(img_dir):
-        for filename in filenames:
-            path = os.path.join(dirpath, filename)
+    for path in list_paths(img_dir, exts=exts):
+        label = label_from_path_fn(path)
 
-            if os.path.splitext(path)[1] in exts:
-                label = label_from_path_fn(path)
+        if label not in kb:
+            kb.add_concept(Concept(label))
 
-                if label not in kb:
-                    kb.add_concept(Concept(label))
-
-                kb.get_concept(label).examples.append(ConceptExample(image_path=path))
+        kb.get_concept(label).examples.append(ConceptExample(image_path=path))
 
     return kb
