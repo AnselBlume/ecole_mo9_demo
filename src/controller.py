@@ -64,8 +64,7 @@ class Controller:
         self.cached_predictions.append(prediction)
 
         img = plot_predicted_classes(prediction, threshold=unk_threshold, return_img=True)
-        predicted_label = prediction['predicted_label']
-        predicted_label = predicted_label if predicted_label != self.trainer.UNK_LABEL else 'unknown'
+        predicted_label = prediction['predicted_label'] if not prediction['is_below_unk_threshold'] else 'unknown'
 
         return {
             'predicted_label': predicted_label,
@@ -296,7 +295,7 @@ class Controller:
         weights1 = predictor1.zs_attr_predictor.weight.data
         weights2 = predictor2.zs_attr_predictor.weight.data
 
-    def compare_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None) -> Image:
+    def compare_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None, weight_by_predictors=True) -> Image:
         if not ((images is None) ^ (indices is None)):
             raise ValueError('Exactly one of imgs or idxs must be provided.')
 
@@ -320,12 +319,28 @@ class Controller:
 
             images = (self.cached_images[indices[0]], self.cached_images[indices[1]])
 
-        trained_attr_scores1 = self.cached_predictions[indices[0]]['predicted_concept_outputs'].trained_attr_img_scores
-        trained_attr_scores2 = self.cached_predictions[indices[1]]['predicted_concept_outputs'].trained_attr_img_scores
+        predictions1 = self.cached_predictions[indices[0]]
+        predictions2 = self.cached_predictions[indices[1]]
+
+        trained_attr_scores1 = predictions1['predicted_concept_outputs'].trained_attr_img_scores
+        trained_attr_scores2 = predictions2['predicted_concept_outputs'].trained_attr_img_scores
 
         attr_names = self.trainer.feature_extractor.trained_clip_attr_predictor.attr_names
 
-        return plot_differences(*images, trained_attr_scores1, trained_attr_scores2, attr_names, return_img=True)
+        if weight_by_predictors:
+            predictor1 = predictions1[]
+
+        else:
+            predictor1 = predictor2 = None
+
+        return plot_differences(
+            *images,
+            trained_attr_scores1,
+            trained_attr_scores2,
+            attr_names,
+            return_img=True,
+            weight_image1_by_predictor=
+        )
 
     def explain_prediction(self, index: int = -1):
         pass

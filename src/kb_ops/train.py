@@ -358,7 +358,7 @@ class ConceptKBTrainer:
     ) -> Union[list[dict], dict]:
         '''
             unk_threshold: Number between [0,1]. If sigmoid(max concept score) is less than this,
-                outputs self.label_to_index[self.UNK_LABEL] as the predicted label.
+                the field 'is_below_unk_threshold' will be set to True in the prediction dict.
 
             Returns: List of prediction dicts if predict_dl is provided, else a single prediction dict.
         '''
@@ -377,15 +377,15 @@ class ConceptKBTrainer:
             pred_ind = scores.argmax(dim=0).item() # int
             predicted_concept_outputs = outputs['predictors_outputs'][pred_ind].cpu()
 
-            # If max score is less than threshold, predict UNK_LABEL
-            if unk_threshold > 0 and scores[pred_ind].sigmoid() < unk_threshold:
-                pred_ind = self.label_to_index[self.UNK_LABEL]
+            # Indicate whether max score is below unk_threshold
+            is_below_unk_threshold = unk_threshold > 0 and scores[pred_ind].sigmoid() < unk_threshold
 
             predictions.append({
                 'concept_names': outputs['concept_names'],
                 'predictors_scores': scores.cpu(),
-                'predicted_index': pred_ind, # This can be -1 if UNK_LABEL is predicted
-                'predicted_label': self.index_to_label[pred_ind], # This can be UNK_LABEL
+                'predicted_index': pred_ind,
+                'predicted_label': self.index_to_label[pred_ind],
+                'is_below_unk_threshold': is_below_unk_threshold,
                 'predicted_concept_outputs': predicted_concept_outputs, # This will always be maximizing concept
                 'true_index': true_ind if predict_dl is not None else None,
                 'true_concept_outputs': None if predict_dl is None or true_ind < 0 else outputs['predictors_outputs'][true_ind].cpu()
