@@ -4,7 +4,7 @@ import torch
 import json
 from tqdm import tqdm
 from model.concept import ConceptKB
-from kb_ops.train import ConceptKBTrainer
+from kb_ops import ConceptKBTrainer, ConceptKBFeaturePipeline
 from feature_extraction import build_feature_extractor
 from model.concept_predictor import ConceptPredictorOutput
 from kb_ops.dataset import PresegmentedDataset, list_collate
@@ -197,9 +197,9 @@ if __name__ == '__main__':
 
     # %%
     kb = ConceptKB.load(args.ckpt_path)
-    feature_extractor = build_feature_extractor()
-    trainer = ConceptKBTrainer(kb, feature_extractor)
-    trained_attrs = feature_extractor.trained_clip_attr_predictor.attr_names
+    feature_pipeline = ConceptKBFeaturePipeline(kb, None, build_feature_extractor())
+    trainer = ConceptKBTrainer(kb, feature_pipeline)
+    trained_attrs = feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
 
     # %%  Build datasets
     (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_directory(args.presegmented_dir, exts='.pkl')
