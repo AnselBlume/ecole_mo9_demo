@@ -39,3 +39,6 @@ class ArticleDeterminer:
             article += ' '
 
         return article
+
+    def to_singular(self, noun: str):
+        return self.p.singular_noun(noun)

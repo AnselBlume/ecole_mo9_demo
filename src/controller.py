@@ -7,6 +7,7 @@ from feature_extraction import FeatureExtractor
 from image_processing import LocalizerAndSegmenter
 from kb_ops.train import ConceptKBTrainer
 from kb_ops.retrieve import CLIPConceptRetriever
+from utils import ArticleDeterminer
 from llm import LLMClient
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
@@ -161,12 +162,18 @@ class Controller:
     ####################
     # Concept Addition #
     ####################
-    def add_concept(self, concept_name: str = None, concept: Concept = None):
+    def add_concept(self, concept_name: str = None, concept: Concept = None, use_singular_name: bool = True):
         if concept_name is None and concept is None:
             raise ValueError('Either concept_name or concept must be provided.')
 
         if concept is None:
             concept = Concept(concept_name)
+
+        # Lowercase and possibly singularize concept name
+        concept.name = concept.name.lower()
+        if use_singular_name:
+            determiner = ArticleDeterminer()
+            concept.name = determiner.to_singular(concept.name)
 
         # Get zero shot attributes (query LLM)
         self.concepts.init_zs_attrs(
