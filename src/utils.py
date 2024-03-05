@@ -41,4 +41,6 @@ class ArticleDeterminer:
         return article
 
     def to_singular(self, noun: str):
-        return self.p.singular_noun(noun)
+        result = self.p.singular_noun(noun) # Returns False if already singular
+
+        return result if result else noun

@@ -166,14 +166,16 @@ class Controller:
         if concept_name is None and concept is None:
             raise ValueError('Either concept_name or concept must be provided.')
 
-        if concept is None:
+        if concept_name is not None: # Normalize the name
+            concept_name = concept_name.lower()
+
+            if use_singular_name:
+                determiner = ArticleDeterminer()
+                concept_name = determiner.to_singular(concept_name)
+
             concept = Concept(concept_name)
 
-        # Lowercase and possibly singularize concept name
-        concept.name = concept.name.lower()
-        if use_singular_name:
-            determiner = ArticleDeterminer()
-            concept.name = determiner.to_singular(concept.name)
+        # Otherwise, Concept obj provided; don't modify name
 
         # Get zero shot attributes (query LLM)
         self.concepts.init_zs_attrs(
@@ -189,6 +191,8 @@ class Controller:
         self.concepts.add_concept(concept)
         concept.predictor.cuda() # Assumes all other predictors are also on cuda
         self.trainer.recompute_labels()
+
+        return concept
 
     def _get_zs_attributes(self, concept_name: str):
         pass
@@ -212,8 +216,7 @@ class Controller:
             logger.info(f'Retrieved concept with name: "{concept.name}"')
         except:
             logger.info(f'No concept found for "{concept_name}". Creating new concept.')
-            concept = Concept(concept_name.lower())
-            self.add_concept(concept)
+            concept = self.add_concept(concept_name)
 
         # If until_correct_examples are not already in the Concept, add them to the examples list
         if not until_correct_examples:
