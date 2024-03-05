@@ -116,7 +116,6 @@ if __name__ == '__main__':
         for c in concept_kb
     ]))
 
-
     (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_paths(all_feature_paths)
     train_ds = FeatureDataset(trn_p, trn_l)
     val_ds = FeatureDataset(val_p, val_l)
