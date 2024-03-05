@@ -8,7 +8,7 @@ from kb_ops import ConceptKBTrainer, ConceptKBFeaturePipeline
 from feature_extraction import build_feature_extractor
 from model.concept_predictor import ConceptPredictorOutput
 from kb_ops.dataset import PresegmentedDataset, list_collate
-from kb_ops.train_test_split import split_from_directory
+from kb_ops.train_test_split import split_from_paths
 from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,15 +18,12 @@ from vis_utils import image_from_masks
 from torchvision.transforms.functional import to_pil_image, pil_to_tensor
 import jsonargparse as argparse
 from torchmetrics import Accuracy
+from itertools import chain
 
 def get_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--config', action=argparse.ActionConfigFile)
-
-    parser.add_argument('--presegmented_dir',
-                        default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data_segmentations',
-                        help='Path to directory of preprocessed segmentations')
 
     parser.add_argument('--output_dir',
                         default='/shared/nas2/blume5/fa23/ecole/results/contribution_visualizations',
@@ -202,7 +199,11 @@ if __name__ == '__main__':
     trained_attrs = feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
 
     # %%  Build datasets
-    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_directory(args.presegmented_dir, exts='.pkl')
+    all_segmentation_paths = list(chain.from_iterable([
+        [ex.image_segmentations_path for ex in c.examples]
+        for c in kb
+    ]))
+    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_paths(all_segmentation_paths)
 
     test_ds = PresegmentedDataset(tst_p, tst_l)
     test_dl = get_dataloader(test_ds)
