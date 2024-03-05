@@ -295,7 +295,7 @@ class Controller:
         weights1 = predictor1.zs_attr_predictor.weight.data
         weights2 = predictor2.zs_attr_predictor.weight.data
 
-    def compare_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None, weight_by_predictors=True) -> Image:
+    def compare_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None, weight_by_predictors: bool = False) -> Image:
         if not ((images is None) ^ (indices is None)):
             raise ValueError('Exactly one of imgs or idxs must be provided.')
 
@@ -328,8 +328,11 @@ class Controller:
         attr_names = self.trainer.feature_extractor.trained_clip_attr_predictor.attr_names
 
         if weight_by_predictors:
-            predictor1 = predictions1[]
+            predicted_concept1 = predictions1['concept_names'][predictions1['predicted_index']]
+            predicted_concept2 = predictions2['concept_names'][predictions2['predicted_index']]
 
+            predictor1 = self.concepts.concepts[predicted_concept1].predictor
+            predictor2 = self.concepts.concepts[predicted_concept2].predictor
         else:
             predictor1 = predictor2 = None
 
@@ -339,10 +342,11 @@ class Controller:
             trained_attr_scores2,
             attr_names,
             return_img=True,
-            weight_image1_by_predictor=
+            weight_imgs_by_predictors=(predictor1, predictor2)
         )
 
     def explain_prediction(self, index: int = -1):
+        # See scripts/vis_contributions.py
         pass
 
 # %%

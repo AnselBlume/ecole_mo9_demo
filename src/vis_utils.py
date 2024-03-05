@@ -1,4 +1,5 @@
 import numpy as np
+from model.concept import ConceptPredictor
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import torch
@@ -220,13 +221,23 @@ def plot_differences(
     figsize=(10,7),
     color1='orange',
     color2='blue',
-    return_img=False
+    return_img=False,
+    weight_imgs_by_predictors: tuple[ConceptPredictor, ConceptPredictor] = ()
 ):
     # Compute top attribute probability differences
     probs1 = attr_scores1.squeeze().sigmoid()
     probs2 = attr_scores2.squeeze().sigmoid()
 
     diffs = (probs1 - probs2).abs()
+
+    if weight_imgs_by_predictors:
+        assert len(weight_imgs_by_predictors) == 2
+        predictor1, predictor2 = weight_imgs_by_predictors
+        attr_weights1 = predictor1.img_zs_attr_weights
+        attr_weights2 = predictor2.img_zs_attr_weights
+
+        raise NotImplementedError('Need to implement weighted differences')
+
     top_diffs, top_inds = diffs.topk(top_k)
     top_inds = np.array(list(reversed(top_inds))) # Put highest diff at top
 
