@@ -194,6 +194,7 @@ class Controller:
         concept.predictor.cuda() # Assumes all other predictors are also on cuda
         self.trainer.recompute_labels()
         self.predictor.recompute_labels()
+        self.retriever.add_concept(concept)
 
         return concept
 
