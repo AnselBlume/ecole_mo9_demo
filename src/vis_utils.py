@@ -3,7 +3,7 @@ from model.concept import ConceptPredictor, Concept
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import torch
-from torchvision.transforms.functional import to_pil_image
+from torchvision.transforms.functional import to_pil_image, pil_to_tensor
 from torchvision.utils import draw_segmentation_masks
 from typing import Union, List
 import PIL
@@ -77,7 +77,7 @@ def image_from_masks(
     masks: Union[torch.Tensor, np.ndarray],
     combine_as_binary_mask: bool = False,
     combine_color = 'aqua',
-    superimpose_on_image: torch.Tensor = None,
+    superimpose_on_image: Union[torch.Tensor, Image] = None,
     superimpose_alpha: float = .8,
     cmap: str = 'rainbow'
 ):
@@ -105,15 +105,24 @@ def image_from_masks(
     colors = get_colors(masks.shape[0], cmap_name=cmap, as_tuples=True) if masks.shape[0] > 1 else combine_color
 
     if superimpose_on_image is not None:
+        if isinstance(superimpose_on_image, Image):
+            superimpose_on_image = pil_to_tensor(superimpose_on_image)
+            return_as_pil = True
+
         alpha = superimpose_alpha
         background = superimpose_on_image
     else:
         alpha = 1
         background = torch.zeros(3, masks.shape[1], masks.shape[2], dtype=torch.uint8)
+        return_as_pil = False
 
     masks = draw_segmentation_masks(background, masks, colors=colors, alpha=alpha)
 
-    if is_numpy:
+    # Output format
+    if return_as_pil:
+        masks = to_pil_image(masks)
+
+    elif is_numpy:
         masks = masks.numpy()
 
     return masks
@@ -212,21 +221,30 @@ def plot_rectangle(
     ax.add_patch(rect)
 
 def plot_image_differences(
-    img1: Image,
-    img2: Image,
-    attr_scores1: torch.Tensor,
-    attr_scores2: torch.Tensor,
+    images: tuple[Image,Image],
+    attr_probs: tuple[torch.Tensor, torch.Tensor],
     attr_names: List[str],
     top_k=5,
     figsize=(10,7),
-    color1='orange',
-    color2='blue',
-    return_img=False,
-    weight_imgs_by_predictors: tuple[ConceptPredictor, ConceptPredictor] = ()
+    colors=('orange', 'blue'),
+    weight_imgs_by_predictors: tuple[ConceptPredictor, ConceptPredictor] = (),
+    region_masks: tuple[torch.Tensor, torch.Tensor] = (),
+    return_img=False
 ):
+    '''
+        attr_probs: Tuple of attribute probabilities for each image, of shape (n_attr,) or (1, n_attr).
+        attr_names: List of attribute names corresponding to each score
+        region_masks: Tuple of region masks for each image, of shape (h, w) or (1, h, w).
+        weight_imgs_by_predictors: Tuple of ConceptPredictors whose attribute weights will be used to weight the probability differences.
+    '''
+    # Unpack
+    img1, img2 = images
+    attr_probs1, attr_probs2 = attr_probs
+    color1, color2 = colors
+
     # Compute top attribute probability differences
-    probs1 = attr_scores1.squeeze().sigmoid()
-    probs2 = attr_scores2.squeeze().sigmoid()
+    probs1 = attr_probs1.squeeze()
+    probs2 = attr_probs2.squeeze()
 
     diffs = (probs1 - probs2).abs()
 
@@ -246,6 +264,21 @@ def plot_image_differences(
     top_inds = np.array(list(reversed(top_inds))) # Put highest diff at top
 
     top_attr_names = [attr_names[i] for i in top_inds]
+
+    if region_masks: # Plot region masks on images
+        imgs = []
+        for img, region_masks in zip(images, region_masks):
+            if region_masks is not None:
+                img = image_from_masks(
+                    masks=region_masks,
+                    combine_as_binary_mask=True,
+                    combine_color='red',
+                    superimpose_alpha=.7,
+                    superimpose_on_image=img
+                )
+            imgs.append(img)
+
+        img1, img2 = imgs
 
     # Plot
     fig = plt.figure(figsize=figsize, constrained_layout=True)
@@ -286,8 +319,7 @@ def plot_image_differences(
     return fig
 
 def plot_concept_differences(
-    concept1: Concept,
-    concept2: Concept,
+    concepts: tuple[Concept, Concept],
     trained_attr_names: list[str],
     top_k=5,
     figsize=(10,7),
@@ -295,6 +327,7 @@ def plot_concept_differences(
     weight_by_magnitudes: bool = True
 ):
     # Compute top attribute weight differences
+    concept1, concept2 = concepts
     weights1 = concept1.predictor.img_trained_attr_weights.weights.data.cpu()
     weights2 = concept2.predictor.img_trained_attr_weights.weights.data.cpu()
 

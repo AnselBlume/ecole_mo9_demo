@@ -35,6 +35,11 @@ class LocalizeAndSegmentOutput:
         metadata={'description': 'Boolean array of shape (n_detections, h, w) representing the segmentation masks of the parts'}
     )
 
+    part_names: list[str] = field(
+        default=None,
+        metadata={'dsecription': 'List of part names corresponding to part_masks. None if part regions are unnamed (e.g. if segmented without grounding by name).'}
+    )
+
     rle_part_masks: list[dict] = field(
         default=None,
         metadata={'description': 'RLE-encoded masks output by pycocotools.mask.encode; currently unused'}

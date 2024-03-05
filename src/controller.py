@@ -1,13 +1,15 @@
 # %%
+import torch
 from score import AttributeScorer
 from model.concept import ConceptKB, Concept, ConceptExample
 from PIL.Image import Image
 import logging, coloredlogs
 from feature_extraction import FeatureExtractor
 from image_processing import LocalizerAndSegmenter
-from kb_ops.train import ConceptKBTrainer
+from kb_ops import ConceptKBTrainer, ConceptKBPredictor
 from kb_ops.retrieve import CLIPConceptRetriever
 from utils import ArticleDeterminer
+from typing import Union
 from llm import LLMClient
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
@@ -31,6 +33,7 @@ class Controller:
         self.concepts = concept_kb
         self.feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
         self.trainer = ConceptKBTrainer(concept_kb, self.feature_pipeline)
+        self.predictor = ConceptKBPredictor(concept_kb, self.feature_pipeline)
         self.cacher = cacher if cacher else ConceptKBFeatureCacher(concept_kb, self.feature_pipeline, cache_dir='feature_cache')
 
         self.retriever = retriever
@@ -55,10 +58,10 @@ class Controller:
         '''
         self.cached_images.append(image)
 
-        prediction = self.trainer.predict(
+        prediction = self.predictor.predict(
             image_data=image,
             unk_threshold=unk_threshold,
-            return_trained_attr_scores=True
+            return_segmentations=True
         )
 
         self.cached_predictions.append(prediction)
@@ -190,6 +193,7 @@ class Controller:
         self.concepts.add_concept(concept)
         concept.predictor.cuda() # Assumes all other predictors are also on cuda
         self.trainer.recompute_labels()
+        self.predictor.recompute_labels()
 
         return concept
 
@@ -289,11 +293,18 @@ class Controller:
         concept1 = self.retrieve_concept(concept_name1)
         concept2 = self.retrieve_concept(concept_name2)
 
-        attr_names = self.trainer.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
+        attr_names = self.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
 
-        return plot_concept_differences(concept1, concept2, attr_names, weight_by_magnitudes=weight_by_magnitudes, return_img=True)
+        return plot_concept_differences((concept1, concept2), attr_names, weight_by_magnitudes=weight_by_magnitudes, return_img=True)
 
-    def compare_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None, weight_by_predictors: bool = True) -> Image:
+    def compare_predictions(
+        self,
+        indices: tuple[int,int] = None,
+        images: tuple[Image,Image] = None,
+        weight_by_predictors: bool = True,
+        image1_regions: Union[str, list[int]] = None,
+        image2_regions: Union[list[str], list[int]] = None
+    ) -> Image:
         if not ((images is None) ^ (indices is None)):
             raise ValueError('Exactly one of imgs or idxs must be provided.')
 
@@ -320,11 +331,48 @@ class Controller:
         predictions1 = self.cached_predictions[indices[0]]
         predictions2 = self.cached_predictions[indices[1]]
 
-        trained_attr_scores1 = predictions1['predicted_concept_outputs'].trained_attr_img_scores
-        trained_attr_scores2 = predictions2['predicted_concept_outputs'].trained_attr_img_scores
+        # Handle case where user wants to visualize region predictions
+        if image1_regions or image2_regions:
+            def get_region_inds(regions: Union[str, list[int]], predictions: dict):
+                part_names = predictions['segmentations'].part_names
 
-        attr_names = self.trainer.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
+                if isinstance(regions, str):
+                    inds = [i for i, part_name in enumerate(part_names) if part_name == regions]
+                else:
+                    inds = regions
 
+                return inds
+
+            def get_region_scores(region_inds: list[int], predictions: dict):
+                region_scores = predictions['predicted_concept_outputs'].trained_attr_region_scores[region_inds]
+                return region_scores.mean(dim=0) # Average over number of regions
+
+        # Get attr scores and masks for regions or image
+        if image1_regions:
+            region_inds = get_region_inds(image1_regions, predictions1)
+            trained_attr_scores1 = get_region_scores(region_inds, predictions1)
+            region_mask1 = predictions1['segmentations'].part_masks[region_inds]
+        else:
+            trained_attr_scores1 = predictions1['predicted_concept_outputs'].trained_attr_img_scores
+            region_mask1 = None
+
+        if image2_regions:
+            region_inds = get_region_inds(image2_regions, predictions1)
+            trained_attr_scores2 = get_region_scores(region_inds, predictions2)
+            region_mask2 = predictions2['segmentations'].part_masks[region_inds]
+        else:
+            trained_attr_scores2 = predictions2['predicted_concept_outputs'].trained_attr_img_scores
+            region_mask2 = None
+
+        # Convert to probabilities if not already
+        if not self.concepts.cfg.use_probabilities:
+            trained_attr_scores1 = trained_attr_scores1.sigmoid()
+            trained_attr_scores2 = trained_attr_scores2.sigmoid()
+
+        # Get attribute names
+        attr_names = self.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
+
+        # Extract winning predictors if weighting by predictors
         if weight_by_predictors:
             predicted_concept1 = predictions1['concept_names'][predictions1['predicted_index']]
             predicted_concept2 = predictions2['concept_names'][predictions2['predicted_index']]
@@ -336,12 +384,12 @@ class Controller:
             predictors = ()
 
         return plot_image_differences(
-            *images,
-            trained_attr_scores1,
-            trained_attr_scores2,
+            images,
+            (trained_attr_scores1, trained_attr_scores2),
             attr_names,
+            weight_imgs_by_predictors=predictors,
+            region_masks=(region_mask1, region_mask2),
             return_img=True,
-            weight_imgs_by_predictors=predictors
         )
 
     def explain_prediction(self, index: int = -1):
@@ -371,20 +419,25 @@ if __name__ == '__main__':
     retriever = CLIPConceptRetriever(kb.concepts, fe.clip, fe.processor)
     controller = Controller(loc_and_seg, kb, fe, retriever)
 
-    # %% Run the prediction
+    # %% Run the first prediction
     img = PIL.Image.open(img_path).convert('RGB')
     result = controller.predict_concept(img, unk_threshold=.1)
 
     logger.info(f'Predicted label: {result["predicted_label"]}')
-    result['plot']
 
-    # %% Explain difference between images
+    # %% Run the second prediction
     img_path2 = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/fork_2_9.jpg'
     img2 = PIL.Image.open(img_path2).convert('RGB')
     controller.predict_concept(img2)
 
+    # %% Explain difference between images
     logger.info('Explaining difference between predictions...')
     controller.compare_predictions(indices=(-2,-1), weight_by_predictors=True)
+
+    # %% Explain difference between image regions
+    controller.compare_predictions(indices=(-2,-1), weight_by_predictors=True, image1_regions=[0])
+    controller.compare_predictions(indices=(-2,-1), weight_by_predictors=True, image2_regions=[0])
+    controller.compare_predictions(indices=(-2,-1), weight_by_predictors=True, image1_regions=[0], image2_regions=[0])
 
     # %% Explain difference between concepts
     controller.compare_concepts('spoon', 'fork')
