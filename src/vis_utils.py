@@ -1,5 +1,5 @@
 import numpy as np
-from model.concept import ConceptPredictor
+from model.concept import ConceptPredictor, Concept
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import torch
@@ -211,7 +211,7 @@ def plot_rectangle(
     rect = plt.Rectangle((x_lim[0], y_lim[0]), width, height, linewidth=line_width, edgecolor=color, facecolor='none')
     ax.add_patch(rect)
 
-def plot_differences(
+def plot_image_differences(
     img1: Image,
     img2: Image,
     attr_scores1: torch.Tensor,
@@ -233,12 +233,16 @@ def plot_differences(
     if weight_imgs_by_predictors:
         assert len(weight_imgs_by_predictors) == 2
         predictor1, predictor2 = weight_imgs_by_predictors
-        attr_weights1 = predictor1.img_zs_attr_weights
-        attr_weights2 = predictor2.img_zs_attr_weights
+        attr_weights1 = predictor1.img_trained_attr_weights.weights.data.cpu()
+        attr_weights2 = predictor2.img_trained_attr_weights.weights.data.cpu()
 
-        raise NotImplementedError('Need to implement weighted differences')
+        # Weight the differences by the attribute weights
+        weighted_diffs = diffs * (attr_weights1.abs() + attr_weights2.abs())
+        top_diffs, top_inds = weighted_diffs.topk(top_k)
 
-    top_diffs, top_inds = diffs.topk(top_k)
+    else:
+        top_diffs, top_inds = diffs.topk(top_k)
+
     top_inds = np.array(list(reversed(top_inds))) # Put highest diff at top
 
     top_attr_names = [attr_names[i] for i in top_inds]
@@ -275,6 +279,61 @@ def plot_differences(
 
     # Bold, larger font
     fig.suptitle('Top Detected Attribute Differences', fontsize=16, fontweight='bold', y=1.05)
+
+    if return_img:
+        return fig_to_img(fig)
+
+    return fig
+
+def plot_concept_differences(
+    concept1: Concept,
+    concept2: Concept,
+    trained_attr_names: list[str],
+    top_k=5,
+    figsize=(10,7),
+    return_img=False,
+    weight_by_magnitudes: bool = True
+):
+    # Compute top attribute weight differences
+    weights1 = concept1.predictor.img_trained_attr_weights.weights.data.cpu()
+    weights2 = concept2.predictor.img_trained_attr_weights.weights.data.cpu()
+
+    diffs = (weights1 - weights2).abs()
+
+    if weight_by_magnitudes:
+        # More heavily weight the differences by those attributes which are highly weighted by at least one concept
+        weighted_diffs = diffs * (weights1.abs() + weights2.abs())
+        top_diffs, top_inds = weighted_diffs.topk(top_k)
+
+    else:
+        top_diffs, top_inds = diffs.topk(top_k)
+
+    top_inds = np.array(list(reversed(top_inds))) # Put highest diff at top
+
+    top_attr_names = [trained_attr_names[i] for i in top_inds]
+
+    # Plot
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Attribute differences
+    diffs1 = weights1[top_inds]
+    diffs2 = weights2[top_inds]
+
+    # See tutorial here https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html
+    bar_width = .25
+    label_loc_offsets = np.arange(top_k) * 3 * bar_width
+    for label_offset, diff1, diff2 in zip(label_loc_offsets, diffs1, diffs2):
+        ax.barh(label_offset + bar_width, diff1, bar_width, color='orange') # Higher offsets --> higher in figure, not lower
+        ax.barh(label_offset, diff2, bar_width, color='blue')
+
+    ax.set_yticks(label_loc_offsets + bar_width / 2, top_attr_names)
+
+    # Set legend with colors
+    ax.legend([concept1.name, concept2.name])
+
+    # Bold, larger font
+    fig.suptitle('Concept Differences by Attribute Importance', fontsize=16, fontweight='bold')
 
     if return_img:
         return fig_to_img(fig)

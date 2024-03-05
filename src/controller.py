@@ -14,7 +14,7 @@ from feature_extraction import CLIPAttributePredictor
 from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 from kb_ops.feature_cache import ConceptKBFeatureCacher
 from utils import to_device
-from vis_utils import plot_predicted_classes, plot_differences
+from vis_utils import plot_predicted_classes, plot_image_differences, plot_concept_differences
 
 logger = logging.getLogger(__name__)
 
@@ -285,17 +285,15 @@ class Controller:
     ##################
     # Interpretation #
     ##################
-    def compare_concepts(self, concept_name1: str, concept_name2: str):
+    def compare_concepts(self, concept_name1: str, concept_name2: str, weight_by_magnitudes: bool = True):
         concept1 = self.retrieve_concept(concept_name1)
         concept2 = self.retrieve_concept(concept_name2)
 
-        predictor1 = concept1.predictor
-        predictor2 = concept2.predictor
+        attr_names = self.trainer.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
 
-        weights1 = predictor1.zs_attr_predictor.weight.data
-        weights2 = predictor2.zs_attr_predictor.weight.data
+        return plot_concept_differences(concept1, concept2, attr_names, weight_by_magnitudes=weight_by_magnitudes, return_img=True)
 
-    def compare_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None, weight_by_predictors: bool = False) -> Image:
+    def compare_predictions(self, indices: tuple[int,int] = None, images: tuple[Image,Image] = None, weight_by_predictors: bool = True) -> Image:
         if not ((images is None) ^ (indices is None)):
             raise ValueError('Exactly one of imgs or idxs must be provided.')
 
@@ -325,24 +323,25 @@ class Controller:
         trained_attr_scores1 = predictions1['predicted_concept_outputs'].trained_attr_img_scores
         trained_attr_scores2 = predictions2['predicted_concept_outputs'].trained_attr_img_scores
 
-        attr_names = self.trainer.feature_extractor.trained_clip_attr_predictor.attr_names
+        attr_names = self.trainer.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
 
         if weight_by_predictors:
             predicted_concept1 = predictions1['concept_names'][predictions1['predicted_index']]
             predicted_concept2 = predictions2['concept_names'][predictions2['predicted_index']]
 
-            predictor1 = self.concepts.concepts[predicted_concept1].predictor
-            predictor2 = self.concepts.concepts[predicted_concept2].predictor
+            predictor1 = self.concepts[predicted_concept1].predictor
+            predictor2 = self.concepts[predicted_concept2].predictor
+            predictors = (predictor1, predictor2)
         else:
-            predictor1 = predictor2 = None
+            predictors = ()
 
-        return plot_differences(
+        return plot_image_differences(
             *images,
             trained_attr_scores1,
             trained_attr_scores2,
             attr_names,
             return_img=True,
-            weight_imgs_by_predictors=(predictor1, predictor2)
+            weight_imgs_by_predictors=predictors
         )
 
     def explain_prediction(self, index: int = -1):
@@ -362,13 +361,13 @@ if __name__ == '__main__':
 
     # %%
     img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_02_29-01:56:41-b1fr1pbu-new_conceptkb/concept_kb_epoch_15.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_05-00:26:23-8y5ustqq-new_seg_locs/concept_kb_epoch_15.pt'
 
     # %%
+    kb = ConceptKB.load(ckpt_path)
     loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
     fe = build_feature_extractor()
 
-    kb = ConceptKB.load(ckpt_path)
     retriever = CLIPConceptRetriever(kb.concepts, fe.clip, fe.processor)
     controller = Controller(loc_and_seg, kb, fe, retriever)
 
@@ -379,12 +378,15 @@ if __name__ == '__main__':
     logger.info(f'Predicted label: {result["predicted_label"]}')
     result['plot']
 
-    # %% Explain difference
+    # %% Explain difference between images
     img_path2 = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/fork_2_9.jpg'
     img2 = PIL.Image.open(img_path2).convert('RGB')
     controller.predict_concept(img2)
 
     logger.info('Explaining difference between predictions...')
-    controller.compare_predictions(indices=(-2,-1))
+    controller.compare_predictions(indices=(-2,-1), weight_by_predictors=True)
+
+    # %% Explain difference between concepts
+    controller.compare_concepts('spoon', 'fork')
 
 # %%
