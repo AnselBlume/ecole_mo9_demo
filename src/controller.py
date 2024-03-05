@@ -145,25 +145,9 @@ class Controller:
 
         return ret_dict
 
-    ###################
-    # Concept Removal #
-    ###################
-    def clear_concepts(self):
-        for concept in self.concepts:
-            self.concepts.remove_concept(concept.name)
-
-    def remove_concept(self, concept_name: str):
-        try:
-            concept = self.retrieve_concept(concept_name, max_retrieval_distance=0.)
-        except RuntimeError as e:
-            logger.info(f'No exact match for concept with name "{concept_name}". Not removing concept to be safe.')
-            raise(e)
-
-        self.concepts.remove_concept(concept.name)
-
-    ####################
-    # Concept Addition #
-    ####################
+    ################################
+    # Concept Addition and Removal #
+    ################################
     def add_concept(self, concept_name: str = None, concept: Concept = None, use_singular_name: bool = True):
         if concept_name is None and concept is None:
             raise ValueError('Either concept_name or concept must be provided.')
@@ -187,19 +171,35 @@ class Controller:
         )
 
         self.concepts.init_predictor(concept)
+        concept.predictor.cuda() # Assumes all other predictors are also on cuda
 
         # TODO Determine if it has any obvious parent or child concepts
 
         self.concepts.add_concept(concept)
-        concept.predictor.cuda() # Assumes all other predictors are also on cuda
+        self.retriever.add_concept(concept)
         self.trainer.recompute_labels()
         self.predictor.recompute_labels()
-        self.retriever.add_concept(concept)
 
         return concept
+    def clear_concepts(self):
+        for concept in self.concepts:
+            self.concepts.remove_concept(concept.name)
+            self.retriever.remove_concept(concept.name)
 
-    def _get_zs_attributes(self, concept_name: str):
-        pass
+        self.trainer.recompute_labels()
+        self.predictor.recompute_labels()
+
+    def remove_concept(self, concept_name: str):
+        try:
+            concept = self.retrieve_concept(concept_name, max_retrieval_distance=0.)
+        except RuntimeError as e:
+            logger.info(f'No exact match for concept with name "{concept_name}". Not removing concept to be safe.')
+            raise(e)
+
+        self.concepts.remove_concept(concept.name)
+        self.retriever.remove_concept(concept.name)
+        self.trainer.recompute_labels()
+        self.predictor.recompute_labels()
 
     ########################
     # Concept Modification #
