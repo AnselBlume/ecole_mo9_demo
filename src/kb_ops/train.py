@@ -419,7 +419,8 @@ class ConceptKBTrainer:
         return_features: bool = False
     ):
 
-        if isinstance(image_data, CachedImageFeatures):
+        # Check __name__ instead of isinstance to avoid pickle versioning issues
+        if image_data.__class__.__name__ == 'CachedImageFeatures': # Check
             features_were_provided = True
 
         else: # Not using features

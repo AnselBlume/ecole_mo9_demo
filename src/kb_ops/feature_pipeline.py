@@ -45,7 +45,8 @@ class ConceptKBFeaturePipeline:
             image = image_data
 
         else:
-            assert isinstance(image_data, LocalizeAndSegmentOutput)
+            # Check __name__ instead of isinstance to avoid pickle versioning issues
+            assert image_data.__class__.__name__ == 'LocalizeAndSegmentOutput', f'Expected LocalizeAndSegmentOutput, got {type(image_data)}'
             segmentations = image_data
             image = segmentations.input_image
 

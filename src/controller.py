@@ -25,13 +25,13 @@ class Controller:
         concept_kb: ConceptKB,
         feature_extractor: FeatureExtractor,
         retriever: CLIPConceptRetriever = None,
-        cache_dir: str = 'feature_cache',
+        cacher: ConceptKBFeatureCacher = None,
         zs_predictor: CLIPAttributePredictor = None
     ):
         self.concepts = concept_kb
         self.feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
         self.trainer = ConceptKBTrainer(concept_kb, self.feature_pipeline)
-        self.cacher = ConceptKBFeatureCacher(concept_kb, self.feature_pipeline, cache_dir=cache_dir)
+        self.cacher = cacher if cacher else ConceptKBFeatureCacher(concept_kb, self.feature_pipeline, cache_dir='feature_cache')
 
         self.retriever = retriever
         self.llm_client = LLMClient()
@@ -228,8 +228,9 @@ class Controller:
                 if example.image_path not in image_paths:
                     concept.examples.append(example)
 
-        # Ensure features are prepared
-        self.cacher.cache_features([concept]) # Ensure features are generated
+        # Ensure features are prepared, only generating those which don't already exist or are dirty
+        self.cacher.cache_segmentations([concept], only_uncached_or_dirty=True)
+        self.cacher.cache_features([concept], only_uncached_or_dirty=True)
 
         # Hook to recache zs_attr_features after negative examples have been sampled
         # This is faster than calling recache_zs_attr_features on all examples in the concept_kb
