@@ -206,7 +206,7 @@ class Controller:
         '''
         pass
 
-    def train_concept(self, concept_name: str, until_correct_examples: list[ConceptExample] = []):
+    def train_concept(self, concept_name: str, until_correct_examples: list[ConceptExample] = [], sample_all_negatives: bool = False):
         '''
             Retrains the concept until it correctly predicts the given example images.
         '''
@@ -240,9 +240,9 @@ class Controller:
             concept,
             stopping_condition='until_correct',
             until_correct_examples=until_correct_examples,
-            sample_all_negatives=False,
+            sample_all_negatives=sample_all_negatives,
             post_sampling_hook=cache_hook,
-            n_epochs_between_predictions=7,
+            n_epochs_between_predictions=1,
             lr=1e-2 # high learning rate so hopefully doesn't take too long to reach margins
         )
 

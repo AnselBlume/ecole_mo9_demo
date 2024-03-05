@@ -14,11 +14,13 @@ from src.kb_ops import ConceptKBFeaturePipeline, ConceptKBFeatureCacher
 from src.controller import Controller
 from src.kb_ops import CLIPConceptRetriever
 from src.scripts.utils import set_feature_paths
+from src.kb_ops.build_kb import list_paths
 import matplotlib.pyplot as plt
 from PIL import Image
 import logging, coloredlogs
 logger = logging.getLogger(__file__)
-coloredlogs.install(level='INFO')
+
+coloredlogs.install(level='DEBUG')
 
 # %%
 if __name__ == '__main__':
@@ -39,24 +41,34 @@ if __name__ == '__main__':
     controller = Controller(loc_and_seg, concept_kb, feature_extractor, retriever=retriever)
 
     # %% Prepare concept for training
-    img_paths = [f'/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/dogs/dog_{i}.png' for i in range(1,3)]
-    cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/dogs'
+    img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/pizza_cutters'
+    concept_name = 'pizza cutter'
+    cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/pizza_cutters'
+
+    # img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/dogs'
+    # concept_name = 'dog'
+    # cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/dogs'
+
+    img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
 
     # %%
-    controller.add_concept('dog')
-    concept = controller.retrieve_concept('dog')
+    controller.add_concept(concept_name)
+    concept = controller.retrieve_concept(concept_name)
     concept.examples = [ConceptExample(image_path=img_path) for img_path in img_paths]
 
     # %% Generate segmentations, features for new examples
     cacher = ConceptKBFeatureCacher(concept_kb, feature_pipeline, cache_dir=cache_dir)
+    set_feature_paths([concept], features_dir=cacher.features_dir, segmentations_dir=cacher.segmentations_dir)
+
     cacher.cache_segmentations()
     cacher.cache_features()
 
     # %% Train concept in isolation
-    controller.train_concept('dog', until_correct_examples=concept.examples)
+    controller.train_concept(concept_name, until_correct_examples=concept.examples)
     logger.info('Finished training new concept')
 
     # %% Predict examples for verification
     for img_path in img_paths:
         img = Image.open(img_path).convert('RGB')
         output = controller.predict_concept(img) # Displays image in Jupyter
+# %%

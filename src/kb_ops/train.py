@@ -295,7 +295,11 @@ class ConceptKBTrainer:
                     all_scores = torch.stack([pred['predictors_scores'] for pred in predictions])
                     normalized_scores = F.softmax(all_scores, dim=1)
                     logger.debug(f'Normalized scores: {normalized_scores}')
+
                     values, indices = normalized_scores.topk(2, dim=1) # Each of values, indices are (n_examples, 2) tensors
+
+                    logger.debug(f'Top two scores: {values}')
+                    logger.debug(f'Target scores: {normalized_scores[:, target_concept_index]}')
 
                     if not (indices[:, 0] == target_concept_index).all(): # Not all examples are correctly predicted
                         continue
