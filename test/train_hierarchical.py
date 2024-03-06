@@ -3,7 +3,7 @@
     NOTE This is a copy-paste of train_and_cls.py with "garden tool" and "tableware" concepts
     added to the ConceptKB to form a two-level hierarchy.
 '''
-import os # TODO Change DesCo CUDA device here
+import os # Change DesCo CUDA device here
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 import sys
@@ -11,8 +11,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
 
 from llm import LLMClient, retrieve_parts
 from kb_ops import kb_from_img_dir
-from model.concept import ConceptKBConfig, Concept
-from kb_ops.train_test_split import split_from_directory, split_from_paths
+from model.concept import ConceptKBConfig, Concept, ConceptKB
+from kb_ops.train_test_split import split_from_paths
 from kb_ops.dataset import FeatureDataset
 from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline
 import logging, coloredlogs
@@ -26,6 +26,22 @@ from itertools import chain
 
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
+
+def add_component_parts(concept: Concept, part_names: list[str]):
+    concept.component_concepts.update({
+        part: Concept(name=part)
+        for part in part_names
+    })
+
+def add_parent(parent_name: Concept, child_names: list[str], concept_kb: ConceptKB):
+    parent = concept_kb.add_concept(parent_name)
+
+    for child_name in child_names:
+        child = concept_kb[child_name]
+        parent.child_concepts[child_name] = child
+        child.parent_concepts[parent_name] = parent
+
+    return parent
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -72,14 +88,7 @@ if __name__ == '__main__':
     concept_kb = kb_from_img_dir(args.img_dir)
 
     # %%
-    tableware = concept_kb.add_concept('tableware')
-    tableware.child_concepts.update({
-        'bowl': concept_kb['bowl'],
-        'fork': concept_kb['fork'],
-        'knife': concept_kb['knife'],
-        'mug': concept_kb['mug'],
-        'spoon': concept_kb['spoon']
-    })
+    tableware = add_parent('tableware', ['bowl', 'fork', 'knife', 'mug', 'spoon'], concept_kb)
 
     # NOTE Add component concepts for DesCo part detection; not relevant for this training which uses SAM
     # Either retrieve from LLM or add manually
@@ -90,31 +99,12 @@ if __name__ == '__main__':
     #         for concept_name in tableware.child_concepts
     #     ])))
     # })
-
-    tableware.component_concepts.update({
-        'rim': Concept(name='rim'),
-        'base': Concept(name='base'),
-        'tines': Concept(name='tines'),
-        'body': Concept(name='body'),
-        'blade': Concept(name='blade'),
-        'handle': Concept(name='handle'),
-        'bowl': Concept(name='bowl')
-    })
+    add_component_parts(tableware, ['rim', 'base', 'tines', 'body', 'blade', 'handle'])
 
     # %%
 
-    garden_tool = concept_kb.add_concept('garden tool')
-    garden_tool.child_concepts.update({
-        'hoe': concept_kb['hoe'],
-        'shovel': concept_kb['shovel'],
-    })
-
-    garden_tool.component_concepts.update({
-        'handle': Concept(name='handle'),
-        'blade': Concept(name='blade'),
-        'head': Concept(name='head'),
-        'shaft': Concept(name='shaft')
-    })
+    garden_tool = add_parent('garden tool', ['hoe', 'shovel'], concept_kb)
+    add_component_parts(garden_tool, ['handle', 'blade', 'head', 'shaft'])
 
     # Import here so DesCo sees the CUDA device change
     from feature_extraction import (
