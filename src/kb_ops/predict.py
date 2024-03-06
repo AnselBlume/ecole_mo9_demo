@@ -83,23 +83,15 @@ class ConceptKBPredictor(ConceptKBForwardBase):
         predictions = []
 
         if leaf_nodes_only:
-            leaf_name_to_leaf_ind = {c.name : i for i, c in enumerate(self.concept_kb.leaf_concepts)}
-
-            global_ind_to_leaf_ind = {
-                global_ind : leaf_name_to_leaf_ind[concept.name]
-                for global_ind, concept in enumerate(self.concept_kb.concepts)
-                if concept.name in leaf_name_to_leaf_ind
-            } # Used to map the global true index to its corresponding leaf concept index
-
             forward_kwargs['concepts'] = self.concept_kb.leaf_concepts
 
         def process_outputs(outputs: dict):
             # Compute predictions
             if predict_dl is not None:
-                true_ind = self.label_to_index[text_label[0]] # int, global index
+                true_ind = self.label_to_ind[text_label[0]] # int, global index
 
                 if leaf_nodes_only: # To leaf index
-                    true_ind = global_ind_to_leaf_ind[true_ind]
+                    true_ind = self.global_ind_to_leaf_ind[true_ind]
 
             scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
 
@@ -113,7 +105,7 @@ class ConceptKBPredictor(ConceptKBForwardBase):
                 'concept_names': outputs['concept_names'],
                 'predictors_scores': scores.cpu(),
                 'predicted_index': pred_ind,
-                'predicted_label': self.index_to_label[pred_ind],
+                'predicted_label': outputs['concept_names'][pred_ind],
                 'is_below_unk_threshold': is_below_unk_threshold,
                 'predicted_concept_outputs': predicted_concept_outputs, # This will always be maximizing concept
                 'true_index': true_ind if predict_dl is not None else None,

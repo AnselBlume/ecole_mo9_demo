@@ -61,7 +61,7 @@ def get_parser():
 if __name__ == '__main__':
     parser = get_parser()
     args = parser.parse_args()
-    # args = parser.parse_args(['--cache.features', 'hierarchical_v1']) # For debugging or jupyter notebook
+    # args = parser.parse_args(['--cache.features', 'features_hierarchical_v1']) # For debugging or jupyter notebook
 
     # %%
     run = wandb.init(project='ecole_mo9_demo', config=args.as_flat(), dir=args.wandb_dir, reinit=True)

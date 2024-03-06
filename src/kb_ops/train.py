@@ -255,7 +255,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
             else: # stopping_condition == 'until_correct'
                 curr_epoch = 0
-                target_concept_index = self.label_to_index[concept.name]
+                target_concept_index = self.label_to_ind[concept.name]
 
                 while True:
                     # Train for one epoch then check the probability margins
@@ -297,14 +297,6 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         data_key = self._determine_data_key(val_dl.dataset)
 
         if leaf_nodes_only_for_accuracy:
-            leaf_name_to_leaf_ind = {c.name : i for i, c in enumerate(self.concept_kb.leaf_concepts)}
-
-            global_ind_to_leaf_ind = {
-                global_ind : leaf_name_to_leaf_ind[concept.name]
-                for global_ind, concept in enumerate(self.concept_kb.concepts)
-                if concept.name in leaf_name_to_leaf_ind
-            } # Used to map the global true index to its corresponding leaf concept index
-
             forward_kwargs['concepts'] = self.concept_kb.leaf_concepts
 
         for batch in tqdm(val_dl, desc='Validation'):
@@ -319,10 +311,10 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             pred_ind = scores.argmax(dim=0, keepdim=True) # (1,) IntTensor
 
             # Compute true index
-            true_ind = self.label_to_index[text_label[0]] # Global index
+            true_ind = self.label_to_ind[text_label[0]] # Global index
 
             if leaf_nodes_only_for_accuracy: # To leaf index
-                true_ind = global_ind_to_leaf_ind[true_ind]
+                true_ind = self.global_ind_to_leaf_ind[true_ind]
 
             true_ind = torch.tensor(true_ind).unsqueeze(0) # (1,)
 

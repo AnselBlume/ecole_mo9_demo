@@ -52,15 +52,26 @@ class ConceptKBForwardBase:
             Recomputes label to index (and reverse) mappings based on the current ConceptKB.
             Additionally computes the rooted subtree for each concept to serve as positive labels.
         '''
-        self.label_to_index = {concept.name : i for i, concept in enumerate(self.concept_kb)}
-        self.label_to_index[self.UNK_LABEL] = -1 # For unknown labels
-        self.index_to_label = {v : k for k, v in self.label_to_index.items()}
+        self.label_to_ind = {concept.name : i for i, concept in enumerate(self.concept_kb)}
+        self.label_to_ind[self.UNK_LABEL] = -1 # For unknown labels
+        self.ind_to_label = {v : k for k, v in self.label_to_ind.items()}
 
         # Compute rooted subtree (descendants + curr node) for each concept to serve as positive labels
         self.concept_labels = {
             concept.name: {c.name for c in self.concept_kb.rooted_subtree(concept)}
             for concept in self.concept_kb
         }
+
+        # Compute mapping between global and leaf indices
+        self.leaf_name_to_leaf_ind = {c.name : i for i, c in enumerate(self.concept_kb.leaf_concepts)}
+        self.leaf_ind_to_leaf_name = {v : k for k, v in self.leaf_name_to_leaf_ind.items()}
+
+        self.global_ind_to_leaf_ind = {
+            global_ind : self.leaf_name_to_leaf_ind[concept.name]
+            for global_ind, concept in enumerate(self.concept_kb.concepts)
+            if concept.name in self.leaf_name_to_leaf_ind
+        }
+        self.leaf_ind_to_global_ind = {v : k for k, v in self.global_ind_to_leaf_ind.items()}
 
     def forward_pass(
         self,

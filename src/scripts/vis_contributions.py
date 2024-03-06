@@ -1,5 +1,6 @@
 # %%
 import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import torch
 import json
 from tqdm import tqdm
@@ -80,7 +81,6 @@ def prediction_contributions(output: ConceptPredictorOutput, trained_attrs: list
             t_attr_region_scores = {k : v / t_attr_region_mass for k, v in t_attr_region_scores.items()}
 
             ret_dict['trained_attr_region_scores'] = t_attr_region_scores
-
 
     # Zero-shot attribute contributions
     if zs_attrs != []:
@@ -185,12 +185,13 @@ def visualize_prediction_contributions(
     return fig
 
 def get_dataloader(dataset):
-    return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=3, pin_memory=True, collate_fn=list_collate)
+    return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True, collate_fn=list_collate)
 
 # %%
 if __name__ == '__main__':
     parser = get_parser()
     args = parser.parse_args()
+    # args = parser.parse_args(['--ckpt_path', '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_06-06:00:17-goiur8to/concept_kb_epoch_15.pt'])
 
     # %%
     kb = ConceptKB.load(args.ckpt_path)
@@ -214,7 +215,6 @@ if __name__ == '__main__':
     # %%
     accuracy = Accuracy(task='multiclass', num_classes=len(kb))
 
-    concepts = list(kb)
     all_contributions = []
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -230,7 +230,7 @@ if __name__ == '__main__':
 
         # Attribute scores
         predicted_concept_outputs = prediction['predicted_concept_outputs']
-        predicted_concept_zs_attrs = [attr.name for attr in concepts[prediction['predicted_index']].zs_attributes]
+        predicted_concept_zs_attrs = [attr.name for attr in kb[prediction['predicted_label']].zs_attributes]
         contributions = prediction_contributions(predicted_concept_outputs, trained_attrs, predicted_concept_zs_attrs)
         all_contributions.append(contributions)
 
@@ -243,8 +243,8 @@ if __name__ == '__main__':
         accuracy(pred_ind, true_ind)
 
         # Set title
-        pred_label = concepts[prediction['predicted_index']].name.capitalize()
-        true_label = concepts[prediction['true_index']].name.capitalize()
+        pred_label = prediction['concept_names'][prediction['predicted_index']].capitalize()
+        true_label = prediction['concept_names'][prediction['true_index']].capitalize()
 
         max_score = prediction['predictors_scores'].max().sigmoid()
         fig.suptitle(f'Prediction: {pred_label} ({max_score * 100:.2f}%). Ground Truth: {true_label}', fontsize=24, fontweight='bold', y=1.1)
