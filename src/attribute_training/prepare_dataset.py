@@ -15,7 +15,7 @@ from tqdm import tqdm
 from typing import Optional
 import vis_utils
 from vis_utils import mask_and_crop_image
-from PIL import Image 
+from PIL import Image, ImageDraw 
 from pycocotools import mask as mask_utils
 import skimage 
 import pickle 
@@ -47,6 +47,37 @@ def open_file(filename,use_json=True):
 def save_file(filename,contents):
     with open(filename,'w+') as fwrite:
         json.dump(contents,fwrite)
+def load_features(annotation_file:str,attribute_to_index:str,feature_dir:str,save_path:str,file_name:str):
+    all_features = []
+    all_labels = []
+    annotations = open_file(annotation_file)
+    attribute_to_id = open_file(attribute_to_index)
+    total_labels = len(list(attribute_to_id.keys()))
+    for entry in tqdm(list(annotations.values())):
+        instance_id = entry['instance_id']
+        labels = np.zeros((total_labels))
+        for p in entry['positive_attributes']:
+            if p in list(attribute_to_id.keys()):
+                attribute_id = attribute_to_id[p]
+                labels[attribute_id] = 1
+        for n in entry['negative_attributes']:
+            if n in list(attribute_to_id.keys()):
+                attribute_id = attribute_to_id[n]
+                labels[attribute_id] = -1 
+        if os.path.exists(os.path.join(feature_dir,instance_id+'.pkl')):
+            feature_file = open_file(os.path.join(feature_dir,instance_id+'.pkl'),use_json=False)                
+            if not np.isnan(feature_file['region_feature']).any():
+
+                all_features.append(feature_file['region_feature'])
+                all_labels.append(labels)
+    all_features = np.stack(all_features)
+    all_labels = np.stack(all_labels)
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
+    with open(os.path.join(save_path,file_name+'.pkl'),'wb') as fsave:
+        pickle.dump({'features':all_features,'labels':all_labels},fsave)
+
+
 def convert_annotations(old_annotation_name,new_annotation_name):
     """
     Convert annotations from list to dictionary where key is instance id
@@ -102,41 +133,78 @@ def create_gt_for_val(annotation_file,attribute_to_index,num_classes=2):
     gt = np.stack(gt)
     with open('/scratch/bcgp/datasets/visual_genome/vaw_dataset/gt/test_gt_three_classes.npy','wb+') as f:
         np.save(f,gt)
+def make_new_id_to_attribute(annotation_path:str,save_path:str):
+    annotations = open_file(annotation_path)
+    all_attributes = set()
+    attr_to_id = {}
+    id_to_attr = {}
+    for att_type in ['color','shape','material']:
+        entries = annotations[att_type]
+        for cat in list(entries.values()):
+            all_attributes.add(cat)
+    for i,att_name in enumerate(list(all_attributes)):
+        attr_to_id[att_name] = i 
+        id_to_attr[i] = att_name 
+    save_file(os.path.join(save_path,'id_to_attr.json'),id_to_attr)
+    save_file(os.path.join(save_path,'attr_to_id.json'),attr_to_id)
+
+
 def make_mask_from_bbox(bbox:list,image):
-    h,w = image.size
+    h_img,w_img = image.size
     x,y,w,h = bbox 
-    mask_image = np.zeros((h,w))
+    mask_image = np.zeros((h_img,w_img))
     mask_image[x:x+w,y:y+h] = 1 
     mask_h, mask_w = mask_image.shape 
-    if mask_h != h or mask_w != w:
+    if mask_h != h_img or mask_w != w_img:
         print(f'Mask shape:{mask_image.shape}')
         print(f'Image shape:{image.size}')
         raise ValueError('Bbox from mask is wrong size')
     return mask_image 
+def polygon_to_mask(polygons,h,w):
+    # for vaw, takes size of image and plots polygon boundary
+    # from https://github.com/ChenyunWu/PhraseCutDataset/blob/master/utils/data_transfer.py#L48
+    p_mask = np.zeros((h, w))
+    for polygon in polygons:
+        if len(polygon) < 2:
+            continue
+        p = []
+        for x, y in polygon:
+            p.append((int(x), int(y)))
+        img = Image.new('L', (w, h), 0)
+        ImageDraw.Draw(img).polygon(p, outline=1, fill=1)
+        mask = np.array(img)
+        p_mask += mask
+    p_mask = p_mask > 0
+    return p_mask.astype(int)
 def make_mask_annotations(annotation_file:str,save_dir:str):
     image_dict = {}
     all_annotations = open_file(annotation_file)
     for entry in tqdm(list(all_annotations.values())):
         image_id = entry['image_id']
-        image = Image.open(os.path.join('/scratch/bcgp/datasets/visual_genome/images',image_id+'.jpg'))
-        h,w = image.size 
+        image = cv2.imread(os.path.join('/scratch/bcgp/datasets/visual_genome/images',image_id+'.jpg'))
+        w,h,_ = image.shape
         instance_entry = {}
         if entry['image_id'] not in image_dict:
             image_dict[entry['image_id']] = []
         if entry['instance_polygon'] != None:
             polygon = entry['instance_polygon'][0]
             mask_from_polygon = skimage.draw.polygon2mask((h,w),polygon)
+            if mask_from_polygon.shape[0] == h:
+                # need to transpose for cv2
+                mask_from_polygon = mask_from_polygon.T
+
             converted_mask = np.asfortranarray(mask_from_polygon).astype(np.uint8)
             rle_mask = mask_utils.encode(converted_mask)
-        else:
-            converted_mask = np.asfortranarray(make_mask_from_bbox(entry['instance_bbox'],image))
-            rle_mask = mask_utils.encode(converted_mask.astype(np.uint8))
-        instance_entry['instance_id'] = entry['instance_id']
-        instance_entry['object_name'] = entry['object_name']
-        instance_entry['positive_attributes'] = entry['positive_attributes']
-        instance_entry['negative_attributes'] = entry['negative_attributes']
-        instance_entry['segmentation'] = rle_mask 
-        image_dict[image_id].append(instance_entry)
+            instance_entry['instance_id'] = entry['instance_id']
+            instance_entry['object_name'] = entry['object_name']
+            instance_entry['positive_attributes'] = entry['positive_attributes']
+            instance_entry['negative_attributes'] = entry['negative_attributes']
+            instance_entry['segmentation'] = rle_mask 
+            image_dict[image_id].append(instance_entry)
+        # else:
+        #     converted_mask = np.asfortranarray(make_mask_from_bbox(entry['instance_bbox'],image))
+        #     rle_mask = mask_utils.encode(converted_mask.astype(np.uint8))
+        
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     for img_regions in tqdm(image_dict,desc='Saving images'):
@@ -152,6 +220,36 @@ def check_new_annotations(old_attribute,new_colors,new_materials,new_shape):
     else:
         new_value = new_shape[old_attribute]
     return new_value 
+def remove_bbox_features(annotation_file:str,saved_path:str):
+    annotations = open_file(annotation_file)
+    for entry in tqdm(list(annotations.values())):
+        if entry['instance_polygon'] == None:
+            if os.path.exists(os.path.join(saved_path,entry['instance_id']+'.pkl')):
+                os.remove(os.path.join(saved_path,entry['instance_id']+'.pkl'))
+def make_multi_class_annotations(annotation_file:str,classes:list,save_path:str,file_name:str):
+    entries_to_keep = {}
+    annotations = open_file(annotation_file)
+    class_names_to_id = {}
+    id_to_class_names = {}
+    for i,c in enumerate(classes):
+        class_names_to_id[c] = i 
+        id_to_class_names[i] = c 
+    for entry in tqdm(list(annotations.values())):
+        new_entry = {'image_id':entry['image_id'],'instance_id':entry['instance_id'],
+                     'instance_bbox':entry['instance_bbox'],'instance_polygon':entry['instance_polygon'],
+                     'object_name':entry['object_name']}
+        new_key = entry['instance_id']
+        positive_attributes = entry['positive_attributes']
+        found_attributes = [c for c in classes if c in positive_attributes]
+        if len(found_attributes)==1:
+            new_entry['class'] = found_attributes[0]
+            new_entry['id'] = class_names_to_id[found_attributes[0]]
+            entries_to_keep[new_key] = new_entry
+            if not os.path.exists(save_path):
+                os.makedirs(save_path,exist_ok=True)
+            save_file(os.path.join(save_path,file_name),entries_to_keep)
+            
+                        
 def revised_annotations(annotation_file:str,save_path:str,file_name:str):
     new_annotations = {}
     old_annotations = open_file(annotation_file)
@@ -185,12 +283,12 @@ def revised_annotations(annotation_file:str,save_path:str,file_name:str):
             new_instance_entry['negative_attributes'] = negative_attributes
             new_annotations[instance_id] = new_instance_entry
     if not os.path.exists(save_path):
-        os.makedirs(save_path)
+        os.makedirs(save_path,exist_ok=True)
     save_file(os.path.join(save_path,file_name),new_annotations)
     print(len(list(new_annotations.keys())))
-revised_annotations(annotation_file='/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/test.json',save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/smaller_num_classes',file_name='test_small_num_classes.json')
-        
-
+make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/train.json',classes=['arch shaped','circular','concical','cubed','curved','cylindrical','domed','oval shaped','pointy','rectangular','round','spherical','triangular'],save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data',file_name='train.json')
+make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/val.json',classes=['arch shaped','circular','concical','cubed','curved','cylindrical','domed','oval shaped','pointy','rectangular','round','spherical','triangular'],save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data',file_name='val.json')
+make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/test.json',classes=['arch shaped','circular','concical','cubed','curved','cylindrical','domed','oval shaped','pointy','rectangular','round','spherical','triangular'],save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data',file_name='test.json')
 
 
 
