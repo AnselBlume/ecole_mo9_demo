@@ -7,6 +7,7 @@ from llm import LLMClient, retrieve_attributes
 from tqdm import tqdm
 import logging
 from utils import ArticleDeterminer
+from typing import Union
 from image_processing import LocalizeAndSegmentOutput
 from .features import ImageFeatures
 from PIL.Image import Image
@@ -92,6 +93,7 @@ class ConceptKBConfig:
     use_ln: bool = True
     use_full_img: bool = True
     use_regions: bool = True
+    use_probabilities: bool = False # Sigmoid scores instead of using raw scores for concept predictor inputs
 
     def __post_init__(self):
         if not self.use_full_img and not self.use_regions:
@@ -102,8 +104,42 @@ class ConceptKB:
         self._concepts = {concept.name : concept for concept in concepts}
 
     @property
+    def leaf_concepts(self) -> list[Concept]:
+        return [concept for concept in self.concepts if not concept.child_concepts]
+
+    @property
+    def root_concepts(self) -> list[Concept]:
+        return [concept for concept in self.concepts if not concept.parent_concepts]
+
+    @property
     def concepts(self) -> list[Concept]:
         return self.get_concepts()
+
+    def children_of(self, concepts: list[Concept]) -> list[Concept]:
+        children = {}
+
+        # Construct children in ordered manner
+        for concept in concepts:
+            for child_name, child in concept.child_concepts.items():
+                if child_name not in children:
+                    children[child_name] = child
+
+        return list(children.values())
+
+    def rooted_subtree(self, concept: Concept) -> list[Concept]:
+        '''
+            Returns the rooted subtree of a concept.
+        '''
+        subtree = {}
+        queue = [concept]
+
+        while queue:
+            curr = queue.pop()
+            if curr.name not in subtree:
+                subtree[curr.name] = curr
+                queue.extend(curr.child_concepts.values())
+
+        return list(subtree.values())
 
     def parameters(self):
         '''
@@ -217,11 +253,17 @@ class ConceptKB:
                 query = f'{attr} of {determiner.determine(attr)}{concept.name}' if encode_class else attr
                 concept.zs_attributes.append(Attribute(attr, is_necessary=attr_type == 'required', query=query))
 
-    def add_concept(self, concept: Concept):
+    def add_concept(self, concept: Union[str, Concept]):
+        if isinstance(concept, str):
+            concept = Concept(name=concept)
+
         self._concepts[concept.name] = concept
 
-    def remove_concept(self, name: str):
-        self._concepts.pop(name)
+        return concept
+
+    def remove_concept(self, concept: Union[str, Concept]):
+        name = concept if isinstance(concept, str) else concept.name
+        return self._concepts.pop(name)
 
     def get_concept(self, name: str) -> Concept:
         return self._concepts[name]
