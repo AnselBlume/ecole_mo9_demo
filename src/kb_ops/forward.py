@@ -66,7 +66,7 @@ class ConceptKBForwardBase:
         concepts: list[Concept] = None,
         do_backward: bool = False,
         backward_every_n_concepts: int = None,
-        return_segmentations: bool = False,
+        return_segmentations: bool = False
     ):
 
         # Check __name__ instead of isinstance to avoid pickle versioning issues
