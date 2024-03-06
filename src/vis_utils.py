@@ -109,6 +109,9 @@ def image_from_masks(
             superimpose_on_image = pil_to_tensor(superimpose_on_image)
             return_as_pil = True
 
+        else:
+            return_as_pil = False
+
         alpha = superimpose_alpha
         background = superimpose_on_image
     else:
