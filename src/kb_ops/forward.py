@@ -19,11 +19,7 @@ class ConceptKBForwardBase:
         '''
 
         self.concept_kb = concept_kb
-
-        self.label_to_index: dict[str,int] = {concept.name : i for i, concept in enumerate(concept_kb)}
-        self.label_to_index[self.UNK_LABEL] = -1 # For unknown labels
-        self.index_to_label: dict[int,str] = {v : k for k, v in self.label_to_index.items()}
-
+        self.recompute_labels()
         self.feature_pipeline = feature_pipeline
 
     def _get_dataloader(self, dataset: Dataset, is_train: bool, **dl_kwargs):
@@ -38,7 +34,7 @@ class ConceptKBForwardBase:
 
         kwargs.update(dl_kwargs)
 
-        return DataLoader(**kwargs)
+        return DataLoader(dataset, **kwargs)
 
     def _determine_data_key(self, dataset: Union[ImageDataset, PresegmentedDataset, FeatureDataset]):
         if isinstance(dataset, FeatureDataset):
@@ -54,10 +50,17 @@ class ConceptKBForwardBase:
     def recompute_labels(self):
         '''
             Recomputes label to index (and reverse) mappings based on the current ConceptKB.
+            Additionally computes the rooted subtree for each concept to serve as positive labels.
         '''
         self.label_to_index = {concept.name : i for i, concept in enumerate(self.concept_kb)}
         self.label_to_index[self.UNK_LABEL] = -1 # For unknown labels
         self.index_to_label = {v : k for k, v in self.label_to_index.items()}
+
+        # Compute rooted subtree (descendants + curr node) for each concept to serve as positive labels
+        self.concept_labels = {
+            concept.name: {c.name for c in self.concept_kb.rooted_subtree(concept)}
+            for concept in self.concept_kb
+        }
 
     def forward_pass(
         self,
@@ -66,7 +69,8 @@ class ConceptKBForwardBase:
         concepts: list[Concept] = None,
         do_backward: bool = False,
         backward_every_n_concepts: int = None,
-        return_segmentations: bool = False
+        return_segmentations: bool = False,
+        seg_kwargs: dict = {}
     ):
 
         # Check __name__ instead of isinstance to avoid pickle versioning issues
@@ -74,7 +78,7 @@ class ConceptKBForwardBase:
             features_were_provided = True
 
         else: # Not using features
-            image, segmentations = self.feature_pipeline.get_image_and_segmentations(image_data)
+            image, segmentations = self.feature_pipeline.get_image_and_segmentations(image_data, **seg_kwargs)
             features_were_provided = False
 
         # Get all concept predictions
@@ -116,7 +120,7 @@ class ConceptKBForwardBase:
 
             # Compute loss and potentially perform backward pass
             if text_label is not None:
-                binary_label = torch.tensor(int(concept.name == text_label), dtype=score.dtype, device=score.device)
+                binary_label = torch.tensor(int(text_label in self.concept_labels[concept.name]), dtype=score.dtype, device=score.device)
                 concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(self.concept_kb)
 
                 curr_loss += concept_loss

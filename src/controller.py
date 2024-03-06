@@ -181,6 +181,7 @@ class Controller:
         self.predictor.recompute_labels()
 
         return concept
+
     def clear_concepts(self):
         for concept in self.concepts:
             self.concepts.remove_concept(concept.name)

@@ -108,10 +108,13 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
         # Prepare concepts
         if concepts is None:
-            concepts = list(self.concept_kb)
-
             if leaf_nodes_only:
-                concepts = [c for c in concepts if not c.children]
+                logger.info('Training leaf concepts only')
+                concepts = self.concept_kb.leaf_concepts
+
+            else:
+                logger.info('Training all concepts in ConceptKB, including internal nodes')
+                concepts = list(self.concept_kb)
 
         data_key = self._determine_data_key(train_ds)
         train_dl = self._get_dataloader(train_ds, is_train=True)
@@ -285,13 +288,24 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             return results
 
     @torch.inference_mode()
-    def validate(self, val_dl: DataLoader, **forward_kwargs):
+    def validate(self, val_dl: DataLoader, leaf_nodes_only_for_accuracy=True, **forward_kwargs):
         self.concept_kb.eval()
 
         total_loss = 0
         predicted_concept_outputs = []
         acc = Accuracy(task='multiclass', num_classes=len(self.concept_kb))
         data_key = self._determine_data_key(val_dl.dataset)
+
+        if leaf_nodes_only_for_accuracy:
+            leaf_name_to_leaf_ind = {c.name : i for i, c in enumerate(self.concept_kb.leaf_concepts)}
+
+            global_ind_to_leaf_ind = {
+                global_ind : leaf_name_to_leaf_ind[concept.name]
+                for global_ind, concept in enumerate(self.concept_kb.concepts)
+                if concept.name in leaf_name_to_leaf_ind
+            } # Used to map the global true index to its corresponding leaf concept index
+
+            forward_kwargs['concepts'] = self.concept_kb.leaf_concepts
 
         for batch in tqdm(val_dl, desc='Validation'):
             image, text_label = batch[data_key], batch['label']
@@ -301,8 +315,16 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
             # Compute predictions and accuracy
             scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
+
             pred_ind = scores.argmax(dim=0, keepdim=True) # (1,) IntTensor
-            true_ind = torch.tensor(self.label_to_index[text_label[0]]).unsqueeze(0) # (1,)
+
+            # Compute true index
+            true_ind = self.label_to_index[text_label[0]] # Global index
+
+            if leaf_nodes_only_for_accuracy: # To leaf index
+                true_ind = global_ind_to_leaf_ind[true_ind]
+
+            true_ind = torch.tensor(true_ind).unsqueeze(0) # (1,)
 
             acc(pred_ind, true_ind)
 

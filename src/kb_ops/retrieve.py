@@ -86,10 +86,9 @@ class CLIPConceptRetriever:
 
     def add_concept(self, concept: Concept, update_cache=False):
         # Add to faiss index (and concept list)
-        inputs = self.clip_processor(text=[concept.name], images=None, return_tensors='pt', padding=True)
-        outputs = self.clip_model(**inputs)
+        embeds = self._get_text_embeds([concept.name.lower().strip()])
         self.concepts.append(concept)  # Update the 'self._concepts' list
-        self._index.add(outputs.text_embeds.detach().numpy())  # Update the faiss index
+        self._index.add(embeds)  # Update the faiss index
 
         if update_cache:
             if not self.cache_path:
