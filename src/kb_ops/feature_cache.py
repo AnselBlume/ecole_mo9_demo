@@ -42,6 +42,18 @@ class CachedImageFeatures:
     def __getitem__(self, concept_name: str):
         return self.get_image_features(concept_name)
 
+    @staticmethod
+    def from_image_features(self, image_features: ImageFeatures):
+        cached_features = CachedImageFeatures()
+
+        cached_features.image_features = image_features.image_features
+        cached_features.region_features = image_features.region_features
+        cached_features.region_weights = image_features.region_weights
+        cached_features.trained_attr_img_scores = image_features.trained_attr_img_scores
+        cached_features.trained_attr_region_scores = image_features.trained_attr_region_scores
+
+        return cached_features
+
 class ConceptKBFeatureCacher:
     '''
         Assumes that every ConceptExample has an image_path.
