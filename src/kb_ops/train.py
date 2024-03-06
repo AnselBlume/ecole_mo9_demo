@@ -1,19 +1,16 @@
 import os
 import torch
 import torch.nn.functional as F
-from image_processing import LocalizeAndSegmentOutput
-from torch.utils.data import DataLoader, Dataset
 from model.concept import ConceptKB, Concept, ConceptExample
-from model.concept_predictor import ConceptPredictorOutput
-from .feature_cache import CachedImageFeatures
 from wandb.sdk.wandb_run import Run
-from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset, FeatureDataset
+from .predict import ConceptKBPredictor
+from .dataset import ImageDataset, PresegmentedDataset, FeatureDataset
 from .feature_pipeline import ConceptKBFeaturePipeline
 from typing import Union, Optional, Any, Literal, Callable
+from torch.utils.data import DataLoader
+from torchmetrics import Accuracy
 import numpy as np
 from tqdm import tqdm
-from PIL.Image import Image
-from torchmetrics import Accuracy
 import logging
 from .forward import ConceptKBForwardBase
 
@@ -55,6 +52,8 @@ class ConceptKBExampleSampler:
 
             Returns: Tuple of (sampled_examples, sampled_concept_names)
         '''
+        # TODO Sample descendants of each negative concept if the concept is not a leaf node
+
         # Decide how many negatives to sample per concept
         n_neg_per_concept = max(int(min_neg_ratio_per_concept * n_pos_examples), 1)
 
@@ -179,6 +178,8 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         min_prob_margin: float = .1,
         n_epochs_between_predictions: int = 5,
         sample_all_negatives: bool = False,
+        sample_only_siblings: bool = False,
+        sample_only_leaf_nodes: bool = True,
         post_sampling_hook: Callable[[list[ConceptExample]], Any] = None,
         n_epochs: int = 10,
         **train_kwargs
@@ -212,9 +213,21 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         # Train for a fixed number of epochs or until examples are predicted correctly
         else:
             # Create examples and labels
-            # TODO Change this to only sample leaf nodes when a concept hierarchy is implemented
-            neg_concepts = [c for c in self.concept_kb if c != concept]
 
+            # Sample the negative concepts
+            if sample_only_siblings:
+                neg_concepts = [
+                    child
+                    for parent in concept.parent_concepts.values()
+                    for child in parent.child_concepts.values()
+                    if child != concept
+                ]
+            elif sample_only_leaf_nodes:
+                neg_concepts = self.concept_kb.leaf_concepts
+            else:
+                neg_concepts = [c for c in self.concept_kb if c != concept]
+
+            # Sample the negative examples from the negative concepts
             if sample_all_negatives:
                 neg_examples, neg_concept_names = self.sampler.get_all_examples(neg_concepts)
             else:
@@ -254,15 +267,16 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 results = self.train(train_ds, None, n_epochs=n_epochs, **train_kwargs)
 
             else: # stopping_condition == 'until_correct'
+                predictor = ConceptKBPredictor(self.concept_kb, self.feature_pipeline)
                 curr_epoch = 0
-                target_concept_index = self.label_to_ind[concept.name]
+                target_concept_index = predictor.leaf_name_to_leaf_ind[concept.name]
 
                 while True:
                     # Train for one epoch then check the probability margins
                     curr_epoch += 1
                     results = self.train(train_ds, None, n_epochs=n_epochs_between_predictions, **train_kwargs)
 
-                    predictions = self.predict(val_dl)
+                    predictions = predictor.predict(val_dl)
 
                     # Check probability margin of each example for stopping condition
                     all_scores = torch.stack([pred['predictors_scores'] for pred in predictions])

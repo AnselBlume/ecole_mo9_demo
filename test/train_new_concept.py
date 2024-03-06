@@ -31,7 +31,7 @@ if __name__ == '__main__':
     img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
 
     # %% Load ConceptKB
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_05-00:26:23-8y5ustqq-new_seg_locs/concept_kb_epoch_15.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_06-07:22:08-h5hwa94c-features_hierarchical_v1/concept_kb_epoch_15.pt'
     concept_kb = ConceptKB.load(ckpt_path)
 
     # %% Build controller components
@@ -52,8 +52,9 @@ if __name__ == '__main__':
     concept = controller.retrieve_concept(concept_name)
     concept.examples = [ConceptExample(image_path=img_path) for img_path in img_paths]
 
-    # %% Save internal generation time by setting the feature paths manually instead of having the controller regenerate them
-    set_feature_paths([concept], features_dir=cacher.features_dir, segmentations_dir=cacher.segmentations_dir)
+    # %% Save internal generation time by setting the segmentation paths manually instead of having the controller regenerate them
+    # NOTE do not set features here, as they are tied to a particular checkpoint, so changing the checkpoing will change the number of zs features
+    set_feature_paths([concept], segmentations_dir=cacher.segmentations_dir)
 
     # %% Train concept in isolation
     controller.train_concept(concept_name, until_correct_examples=concept.examples)
