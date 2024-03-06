@@ -4,6 +4,7 @@ import pickle
 import os 
 import sys
 import numpy as np
+import gzip 
 import json 
 import cv2
 from tqdm import tqdm
@@ -17,7 +18,11 @@ import torch.nn.functional as F
 from pathlib import Path
 import clip
 import pickle 
-
+import shutil 
+import logging 
+import subprocess 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 class CenterPadding(torch.nn.Module):
     def __init__(self, multiple = 14):
         super().__init__()
@@ -60,7 +65,15 @@ def extract_dino_v2(args,model,image):
         features_out = model.get_intermediate_layers(img, n=layers,reshape=True)    
         features = torch.cat(features_out, dim=1) # B, C, H, W 
     return features.detach().cpu().to(torch.float32).numpy()
-
+def e(args):
+    '''
+    Save file as tar file 
+    '''
+    dir_name = os.path.dirname(args.feature_dir)
+    splits = os.path.split(args.feature_dir)
+    command = f'cd {dir_name}; tar -czf {args.feature_dir_save}.tar.gz {splits[-1]}'
+    ret = subprocess.run(command,capture_output=True,shell=True)
+    logger.info(f'Saved files to {ret}')
 def extract_features(model, args, preprocess=None):
     all_image_files = [f for f in os.listdir(args.image_dir) if os.path.isfile(os.path.join(args.image_dir, f))]
     model = model.to(device='cuda')
@@ -83,7 +96,8 @@ def extract_features(model, args, preprocess=None):
             features = extract_dino_v2(args,model,image)
         if not os.path.exists(args.feature_dir):
             os.makedirs(args.feature_dir)
-        with open(os.path.join(args.feature_dir,image_name.replace(filename_extension,'.pkl')),'wb+') as fopen:
+        #np.savez_compressed(os.path.join(args.feature_dir,image_name.replace(filename_extension,'.npz')),features=features)
+        with open(os.path.join(args.feature_dir,image_name.replace(filename_extension,'.npy')),'wb+') as fopen:
             pickle.dump(features,fopen)
 
 
@@ -97,6 +111,12 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--feature_dir",
+        type=str,
+        default=None,
+        help="Location of feature files",
+    )
+    parser.add_argument(
+        "--feature_dir_save",
         type=str,
         default=None,
         help="Location of feature files",
@@ -118,7 +138,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--layers",
         type=str,
-        default="[23]",
+        default="[2,5,8,11]",
         help="List of layers or number of last layers to take"
     )
     parser.add_argument(
@@ -138,10 +158,16 @@ if __name__ == '__main__':
         default='fp16',
         choices=['fp16','fp32','bf16']
     )
+    parser.add_argument(
+        "--save_every",
+        type=int,
+        default=1000,
+        help="Save as tar file every",
+    )
     args = parser.parse_args([
         '--image_dir','/scratch/bcgp/datasets/visual_genome/images',
-        '--feature_dir','/scratch/bcgp/datasets/visual_genome/features',
-        '--dtype','bf16'
+        '--dtype','bf16',
+        '--feature_dir','/scratch/bcgp/michal5/dino_features_early_layer'
     ])
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args.device = device 
