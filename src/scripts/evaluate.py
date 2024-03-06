@@ -1,5 +1,5 @@
 # %%
-import os # TODO Change DesCo CUDA device here
+import os # Change DesCo CUDA device here
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 import sys
