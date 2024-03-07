@@ -327,12 +327,17 @@ def plot_concept_differences(
     top_k=5,
     figsize=(10,7),
     return_img=False,
-    weight_by_magnitudes: bool = True
+    weight_by_magnitudes: bool = True,
+    take_abs_of_weights: bool = False
 ):
     # Compute top attribute weight differences
     concept1, concept2 = concepts
     weights1 = concept1.predictor.img_trained_attr_weights.weights.data.cpu()
     weights2 = concept2.predictor.img_trained_attr_weights.weights.data.cpu()
+
+    if take_abs_of_weights:
+        weights1 = weights1.abs()
+        weights2 = weights2.abs()
 
     diffs = (weights1 - weights2).abs()
 

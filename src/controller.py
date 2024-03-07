@@ -163,6 +163,8 @@ class Controller:
 
         # Otherwise, Concept obj provided; don't modify name
 
+        # TODO add error check to make sure that the concept doesn't already exist in the ConceptKB
+
         # Get zero shot attributes (query LLM)
         self.concepts.init_zs_attrs(
             concept,
@@ -297,7 +299,13 @@ class Controller:
 
         attr_names = self.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
 
-        return plot_concept_differences((concept1, concept2), attr_names, weight_by_magnitudes=weight_by_magnitudes, return_img=True)
+        return plot_concept_differences(
+            (concept1, concept2),
+            attr_names,
+            weight_by_magnitudes=weight_by_magnitudes,
+            take_abs_of_weights=not self.concepts.cfg.use_probabilities,
+            return_img=True
+        )
 
     def compare_predictions(
         self,
