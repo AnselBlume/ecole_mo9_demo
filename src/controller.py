@@ -353,7 +353,7 @@ class Controller:
             (concept1, concept2),
             attr_names,
             weight_by_magnitudes=weight_by_magnitudes,
-            take_abs_of_weights=not self.concepts.cfg.use_probabilities,
+            take_abs_of_weights=self.concepts.cfg.use_ln,
             return_img=True
         )
 
@@ -457,6 +457,7 @@ class Controller:
         index: int,
         attr_name: str,
         attr_type: Literal['trained', 'zs'] = 'trained',
+        use_abs: bool = False,
         return_all_metadata: bool = False
     ) -> Union[torch.BoolTensor, dict]:
         '''
@@ -467,6 +468,7 @@ class Controller:
                 index: Index of the cached prediction to use.
                 attr_name: Name of the attribute to visualize.
                 attr_type: Type of attribute to visualize. Must be 'trained' or 'zs'.
+                use_abs: If True, finds the region which maximizes the (unsigned) magnitude of the score.
                 return_all_metadata: If True, returns a dict with keys 'part_masks', 'maximizing_index',
                     and 'attr_scores_by_region'. If False, returns the part mask BoolTensor.
 
@@ -487,6 +489,10 @@ class Controller:
 
         attr_index = attr_names.index(attr_name)
         attr_scores_by_region = attr_scores[:, attr_index] # (n_regions,)
+
+        if use_abs: # Find region which maximizes magnitude of score, regardless of sign
+            attr_scores_by_region = attr_scores_by_region.abs()
+
         maximizing_region_ind = attr_scores_by_region.argmax().item()
 
         if return_all_metadata:
