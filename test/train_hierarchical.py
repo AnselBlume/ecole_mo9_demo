@@ -60,6 +60,7 @@ def get_parser():
     parser.add_argument('--wandb_dir', default='/shared/nas2/blume5/fa23/ecole', help='WandB log directory')
 
     parser.add_argument('--predictor.use_ln', type=bool, default=True, help='Whether to use LayerNorm')
+    parser.add_argument('--predictor.use_probabilities', type=bool, default=False, help='Whether to sigmoid raw scores instead of layer-norming them for prediction')
     parser.add_argument('--predictor.use_full_img', type=bool, default=True, help='Whether to use full image as input')
     parser.add_argument('--predictor.use_regions', type=bool, default=True, help='Whether to use regions as input')
     parser.add_argument('--predictor.encode_class_in_zs_attr', type=bool, default=False, help='Whether to encode class in zero-shot attributes')
@@ -125,6 +126,7 @@ if __name__ == '__main__':
         img_feature_dim=feature_extractor.clip.config.projection_dim,
         n_trained_attrs=N_ATTRS_SUBSET,
         use_ln=args.predictor.use_ln,
+        use_probabilities=args.predictor.use_probabilities,
         use_full_img=args.predictor.use_full_img,
         use_regions=args.predictor.use_regions
     ), llm_client=llm_client)

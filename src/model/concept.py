@@ -91,13 +91,16 @@ class ConceptKBConfig:
     img_feature_dim: int = 768
     n_trained_attrs: int = None
     use_ln: bool = True
+    use_probabilities: bool = False # Sigmoid scores instead of using raw scores for concept predictor inputs
     use_full_img: bool = True
     use_regions: bool = True
-    use_probabilities: bool = False # Sigmoid scores instead of using raw scores for concept predictor inputs
 
     def __post_init__(self):
         if not self.use_full_img and not self.use_regions:
             raise ValueError('At least one of use_full_img and use_regions must be True.')
+
+        if self.use_ln and self.use_probabilities:
+            raise ValueError('Cannot use both layer norm and probabilities.')
 
 class ConceptKB:
     def __init__(self, concepts: list[Concept] = []):
@@ -219,6 +222,7 @@ class ConceptKB:
             n_trained_attrs=self.cfg.n_trained_attrs,
             n_zs_attrs=len(concept.zs_attributes),
             use_ln=self.cfg.use_ln,
+            use_probabilities=self.cfg.use_probabilities,
             use_full_img=self.cfg.use_full_img,
             use_regions=self.cfg.use_regions
         )

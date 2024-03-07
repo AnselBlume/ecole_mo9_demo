@@ -77,6 +77,7 @@ class ConceptPredictor(nn.Module):
         n_zs_attrs: int,
         use_bias=True,
         use_ln=True,
+        use_probabilities=False,
         use_full_img=True,
         use_regions=True
     ):
@@ -98,7 +99,11 @@ class ConceptPredictor(nn.Module):
             + (use_full_img + use_regions) * n_zs_attrs
         )
 
+        if use_ln and use_probabilities:
+            raise ValueError("Layer normalization and probabilities cannot be used together")
+
         self.ln = nn.LayerNorm(self.n_features) if use_ln else nn.Identity()
+        self.prob_scaler = nn.Sigmoid() if use_probabilities else nn.Identity()
 
         self.img_features_predictor = nn.Linear(img_feature_dim, 1, bias=use_bias) # This will only be used if use_full_img is True
         self.img_features_weight = nn.Linear(1, 1, bias=use_bias) if self.use_full_img else nn.Identity()
@@ -168,6 +173,7 @@ class ConceptPredictor(nn.Module):
             ], dim=1) # (1, 1 + 1 + 2*n_trained_attrs + 2*n_zs_attrs)
 
             all_scores = self.ln(all_scores)
+            all_scores = self.prob_scaler(all_scores)
 
             # Split scores and apply weights of linear model
             img_score, region_score, trained_attr_img_score, trained_attr_region_score, zs_attr_img_score, zs_attr_region_score = all_scores.split((
