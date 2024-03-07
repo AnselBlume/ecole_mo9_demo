@@ -185,7 +185,7 @@ class LocalizerAndSegmenter:
                     filtered_part_masks.append(part_masks[i])
                     filtered_crop_parts.append(crop)
 
-            output.part_masks = torch.stack(filtered_part_masks)
+            output.part_masks = torch.stack(filtered_part_masks) if filtered_part_masks else torch.tensor([])
             output.part_crops = filtered_crop_parts
 
         if concept_parts:
