@@ -23,7 +23,8 @@ class ConceptKBFeaturePipeline:
         concept_name: str = '',
         concept_parts: list[str] = [],
         remove_background: bool = True,
-        return_crops: bool = True
+        return_crops: bool = True,
+        use_bbox_for_crops: bool = False
     ) -> LocalizeAndSegmentOutput:
 
         return self.loc_and_seg.localize_and_segment(
@@ -31,7 +32,8 @@ class ConceptKBFeaturePipeline:
             concept_name=concept_name,
             concept_parts=concept_parts,
             remove_background=remove_background,
-            return_crops=return_crops
+            return_crops=return_crops,
+            use_bbox_for_crops=use_bbox_for_crops
         )
 
     def get_image_and_segmentations(

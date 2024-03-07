@@ -5,7 +5,8 @@ from image_processing.segment import Segmenter
 from image_processing.localize import Localizer, bbox_from_mask
 from feature_extraction import Sam, GLIPDemo
 from utils import ArticleDeterminer
-from torchvision.transforms.functional import pil_to_tensor
+from torchvision.transforms.functional import pil_to_tensor, to_pil_image
+from torchvision.utils import draw_bounding_boxes
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,8 @@ class LocalizerAndSegmenter:
         concept_name: str = '',
         concept_parts: list[str] = [],
         remove_background: bool = True,
-        return_crops: bool = True
+        return_crops: bool = True,
+        use_bbox_for_crops: bool = False
     ) -> LocalizeAndSegmentOutput:
         '''
             Localizes and segments the concept in the image in to parts.
@@ -157,7 +159,18 @@ class LocalizerAndSegmenter:
         )
 
         if return_crops:
-            part_crops = self.segmenter.crops_from_masks(image, part_masks, only_mask=remove_background)
+            if use_bbox_for_crops:
+                image_t = pil_to_tensor(image)
+                bboxes = bbox_from_mask(part_masks)
+
+                part_crops = [
+                    to_pil_image(draw_bounding_boxes(image_t, bbox[None,...], width=3, colors='red'))
+                    for bbox in bboxes
+                ]
+
+            else:
+                part_crops = self.segmenter.crops_from_masks(image, part_masks, only_mask=remove_background)
+
             logger.info(f'Generated {len(part_crops)} part crops from part masks')
 
             # Ignore part crops with a zero-dimension (caused by part mask being one-dimensional, e.g. a line)

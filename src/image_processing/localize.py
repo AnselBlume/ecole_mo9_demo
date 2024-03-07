@@ -49,6 +49,9 @@ def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool =
     if is_np:
         masks = torch.from_numpy(masks)
 
+    if len(masks) == 0:
+        return torch.zeros(0, 4).int() if not is_np else np.zeros((0, 4), dtype=int)
+
     # Convert masks to boolean and zero pad the masks to have regions on image edges
     # use the edges as boundaries
     masks = masks.bool()

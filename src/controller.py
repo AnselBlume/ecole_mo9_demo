@@ -82,14 +82,16 @@ class Controller:
         concept_name: str = '',
         concept_parts: list[str] = [],
         remove_background: bool = True,
-        return_crops: bool = True
+        return_crops: bool = True,
+        use_bbox_for_crops: bool = False
     ):
         return self.feature_pipeline.get_segmentations(
             image=image,
             concept_name=concept_name,
             concept_parts=concept_parts,
             remove_background=remove_background,
-            return_crops=return_crops
+            return_crops=return_crops,
+            use_bbox_for_crops=use_bbox_for_crops
         )
 
     def predict_from_zs_attributes(
