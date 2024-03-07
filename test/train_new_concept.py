@@ -53,7 +53,7 @@ if __name__ == '__main__':
     concept.examples = [ConceptExample(image_path=img_path) for img_path in img_paths]
 
     # %% Save internal generation time by setting the segmentation paths manually instead of having the controller regenerate them
-    # NOTE do not set features here, as they are tied to a particular checkpoint, so changing the checkpoing will change the number of zs features
+    # NOTE do not set features here, as they are tied to a particular checkpoint, so changing the checkpoint will change the number of zs features
     set_feature_paths([concept], segmentations_dir=cacher.segmentations_dir)
 
     # %% Train concept in isolation
