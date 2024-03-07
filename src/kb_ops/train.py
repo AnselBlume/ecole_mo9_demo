@@ -223,7 +223,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                     if child != concept
                 ]
             elif sample_only_leaf_nodes:
-                neg_concepts = self.concept_kb.leaf_concepts
+                neg_concepts = [c for c in self.concept_kb.leaf_concepts if c != concept]
             else:
                 neg_concepts = [c for c in self.concept_kb if c != concept]
 
@@ -235,9 +235,6 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
             all_samples = concept.examples + neg_examples
             all_labels = [concept.name] * len(concept.examples) + neg_concept_names
-
-            # all_samples = concept.examples # For debugging purposes, only train on positive examples
-            # all_labels = [concept.name] * len(concept.examples)
 
             if post_sampling_hook:
                 post_sampling_hook(all_samples)
