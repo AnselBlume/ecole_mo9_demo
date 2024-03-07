@@ -1,5 +1,4 @@
 # %%
-import torch
 from score import AttributeScorer
 from model.concept import ConceptKB, Concept, ConceptExample
 from PIL.Image import Image
@@ -8,8 +7,10 @@ from feature_extraction import FeatureExtractor
 from image_processing import LocalizerAndSegmenter
 from kb_ops import ConceptKBTrainer, ConceptKBPredictor
 from kb_ops.retrieve import CLIPConceptRetriever
+from kb_ops.train_test_split import split_from_paths
+from kb_ops.dataset import FeatureDataset
 from utils import ArticleDeterminer
-from typing import Union
+from typing import Union, Literal
 from llm import LLMClient
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
@@ -17,6 +18,7 @@ from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 from kb_ops.feature_cache import ConceptKBFeatureCacher
 from utils import to_device
 from vis_utils import plot_predicted_classes, plot_image_differences, plot_concept_differences
+from itertools import chain
 
 logger = logging.getLogger(__name__)
 
@@ -211,11 +213,38 @@ class Controller:
         '''
             Trains all concepts in the concept knowledge base from each concept's example_imgs.
         '''
-        pass
+        self.cacher.cache_segmentations()
+        self.cacher.cache_features()
 
-    def train_concept(self, concept_name: str, until_correct_examples: list[ConceptExample] = [], sample_all_negatives: bool = False):
+        all_feature_paths = list(chain.from_iterable([
+            [ex.image_features_path for ex in c.examples]
+            for c in self.concepts
+        ]))
+
+        (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_paths(all_feature_paths)
+        train_ds = FeatureDataset(trn_p, trn_l)
+        val_ds = FeatureDataset(val_p, val_l)
+
+        self.trainer.train(
+            train_ds=train_ds,
+            val_ds=val_ds,
+            n_epochs=15,
+            lr=1e-2,
+            backward_every_n_concepts=10,
+            ckpt_dir=None
+        )
+
+    def train_concept(
+        self,
+        concept_name: str,
+        stopping_condition: Literal['n_epochs', 'until_correct'] = 'until_correct',
+        until_correct_examples: list[ConceptExample] = [],
+        n_epochs: int = 10,
+        sample_all_negatives: bool = False
+    ):
         '''
-            Retrains the concept until it correctly predicts the given example images.
+            Retrains the concept until it correctly predicts the given example images if until_correct_examples
+            are provided, else for n_epochs epochs.
         '''
         # Try to retrieve concept
         try:
@@ -225,15 +254,18 @@ class Controller:
             logger.info(f'No concept found for "{concept_name}". Creating new concept.')
             concept = self.add_concept(concept_name)
 
-        # If until_correct_examples are not already in the Concept, add them to the examples list
-        if not until_correct_examples:
-            logger.info('No examples provided; considering all concept examples as stopping condition via correctness')
+        if stopping_condition == 'until_correct':
+            if not until_correct_examples:
+                logger.info('No examples provided; considering all concept examples as stopping condition via correctness')
+                until_correct_examples = concept.examples
 
-        else: # Identify concept examples by their image_paths
-            image_paths = {ex.image_path for ex in concept.examples}
-            for example in until_correct_examples:
-                if example.image_path not in image_paths:
-                    concept.examples.append(example)
+            # If until_correct_examples are not already in the Concept, add them to the examples list
+            else:
+                # Identify concept examples by their image_paths
+                image_paths = {ex.image_path for ex in concept.examples}
+                for example in until_correct_examples:
+                    if example.image_path not in image_paths:
+                        concept.examples.append(example)
 
         # Ensure features are prepared, only generating those which don't already exist or are dirty
         self.cacher.cache_segmentations([concept], only_uncached_or_dirty=True)
@@ -243,16 +275,31 @@ class Controller:
         # This is faster than calling recache_zs_attr_features on all examples in the concept_kb
         cache_hook = lambda exs: self.cacher.recache_zs_attr_features(concept, examples=exs)
 
-        # Train concept
-        self.trainer.train_concept(
-            concept,
-            stopping_condition='until_correct',
-            until_correct_examples=until_correct_examples,
-            sample_all_negatives=sample_all_negatives,
-            post_sampling_hook=cache_hook,
-            n_epochs_between_predictions=1,
-            lr=1e-2 # high learning rate so hopefully doesn't take too long to reach margins
-        )
+        if stopping_condition == 'n_epochs' or len(self.concepts) <= 1:
+            if len(self.concepts) == 1:
+                logger.info('No other concepts in the ConceptKB; training concept in isolation for fixed number of epochs.')
+
+            self.trainer.train_concept(
+                concept,
+                stopping_condition='n_epochs',
+                n_epochs=n_epochs,
+                post_sampling_hook=cache_hook,
+                lr=1e-2
+            )
+
+        elif stopping_condition == 'until_correct':
+            self.trainer.train_concept(
+                concept,
+                stopping_condition='until_correct',
+                until_correct_examples=until_correct_examples,
+                sample_all_negatives=sample_all_negatives,
+                post_sampling_hook=cache_hook,
+                n_epochs_between_predictions=1,
+                lr=1e-2 # high learning rate so hopefully doesn't take too long to reach margins
+            )
+
+        else:
+            raise ValueError('Unrecognized stopping condition')
 
     def set_zs_attributes(self, concept_name: str, zs_attrs: list[str]):
         concept = self.retrieve_concept(concept_name)
