@@ -173,16 +173,19 @@ class LocalizerAndSegmenter:
 
             logger.info(f'Generated {len(part_crops)} part crops from part masks')
 
-            # Ignore part crops with a zero-dimension (caused by part mask being one-dimensional, e.g. a line)
+            # Ignore part masks where the crop has a zero-dimension (caused by part mask being one-dimensional, e.g. a line)
+            filtered_part_masks = []
             filtered_crop_parts = []
             for i, crop in enumerate(part_crops):
                 if crop.size[0] == 0 or crop.size[1] == 0:
-                    logger.warning(f'Part crop {i} has a zero-dimension; skipping. This will cause a mismatch with part masks.')
+                    logger.warning(f'Part crop {i} has a zero-dimension; filtering out part mask and crop')
                     continue
 
                 else:
+                    filtered_part_masks.append(part_masks[i])
                     filtered_crop_parts.append(crop)
 
+            output.part_masks = torch.stack(filtered_part_masks)
             output.part_crops = filtered_crop_parts
 
         if concept_parts:

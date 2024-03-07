@@ -1,4 +1,5 @@
 # %%
+import torch
 from score import AttributeScorer
 from model.concept import ConceptKB, Concept, ConceptExample
 from PIL.Image import Image
@@ -451,6 +452,54 @@ class Controller:
             return_img=True,
         )
 
+    def get_maximizing_region(
+        self,
+        index: int,
+        attr_name: str,
+        attr_type: Literal['trained', 'zs'] = 'trained',
+        return_all_metadata: bool = False
+    ) -> Union[torch.BoolTensor, dict]:
+        '''
+            Gets the part mask corresponding to the region with the highest score for the
+            specified attribute. Assumes the prediction has already been cached.
+
+            Arguments:
+                index: Index of the cached prediction to use.
+                attr_name: Name of the attribute to visualize.
+                attr_type: Type of attribute to visualize. Must be 'trained' or 'zs'.
+                return_all_metadata: If True, returns a dict with keys 'part_masks', 'maximizing_index',
+                    and 'attr_scores_by_region'. If False, returns the part mask BoolTensor.
+
+            Returns: If return_all_metadata is False, returns the part mask. Otherwise, returns a dict
+                with keys 'part_masks', 'maximizing_index', and 'attr_scores_by_region'.
+
+        '''
+        prediction = self.cached_predictions[index]
+
+        if attr_type == 'trained':
+            attr_names = self.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
+            attr_scores = prediction['predicted_concept_outputs'].trained_attr_region_scores
+
+        else:
+            assert attr_type == 'zs'
+            attr_names = [a.name for a in self.concepts[prediction['predicted_label']].zs_attributes]
+            attr_scores = prediction['predicted_concept_outputs'].zs_attr_region_scores
+
+        attr_index = attr_names.index(attr_name)
+        attr_scores_by_region = attr_scores[:, attr_index] # (n_regions,)
+        maximizing_region_ind = attr_scores_by_region.argmax().item()
+
+        if return_all_metadata:
+            return {
+                'part_masks': prediction['segmentations'].part_masks,
+                'maximizing_index': maximizing_region_ind,
+                'attr_scores_by_region': attr_scores_by_region
+            }
+
+        else:
+            maximizing_region_mask = prediction['segmentations'].part_masks[maximizing_region_ind]
+            return maximizing_region_mask
+
     def explain_prediction(self, index: int = -1):
         # See scripts/vis_contributions.py
         pass
@@ -468,7 +517,7 @@ if __name__ == '__main__':
 
     # %%
     img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_05-00:26:23-8y5ustqq-new_seg_locs/concept_kb_epoch_15.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_07-06:33:43-kscq1khp-features-hierarchical_v1/concept_kb_epoch_15.pt'
 
     # %%
     kb = ConceptKB.load(ckpt_path)
