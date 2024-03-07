@@ -187,7 +187,8 @@ def plot_predicted_classes(
     scores: torch.Tensor = prediction['predictors_scores'].sigmoid() # (n,)
     names: list = prediction['concept_names']
 
-    values, indices = scores.topk(n_classes)
+    top_k = min(n_classes, len(names))
+    values, indices = scores.topk(top_k)
     names = [names[i] for i in indices]
 
     # Reverse for plot so highest score is at top
@@ -250,6 +251,8 @@ def plot_image_differences(
     probs2 = attr_probs2.squeeze()
 
     diffs = (probs1 - probs2).abs()
+
+    top_k = min(top_k, len(attr_names))
 
     if weight_imgs_by_predictors:
         assert len(weight_imgs_by_predictors) == 2
@@ -340,6 +343,8 @@ def plot_concept_differences(
         weights2 = weights2.abs()
 
     diffs = (weights1 - weights2).abs()
+
+    top_k = min(top_k, len(trained_attr_names))
 
     if weight_by_magnitudes:
         # More heavily weight the differences by those attributes which are highly weighted by at least one concept
