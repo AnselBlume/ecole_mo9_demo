@@ -62,8 +62,11 @@ class CLIPConceptRetriever:
         return embeds
 
     def rebuild_index(self):
+        if not self._concepts:
+            return
+
         logger.info('[ Computing text embeddings for FAISS index ]')
-        concept_names = [self._normalize_name(c.name) for c in concepts]
+        concept_names = [self._normalize_name(c.name) for c in self._concepts]
 
         self.id_counter = 0
         ids = np.arange(self.id_counter, self.id_counter + len(concept_names))
@@ -109,6 +112,11 @@ class CLIPConceptRetriever:
         return retrieved_concepts
 
     def add_concept(self, concept: Concept, update_cache=False):
+        if not self._concepts:
+            self._concepts.append(concept)
+            self.rebuild_index()
+            return
+
         # See https://github.com/facebookresearch/faiss/wiki/Getting-started
         # Add to faiss index (and concept list)
         name = self._normalize_name(concept.name)
