@@ -523,7 +523,7 @@ if __name__ == '__main__':
 
     # %%
     img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_07-06:33:43-kscq1khp-features-hierarchical_v1/concept_kb_epoch_15.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_07-17:43:49-bxbj2ill-features-hierarchical_v3-no_ln/concept_kb_epoch_50.pt'
 
     # %%
     kb = ConceptKB.load(ckpt_path)

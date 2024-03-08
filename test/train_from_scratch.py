@@ -55,7 +55,7 @@ if __name__ == '__main__':
     set_feature_paths([concept], segmentations_dir=cache_dir + '/segmentations')
 
     # %% Train pizza cutter
-    controller.train_concept('pizza cutter')
+    controller.train_concept(concept_name)
 
     # %% Add dog concept
     img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/dogs'
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     set_feature_paths([concept], segmentations_dir=cache_dir + '/segmentations')
 
     # %% Train concept in isolation
-    controller.train_concept('dog')
+    controller.train_concept(concept_name)
 
     # %% Predict examples for verification
     for img_path in img_paths:
