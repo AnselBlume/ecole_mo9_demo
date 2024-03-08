@@ -39,22 +39,23 @@ class FeatureExtractor(nn.Module):
 
         img_features = visual_features[:1] # (1, d_img)
         region_features = visual_features[1:] # (n_regions, d_img)
+        device = region_features.device
 
         if len(zs_attrs):
             zs_features = self.clip_feature_extractor(texts=zs_attrs)
             zs_scores = self.zs_attr_predictor.feature_score(visual_features, zs_features) # (1 + n_regions, n_zs_attrs)
         else:
-            zs_scores = torch.tensor([[]]) # This will be a nop in the indexing below
+            zs_scores = torch.tensor([[]], device=device) # This will be a nop in the indexing below
 
         if cached_trained_attr_scores is None:
             if len(self.trained_clip_attr_predictor.attr_names):
                 trained_attr_scores = self.trained_clip_attr_predictor.predict_from_features(visual_features) # (1 + n_regions, n_learned_attrs)
             else:
-                trained_attr_scores = torch.tensor([[]]) # (1, 0); nop in the indexing below
+                trained_attr_scores = torch.tensor([[]], device=device) # (1, 0); nop in the indexing below
         else:
             trained_attr_scores = cached_trained_attr_scores
 
-        region_weights = torch.ones(len(regions), device=trained_attr_scores.device) / len(regions) # Uniform weights
+        region_weights = torch.ones(len(regions), device=device) / len(regions) # Uniform weights
 
         return ImageFeatures(
             image_features=img_features,

@@ -206,6 +206,9 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
                 sampling_seed: Seed for random number generator used for sampling negative examples.
         '''
+        if not concept.examples:
+            raise ValueError('Concept must have examples to train')
+
         if stopping_condition == 'validation':
             # Implement some way to perform validation as a stopping condition
             raise NotImplementedError('Validation is not yet implemented')

@@ -143,10 +143,11 @@ class ConceptPredictor(nn.Module):
             else:
                 trained_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
-            if self.use_regions:
+            if self.use_regions and img_feats.trained_attr_region_scores.numel(): # Using regions and there are trained attributes
                 trained_attr_region_scores = img_feats.trained_attr_region_scores * region_weights # (n_regions, n_trained_attrs); possibly (n_regions, 0)
                 trained_attr_region_score = trained_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_trained_attrs)
             else:
+                trained_attr_region_scores = torch.tensor([[]], device=region_weights.device) # (1, 0)
                 trained_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             # Zero shot attributes
@@ -156,10 +157,11 @@ class ConceptPredictor(nn.Module):
             else:
                 zs_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
-            if self.use_regions:
+            if self.use_regions and img_feats.zs_attr_region_scores.numel(): # Using regions and there are zero-shot attributes
                 zs_attr_region_scores = img_feats.zs_attr_region_scores * region_weights # (n_regions, n_zs_attrs); possibly (n_regions, 0)
                 zs_attr_region_score = zs_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_zs_attrs)
             else:
+                zs_attr_region_scores = torch.tensor([[]], device=region_weights.device) # (1, 0)
                 zs_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             # Concatenate all scores for layer norm
