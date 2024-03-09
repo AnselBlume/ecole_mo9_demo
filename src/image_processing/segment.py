@@ -124,7 +124,6 @@ class Segmenter:
             bbox_mask[y1:y2, x1:x2] = True
 
             if remove_background: # Remove background based on bbox crop
-                fg_mask = self.foreground_mask(cropped_image)
                 bbox_mask[y1:y2, x1:x2] = bbox_mask[y1:y2, x1:x2] & self.foreground_mask(cropped_image)
 
             masks = torch.stack([m & bbox_mask for m in masks]) # Restrict mask to bbox
