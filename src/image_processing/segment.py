@@ -19,7 +19,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Segmenter:
-    def __init__(self, sam: Sam, rembg_model_name: str = 'sam_prompt'):
+    def __init__(self, sam: Sam, rembg_model_name: str = 'isnet-general-use'):
         self.sam_amg = build_sam_amg(sam, part_based=True)
         self.rembg_session = new_session(model_name=rembg_model_name)
 
