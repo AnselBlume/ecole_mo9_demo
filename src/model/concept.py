@@ -7,7 +7,7 @@ from llm import LLMClient, retrieve_attributes
 from tqdm import tqdm
 import logging
 from utils import ArticleDeterminer
-from typing import Union
+from typing import Union, Any
 from image_processing import LocalizeAndSegmentOutput
 from .features import ImageFeatures
 from PIL.Image import Image
@@ -192,7 +192,12 @@ class ConceptKB:
 
         return dt
 
-    def initialize(self, cfg: ConceptKBConfig, llm_client: LLMClient = None):
+    def initialize(
+        self,
+        cfg: ConceptKBConfig,
+        llm_client: LLMClient = None,
+        concept_to_zs_attrs: dict[str,Any] = None
+    ):
         '''
             Initializes the ConceptKB with zero-shot attributes and concept predictors.
         '''
@@ -204,7 +209,7 @@ class ConceptKB:
 
         # Get zero-shot attributes
         if llm_client is not None:
-            self._init_zs_attrs(llm_client, cfg.encode_class_in_zs_attr)
+            self._init_zs_attrs(llm_client, cfg.encode_class_in_zs_attr, concept_to_zs_attrs=concept_to_zs_attrs)
 
         # Build predictors
         self._init_predictors()
@@ -227,7 +232,12 @@ class ConceptKB:
             use_regions=self.cfg.use_regions
         )
 
-    def _init_zs_attrs(self, llm_client: LLMClient, encode_class: bool):
+    def _init_zs_attrs(
+        self,
+        llm_client: LLMClient,
+        encode_class: bool,
+        concept_to_zs_attrs: dict[str,Any] = None
+    ):
         '''
             Initializes zero-shot attributes for ConceptKB's concepts.
         '''
@@ -235,14 +245,23 @@ class ConceptKB:
 
         determiner = ArticleDeterminer()
         for concept in tqdm(self.concepts):
-            self.init_zs_attrs(concept, llm_client, encode_class, determiner)
+            zs_attr_dict = concept_to_zs_attrs.get(concept.name, None) if concept_to_zs_attrs else None
+
+            self.init_zs_attrs(
+                concept,
+                llm_client,
+                encode_class,
+                determiner=determiner,
+                zs_attr_dict=zs_attr_dict
+            )
 
     def init_zs_attrs(
         self,
         concept: Concept,
         llm_client: LLMClient,
         encode_class: bool,
-        determiner: ArticleDeterminer = None
+        determiner: ArticleDeterminer = None,
+        zs_attr_dict: dict[str,Any] = None
     ):
         '''
             Initializes zero-shot attributes for a specified Concept.
@@ -250,7 +269,7 @@ class ConceptKB:
         if determiner is None and encode_class:
             determiner = ArticleDeterminer()
 
-        zs_attr_dict = retrieve_attributes(concept.name, llm_client)
+        zs_attr_dict = zs_attr_dict if zs_attr_dict else retrieve_attributes(concept.name, llm_client)
 
         for attr_type in ['required', 'likely']:
             for attr in zs_attr_dict[attr_type]:
