@@ -123,3 +123,12 @@ def build_feature_extractor(
 
     else:
         return FeatureExtractor(model, processor).to(device)
+
+##########
+# DiNOv2 #
+##########
+import torch
+from .dino_features import DinoFeatureExtractor
+
+def build_dino(model_name: str = 'dinov2_vitl14_reg', device: str = 'cuda'):
+    return torch.hub.load('facebookresearch/dinov2', model_name).to(device)
