@@ -107,6 +107,15 @@ def build_trained_attr_predictor(clip_model: CLIPModel, processor: CLIPProcessor
 def build_zero_shot_attr_predictor(clip_model: CLIPModel, processor: CLIPProcessor):
     return CLIPAttributePredictor(clip_model, processor)
 
+##########
+# DiNOv2 #
+##########
+import torch
+from .dino_features import DinoFeatureExtractor
+
+def build_dino(model_name: str = 'dinov2_vitb14_reg', device: str = 'cuda'):
+    return torch.hub.load('facebookresearch/dinov2', model_name).to(device)
+
 #####################
 # Feature Extractor #
 #####################
@@ -115,20 +124,12 @@ from .feature_extractor import FeatureExtractor
 def build_feature_extractor(
     model: CLIPModel = None,
     processor: CLIPProcessor = None,
-    model_name: str = 'openai/clip-vit-large-patch14',
+    dino_model_name: str = 'dinov2_vitb14_reg',
+    clip_model_name: str = 'openai/clip-vit-large-patch14',
     device: str = 'cuda'
 ):
     if model is None or processor is None:
-        return FeatureExtractor(*build_clip(model_name)).to(device)
+        return FeatureExtractor(build_dino(dino_model_name), *build_clip(clip_model_name)).to(device)
 
     else:
         return FeatureExtractor(model, processor).to(device)
-
-##########
-# DiNOv2 #
-##########
-import torch
-from .dino_features import DinoFeatureExtractor
-
-def build_dino(model_name: str = 'dinov2_vitl14_reg', device: str = 'cuda'):
-    return torch.hub.load('facebookresearch/dinov2', model_name).to(device)

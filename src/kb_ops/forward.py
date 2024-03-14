@@ -100,6 +100,7 @@ class ConceptKBForwardBase:
         # Cache to avoid recomputation for each image
         cached_visual_features = None
         cached_trained_attr_scores = None
+        cached_clip_visual_features = None
 
         concepts = concepts if concepts is not None else self.concept_kb
         for i, concept in enumerate(concepts, start=1):
@@ -121,6 +122,9 @@ class ConceptKBForwardBase:
                 # Cache visual features and trained attribute scores
                 if cached_visual_features is None:
                     cached_visual_features = torch.cat([features.image_features, features.region_features], dim=0)
+
+                if cached_clip_visual_features is None:
+                    cached_clip_visual_features = torch.cat([features.clip_image_features, features.clip_region_features], dim=0)
 
                 if cached_trained_attr_scores is None:
                     cached_trained_attr_scores = torch.cat([features.trained_attr_img_scores, features.trained_attr_region_scores], dim=0)

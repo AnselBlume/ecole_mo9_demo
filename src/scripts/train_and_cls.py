@@ -28,10 +28,10 @@ def get_parser():
     parser.add_argument('--config', action=argparse.ActionConfigFile)
 
     parser.add_argument('--img_dir', type=str,
-                        default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/xiaomeng_augmented_data_v1',
+                        default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/xiaomeng_augmented_data_v3',
                         help='Path to directory of images or preprocessed segmentations')
 
-    parser.add_argument('--cache.root', default='/shared/nas2/blume5/fa23/ecole/cache/xiaomeng_augmented_data_v1', help='Directory to save feature cache')
+    parser.add_argument('--cache.root', default='/shared/nas2/blume5/fa23/ecole/cache/xiaomeng_augmented_data_v3', help='Directory to save feature cache')
     parser.add_argument('--cache.segmentations', default='segmentations', help='Subdirectory of cache_dir to save segmentations')
     parser.add_argument('--cache.features', default='features', help='Subdirectory of cache_dir to save segmentations')
 
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     from feature_extraction import (
         build_feature_extractor,
         build_desco,
-        build_sam,
+        build_sam
     )
     from image_processing import build_localizer_and_segmenter
 

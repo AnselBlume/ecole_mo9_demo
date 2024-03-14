@@ -88,7 +88,7 @@ class Concept:
 @dataclass
 class ConceptKBConfig:
     encode_class_in_zs_attr: bool = False
-    img_feature_dim: int = 768
+    img_feature_dim: int = 1024 # DINOv2 image feature dimension
     n_trained_attrs: int = None
     use_ln: bool = True
     use_probabilities: bool = False # Sigmoid scores instead of using raw scores for concept predictor inputs
@@ -103,8 +103,9 @@ class ConceptKBConfig:
             raise ValueError('Cannot use both layer norm and probabilities.')
 
 class ConceptKB:
-    def __init__(self, concepts: list[Concept] = []):
+    def __init__(self, concepts: list[Concept] = [], neg_concept_examples: list[ConceptExample] = []):
         self._concepts = {concept.name : concept for concept in concepts}
+        self._neg_concept_examples = neg_concept_examples
 
     @property
     def leaf_concepts(self) -> list[Concept]:
