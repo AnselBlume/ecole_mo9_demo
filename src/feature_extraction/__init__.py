@@ -113,7 +113,7 @@ def build_zero_shot_attr_predictor(clip_model: CLIPModel, processor: CLIPProcess
 import torch
 from .dino_features import DinoFeatureExtractor
 
-def build_dino(model_name: str = 'dinov2_vitb14_reg', device: str = 'cuda'):
+def build_dino(model_name: str = 'dinov2_vits14_reg', device: str = 'cuda'):
     return torch.hub.load('facebookresearch/dinov2', model_name).to(device)
 
 #####################
@@ -124,7 +124,7 @@ from .feature_extractor import FeatureExtractor
 def build_feature_extractor(
     model: CLIPModel = None,
     processor: CLIPProcessor = None,
-    dino_model_name: str = 'dinov2_vitb14_reg',
+    dino_model_name: str = 'dinov2_vits14_reg',
     clip_model_name: str = 'openai/clip-vit-large-patch14',
     device: str = 'cuda'
 ):
