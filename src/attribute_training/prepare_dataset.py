@@ -235,19 +235,25 @@ def make_multi_class_annotations(annotation_file:str,classes:list,save_path:str,
         class_names_to_id[c] = i 
         id_to_class_names[i] = c 
     for entry in tqdm(list(annotations.values())):
-        new_entry = {'image_id':entry['image_id'],'instance_id':entry['instance_id'],
+        positive_attributes = entry['positive_attributes']
+        found_attributes = []
+        for p in positive_attributes:
+            for c in classes:
+                if p == c:
+                    found_attributes.append(c)
+        
+        if len(found_attributes)==1:
+            new_entry = {'image_id':entry['image_id'],'instance_id':entry['instance_id'],
                      'instance_bbox':entry['instance_bbox'],'instance_polygon':entry['instance_polygon'],
                      'object_name':entry['object_name']}
-        new_key = entry['instance_id']
-        positive_attributes = entry['positive_attributes']
-        found_attributes = [c for c in classes if c in positive_attributes]
-        if len(found_attributes)==1:
+            new_key = entry['instance_id']
+     
             new_entry['class'] = found_attributes[0]
             new_entry['id'] = class_names_to_id[found_attributes[0]]
             entries_to_keep[new_key] = new_entry
             if not os.path.exists(save_path):
                 os.makedirs(save_path,exist_ok=True)
-            save_file(os.path.join(save_path,file_name),entries_to_keep)
+    save_file(os.path.join(save_path,file_name),entries_to_keep)
             
                         
 def revised_annotations(annotation_file:str,save_path:str,file_name:str):
@@ -286,9 +292,11 @@ def revised_annotations(annotation_file:str,save_path:str,file_name:str):
         os.makedirs(save_path,exist_ok=True)
     save_file(os.path.join(save_path,file_name),new_annotations)
     print(len(list(new_annotations.keys())))
-make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/train.json',classes=['arch shaped','circular','concical','cubed','curved','cylindrical','domed','oval shaped','pointy','rectangular','round','spherical','triangular'],save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data',file_name='train.json')
-make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/val.json',classes=['arch shaped','circular','concical','cubed','curved','cylindrical','domed','oval shaped','pointy','rectangular','round','spherical','triangular'],save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data',file_name='val.json')
-make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/test.json',classes=['arch shaped','circular','concical','cubed','curved','cylindrical','domed','oval shaped','pointy','rectangular','round','spherical','triangular'],save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data',file_name='test.json')
+
+colors = ['arch shaped','circular','conical','cubed','curved','cylindrical','domed','oval shaped','pointy','rectangular','round','spherical','triangular']
+make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/train.json',classes=colors,save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data_single_classes',file_name='train.json')
+make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/val.json',classes=colors,save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data_single_classes',file_name='val.json')
+make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/test.json',classes=colors,save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data_single_classes',file_name='test.json')
 
 
 
