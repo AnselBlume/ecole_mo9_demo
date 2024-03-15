@@ -138,7 +138,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--layers",
         type=str,
-        default="[2,5,8,11]",
+        default="[23]",
         help="List of layers or number of last layers to take"
     )
     parser.add_argument(
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     args = parser.parse_args([
         '--image_dir','/scratch/bcgp/datasets/visual_genome/images',
         '--dtype','bf16',
-        '--feature_dir','/scratch/bcgp/michal5/dino_features_early_layer'
+        '--feature_dir','/tmp/features'
     ])
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args.device = device 

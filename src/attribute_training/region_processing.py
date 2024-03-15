@@ -252,7 +252,6 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-
     image_id_to_mask = load_all_regions(args)
     region_features(args,image_id_to_mask)
 
