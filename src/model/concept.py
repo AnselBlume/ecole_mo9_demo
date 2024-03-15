@@ -90,7 +90,7 @@ class ConceptKBConfig:
     encode_class_in_zs_attr: bool = False
     img_feature_dim: int = 1024 # DINOv2 image feature dimension
     n_trained_attrs: int = None
-    use_ln: bool = True
+    use_ln: bool = False # Layer norm the features before passing to ConceptPredictor
     use_probabilities: bool = False # Sigmoid scores instead of using raw scores for concept predictor inputs
     use_full_img: bool = True
     use_regions: bool = True

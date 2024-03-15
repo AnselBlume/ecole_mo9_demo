@@ -38,7 +38,7 @@ def get_parser():
     parser.add_argument('--wandb_project', type=str, default='ecole_mo9_demo', help='WandB project name')
     parser.add_argument('--wandb_dir', default='/shared/nas2/blume5/fa23/ecole', help='WandB log directory')
 
-    parser.add_argument('--predictor.use_ln', type=bool, default=True, help='Whether to use LayerNorm')
+    parser.add_argument('--predictor.use_ln', type=bool, default=False, help='Whether to use LayerNorm')
     parser.add_argument('--predictor.use_probabilities', type=bool, default=False, help='Whether to sigmoid raw scores instead of layer-norming them for prediction')
     parser.add_argument('--predictor.use_full_img', type=bool, default=True, help='Whether to use full image as input')
     parser.add_argument('--predictor.use_regions', type=bool, default=True, help='Whether to use regions as input')
