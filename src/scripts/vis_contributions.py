@@ -197,7 +197,7 @@ if __name__ == '__main__':
     kb = ConceptKB.load(args.ckpt_path)
     feature_pipeline = ConceptKBFeaturePipeline(kb, None, build_feature_extractor())
     predictor = ConceptKBPredictor(kb, feature_pipeline)
-    trained_attrs = feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
+    trained_attrs = feature_pipeline.feature_extractor.trained_attr_predictor.attr_names
 
     # %%  Build datasets
     all_segmentation_paths = list(chain.from_iterable([
