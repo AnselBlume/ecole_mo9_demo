@@ -1,13 +1,29 @@
+import logging
+logger = logging.getLogger(__name__)
 
 ##########################
 # Segment Anything Model #
 ##########################
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+# TODO Experiment with MobileSAMv2
 from segment_anything.modeling import Sam
 
+USE_MOBILE_SAM = True
 DEFAULT_SAM_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/sam/sam_vit_h_4b8939.pth'
+DEFAULT_MOBILE_SAM_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/sam/mobile_sam/mobile_sam.pt'
 
-def build_sam(model_name: str = 'vit_h', ckpt_path: str = DEFAULT_SAM_CKPT_PATH, device: str = 'cuda') -> Sam:
+if USE_MOBILE_SAM:
+    from mobile_sam import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+    SAM_CKPT_PATH = DEFAULT_MOBILE_SAM_CKPT_PATH
+    SAM_MODEL_TYPE = 'vit_t'
+    logger.info('Using Mobile-SAM model')
+
+else:
+    from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+    SAM_CKPT_PATH = DEFAULT_SAM_CKPT_PATH
+    SAM_MODEL_TYPE = 'vit_h'
+    logger.info('Using standard SAM model')
+
+def build_sam(model_name: str = SAM_MODEL_TYPE, ckpt_path: str = SAM_CKPT_PATH, device: str = 'cuda') -> Sam:
     return sam_model_registry[model_name](checkpoint=ckpt_path).to(device)
 
 def build_sam_predictor(model: Sam = None):
@@ -45,7 +61,7 @@ from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
 from maskrcnn_benchmark.config import cfg as BASE_DESCO_CONFIG
 
 DEFAULT_DESCO_CFG_PATH = '/shared/nas2/blume5/fa23/ecole/src/patch_mining/DesCo/configs/pretrain_new/desco_glip.yaml'
-DEFAULT_DESCO_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/desco/desco_glip_tiny.pth'
+DEFAULT_DESCO_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/desco/part_desco_glip_tiny.pth'
 
 def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT_DESCO_CKPT_PATH, device: str = 'cuda'):
     if 'fiber' in (cfg_path + ckpt_path).lower():
@@ -80,21 +96,40 @@ def build_clip(model_name: str = 'openai/clip-vit-large-patch14', device: str = 
 #########################
 # Attribute Classifiers #
 #########################
-from feature_extraction.trained_attrs import TrainedCLIPAttributePredictor
+from feature_extraction.trained_attrs import CLIPTrainedAttributePredictor
 from feature_extraction.clip_features import CLIPFeatureExtractor
 from feature_extraction.zero_shot_attrs import CLIPAttributePredictor
 
 def build_trained_attr_predictor(clip_model: CLIPModel, processor: CLIPProcessor, device: str = 'cuda'):
     feature_extractor = CLIPFeatureExtractor(clip_model, processor)
-    return TrainedCLIPAttributePredictor(feature_extractor, device=device)
+    return CLIPTrainedAttributePredictor(feature_extractor, device=device)
 
 def build_zero_shot_attr_predictor(clip_model: CLIPModel, processor: CLIPProcessor):
     return CLIPAttributePredictor(clip_model, processor)
+
+##########
+# DiNOv2 #
+##########
+import torch
+from .dino_features import DinoFeatureExtractor
+
+def build_dino(model_name: str = 'dinov2_vitb14_reg', device: str = 'cuda'):
+    return torch.hub.load('facebookresearch/dinov2', model_name).to(device)
 
 #####################
 # Feature Extractor #
 #####################
 from .feature_extractor import FeatureExtractor
 
-def build_feature_extractor(model_name: str = 'openai/clip-vit-large-patch14', device: str = 'cuda'):
-    return FeatureExtractor(*build_clip(model_name)).to(device)
+def build_feature_extractor(
+    model: CLIPModel = None,
+    processor: CLIPProcessor = None,
+    dino_model_name: str = 'dinov2_vitb14_reg',
+    clip_model_name: str = 'openai/clip-vit-large-patch14',
+    device: str = 'cuda'
+):
+    if model is None or processor is None:
+        return FeatureExtractor(build_dino(dino_model_name), *build_clip(clip_model_name)).to(device)
+
+    else:
+        return FeatureExtractor(model, processor).to(device)

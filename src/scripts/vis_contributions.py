@@ -1,14 +1,15 @@
 # %%
 import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import torch
 import json
 from tqdm import tqdm
 from model.concept import ConceptKB
-from kb_ops.train import ConceptKBTrainer
+from kb_ops import ConceptKBPredictor, ConceptKBFeaturePipeline
 from feature_extraction import build_feature_extractor
 from model.concept_predictor import ConceptPredictorOutput
 from kb_ops.dataset import PresegmentedDataset, list_collate
-from kb_ops.train_test_split import split_from_directory
+from kb_ops.train_test_split import split_from_paths
 from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,15 +19,12 @@ from vis_utils import image_from_masks
 from torchvision.transforms.functional import to_pil_image, pil_to_tensor
 import jsonargparse as argparse
 from torchmetrics import Accuracy
+from itertools import chain
 
 def get_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--config', action=argparse.ActionConfigFile)
-
-    parser.add_argument('--presegmented_dir',
-                        default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data_segmentations',
-                        help='Path to directory of preprocessed segmentations')
 
     parser.add_argument('--output_dir',
                         default='/shared/nas2/blume5/fa23/ecole/results/contribution_visualizations',
@@ -83,7 +81,6 @@ def prediction_contributions(output: ConceptPredictorOutput, trained_attrs: list
             t_attr_region_scores = {k : v / t_attr_region_mass for k, v in t_attr_region_scores.items()}
 
             ret_dict['trained_attr_region_scores'] = t_attr_region_scores
-
 
     # Zero-shot attribute contributions
     if zs_attrs != []:
@@ -188,32 +185,36 @@ def visualize_prediction_contributions(
     return fig
 
 def get_dataloader(dataset):
-    return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=3, pin_memory=True, collate_fn=list_collate)
+    return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True, collate_fn=list_collate)
 
 # %%
 if __name__ == '__main__':
     parser = get_parser()
     args = parser.parse_args()
+    # args = parser.parse_args(['--ckpt_path', '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_06-06:00:17-goiur8to/concept_kb_epoch_15.pt'])
 
     # %%
     kb = ConceptKB.load(args.ckpt_path)
-    feature_extractor = build_feature_extractor()
-    trainer = ConceptKBTrainer(kb, feature_extractor)
-    trained_attrs = feature_extractor.trained_clip_attr_predictor.attr_names
+    feature_pipeline = ConceptKBFeaturePipeline(kb, None, build_feature_extractor())
+    predictor = ConceptKBPredictor(kb, feature_pipeline)
+    trained_attrs = feature_pipeline.feature_extractor.trained_attr_predictor.attr_names
 
     # %%  Build datasets
-    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_directory(args.presegmented_dir, exts='.pkl')
+    all_segmentation_paths = list(chain.from_iterable([
+        [ex.image_segmentations_path for ex in c.examples]
+        for c in kb
+    ]))
+    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_paths(all_segmentation_paths)
 
     test_ds = PresegmentedDataset(tst_p, tst_l)
     test_dl = get_dataloader(test_ds)
 
     # %% Predict
-    predictions = trainer.predict(test_dl)
+    predictions = predictor.predict(test_dl)
 
     # %%
     accuracy = Accuracy(task='multiclass', num_classes=len(kb))
 
-    concepts = list(kb)
     all_contributions = []
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -222,14 +223,14 @@ if __name__ == '__main__':
         prediction = predictions[index]
 
         # Create images
-        img = instance['segmentations']['image']
+        img = instance['segmentations'].input_image
         region_img = to_pil_image(
-            image_from_masks(instance['segmentations']['part_masks'], superimpose_on_image=pil_to_tensor(img), superimpose_alpha=.7)
-        ) if instance['segmentations']['part_masks'].shape[0] > 0 else img
+            image_from_masks(instance['segmentations'].part_masks, superimpose_on_image=pil_to_tensor(img), superimpose_alpha=.7)
+        ) if instance['segmentations'].part_masks.shape[0] > 0 else img
 
         # Attribute scores
         predicted_concept_outputs = prediction['predicted_concept_outputs']
-        predicted_concept_zs_attrs = [attr.name for attr in concepts[prediction['predicted_index']].zs_attributes]
+        predicted_concept_zs_attrs = [attr.name for attr in kb[prediction['predicted_label']].zs_attributes]
         contributions = prediction_contributions(predicted_concept_outputs, trained_attrs, predicted_concept_zs_attrs)
         all_contributions.append(contributions)
 
@@ -242,14 +243,14 @@ if __name__ == '__main__':
         accuracy(pred_ind, true_ind)
 
         # Set title
-        pred_label = concepts[prediction['predicted_index']].name.capitalize()
-        true_label = concepts[prediction['true_index']].name.capitalize()
+        pred_label = prediction['concept_names'][prediction['predicted_index']].capitalize()
+        true_label = prediction['concept_names'][prediction['true_index']].capitalize()
 
         max_score = prediction['predictors_scores'].max().sigmoid()
         fig.suptitle(f'Prediction: {pred_label} ({max_score * 100:.2f}%). Ground Truth: {true_label}', fontsize=24, fontweight='bold', y=1.1)
 
         # Save figure
-        file_path = os.path.splitext(os.path.basename(instance['segmentations']['image_path']))[0]
+        file_path = os.path.splitext(os.path.basename(instance['segmentations'].input_image_path))[0]
         out_path = os.path.join(args.output_dir, f'{file_path}.jpg')
         fig.savefig(out_path, bbox_inches='tight') # Recompute fig dims when saving because of raised suptitle
         plt.close(fig)

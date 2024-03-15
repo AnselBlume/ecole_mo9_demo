@@ -1,8 +1,9 @@
 import numpy as np
+from model.concept import ConceptPredictor, Concept
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import torch
-from torchvision.transforms.functional import to_pil_image
+from torchvision.transforms.functional import to_pil_image, pil_to_tensor
 from torchvision.utils import draw_segmentation_masks
 from typing import Union, List
 import PIL
@@ -76,7 +77,7 @@ def image_from_masks(
     masks: Union[torch.Tensor, np.ndarray],
     combine_as_binary_mask: bool = False,
     combine_color = 'aqua',
-    superimpose_on_image: torch.Tensor = None,
+    superimpose_on_image: Union[torch.Tensor, Image] = None,
     superimpose_alpha: float = .8,
     cmap: str = 'rainbow'
 ):
@@ -104,15 +105,27 @@ def image_from_masks(
     colors = get_colors(masks.shape[0], cmap_name=cmap, as_tuples=True) if masks.shape[0] > 1 else combine_color
 
     if superimpose_on_image is not None:
+        if isinstance(superimpose_on_image, Image):
+            superimpose_on_image = pil_to_tensor(superimpose_on_image)
+            return_as_pil = True
+
+        else:
+            return_as_pil = False
+
         alpha = superimpose_alpha
         background = superimpose_on_image
     else:
         alpha = 1
         background = torch.zeros(3, masks.shape[1], masks.shape[2], dtype=torch.uint8)
+        return_as_pil = False
 
     masks = draw_segmentation_masks(background, masks, colors=colors, alpha=alpha)
 
-    if is_numpy:
+    # Output format
+    if return_as_pil:
+        masks = to_pil_image(masks)
+
+    elif is_numpy:
         masks = masks.numpy()
 
     return masks
@@ -154,6 +167,14 @@ def mask_and_crop_image(image_file:str,mask:List):
     segmented_image = segmented_image[int(y1):int(y2),int(x1):int(x2)]
     return segmented_image
 
+######################
+# Plotting functions #
+######################
+
+def fig_to_img(fig: plt.Figure) -> Image:
+    fig.canvas.draw()
+    return PIL.Image.frombytes('RGB', fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
+
 def plot_predicted_classes(
     prediction: dict,
     n_classes: int = 5,
@@ -166,7 +187,8 @@ def plot_predicted_classes(
     scores: torch.Tensor = prediction['predictors_scores'].sigmoid() # (n,)
     names: list = prediction['concept_names']
 
-    values, indices = scores.topk(n_classes)
+    top_k = min(n_classes, len(names))
+    values, indices = scores.topk(top_k)
     names = [names[i] for i in indices]
 
     # Reverse for plot so highest score is at top
@@ -185,7 +207,181 @@ def plot_predicted_classes(
     ax.set_xlim(-.001, ax.get_xlim()[1])
 
     if return_img:
-        fig.canvas.draw()
-        return PIL.Image.frombytes('RGB', fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
+        return fig_to_img(fig)
 
     return fig, ax
+
+def plot_rectangle(
+    ax: plt.Axes,
+    color: str = 'red',
+    line_width=10
+):
+    x_lim = ax.get_xlim()
+    y_lim = ax.get_ylim()
+
+    width = x_lim[1] - x_lim[0]
+    height = y_lim[1] - y_lim[0]
+    rect = plt.Rectangle((x_lim[0], y_lim[0]), width, height, linewidth=line_width, edgecolor=color, facecolor='none')
+    ax.add_patch(rect)
+
+def plot_image_differences(
+    images: tuple[Image,Image],
+    attr_probs: tuple[torch.Tensor, torch.Tensor],
+    attr_names: List[str],
+    top_k=5,
+    figsize=(10,7),
+    colors=('orange', 'blue'),
+    weight_imgs_by_predictors: tuple[ConceptPredictor, ConceptPredictor] = (),
+    region_masks: tuple[torch.Tensor, torch.Tensor] = (),
+    return_img=False
+):
+    '''
+        attr_probs: Tuple of attribute probabilities for each image, of shape (n_attr,) or (1, n_attr).
+        attr_names: List of attribute names corresponding to each score
+        region_masks: Tuple of region masks for each image, of shape (h, w) or (1, h, w).
+        weight_imgs_by_predictors: Tuple of ConceptPredictors whose attribute weights will be used to weight the probability differences.
+    '''
+    # Unpack
+    img1, img2 = images
+    attr_probs1, attr_probs2 = attr_probs
+    color1, color2 = colors
+
+    # Compute top attribute probability differences
+    probs1 = attr_probs1.squeeze()
+    probs2 = attr_probs2.squeeze()
+
+    diffs = (probs1 - probs2).abs()
+
+    top_k = min(top_k, len(attr_names))
+
+    if weight_imgs_by_predictors:
+        assert len(weight_imgs_by_predictors) == 2
+        predictor1, predictor2 = weight_imgs_by_predictors
+        attr_weights1 = predictor1.img_trained_attr_weights.weights.data.cpu()
+        attr_weights2 = predictor2.img_trained_attr_weights.weights.data.cpu()
+
+        # Weight the differences by the attribute weights
+        weighted_diffs = diffs * (attr_weights1.abs() + attr_weights2.abs())
+        top_diffs, top_inds = weighted_diffs.topk(top_k)
+
+    else:
+        top_diffs, top_inds = diffs.topk(top_k)
+
+    top_inds = np.array(list(reversed(top_inds))) # Put highest diff at top
+
+    top_attr_names = [attr_names[i] for i in top_inds]
+
+    if region_masks: # Plot region masks on images
+        imgs = []
+        for img, region_masks in zip(images, region_masks):
+            if region_masks is not None:
+                img = image_from_masks(
+                    masks=region_masks,
+                    combine_as_binary_mask=True,
+                    combine_color='red',
+                    superimpose_alpha=.7,
+                    superimpose_on_image=img
+                )
+            imgs.append(img)
+
+        img1, img2 = imgs
+
+    # Plot
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    grid = GridSpec(2, 2, figure=fig, wspace=.05, hspace=.05)
+
+    # Image 1
+    img1_ax = fig.add_subplot(grid[0,0])
+    img1_ax.imshow(img1)
+    img1_ax.axis('off')
+    plot_rectangle(img1_ax, color=color1)
+
+    # Image 2
+    img2_ax = fig.add_subplot(grid[1,0])
+    img2_ax.imshow(img2)
+    img2_ax.axis('off')
+    plot_rectangle(img2_ax, color=color2)
+
+    # Attribute differences
+    diffs_ax = fig.add_subplot(grid[:,1])
+    probs1 = probs1[top_inds]
+    probs2 = probs2[top_inds]
+
+    # See tutorial here https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html
+    bar_width = .25
+    label_loc_offsets = np.arange(top_k) * 3 * bar_width
+    for label_offset, prob1, prob2 in zip(label_loc_offsets, probs1, probs2):
+        diffs_ax.barh(label_offset, prob2, bar_width, color=color2)
+        diffs_ax.barh(label_offset + bar_width, prob1, bar_width, color=color1)
+
+    diffs_ax.set_yticks(label_loc_offsets + bar_width / 2, top_attr_names)
+
+    # Bold, larger font
+    fig.suptitle('Top Detected Attribute Differences', fontsize=16, fontweight='bold', y=1.05)
+
+    if return_img:
+        return fig_to_img(fig)
+
+    return fig
+
+def plot_concept_differences(
+    concepts: tuple[Concept, Concept],
+    trained_attr_names: list[str],
+    top_k=5,
+    figsize=(10,7),
+    return_img=False,
+    weight_by_magnitudes: bool = True,
+    take_abs_of_weights: bool = False
+):
+    # Compute top attribute weight differences
+    concept1, concept2 = concepts
+    weights1 = concept1.predictor.img_trained_attr_weights.weights.data.cpu()
+    weights2 = concept2.predictor.img_trained_attr_weights.weights.data.cpu()
+
+    if take_abs_of_weights:
+        weights1 = weights1.abs()
+        weights2 = weights2.abs()
+
+    diffs = (weights1 - weights2).abs()
+
+    top_k = min(top_k, len(trained_attr_names))
+
+    if weight_by_magnitudes:
+        # More heavily weight the differences by those attributes which are highly weighted by at least one concept
+        weighted_diffs = diffs * (weights1.abs() + weights2.abs())
+        top_diffs, top_inds = weighted_diffs.topk(top_k)
+
+    else:
+        top_diffs, top_inds = diffs.topk(top_k)
+
+    top_inds = np.array(list(reversed(top_inds))) # Put highest diff at top
+
+    top_attr_names = [trained_attr_names[i] for i in top_inds]
+
+    # Plot
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Attribute differences
+    diffs1 = weights1[top_inds]
+    diffs2 = weights2[top_inds]
+
+    # See tutorial here https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html
+    bar_width = .25
+    label_loc_offsets = np.arange(top_k) * 3 * bar_width
+    for label_offset, diff1, diff2 in zip(label_loc_offsets, diffs1, diffs2):
+        ax.barh(label_offset + bar_width, diff1, bar_width, color='orange') # Higher offsets --> higher in figure, not lower
+        ax.barh(label_offset, diff2, bar_width, color='blue')
+
+    ax.set_yticks(label_loc_offsets + bar_width / 2, top_attr_names)
+
+    # Set legend with colors
+    ax.legend([concept1.name, concept2.name])
+
+    # Bold, larger font
+    fig.suptitle('Concept Differences by Attribute Importance', fontsize=16, fontweight='bold')
+
+    if return_img:
+        return fig_to_img(fig)
+
+    return fig

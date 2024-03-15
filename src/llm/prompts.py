@@ -21,7 +21,7 @@ Example 3: If the object is "dog", the response could be:
 - paws
 - body
 
-Provide only the bulleted list without additional commentary. If the object does not have distinct parts (e.g. a ball), repeat the specified object without any bullets (e.g. "ball", not "- ball").
+Provide only the bulleted list without additional commentary. If the object does not have distinct parts (e.g. a ball), or if you are unfamiliar with what the object is, repeat the specified object without any bullets (e.g. "ball", not "- ball").
 
 List the key visible parts of the following object: '''
 
@@ -51,6 +51,8 @@ If there are no 'Likely' attributes either, format your response as:
 Likely:
 none
 
+Similarly, if you are unfamiliar with what the object is, you should respond with 'none' for both categories.
+
 You should only provide features that are likely to be visible. For example, saying that a tree frog has "sticky toe pads" is unhelpful for identification, as this feature is not visible in a photograph.
 Similarly, you should not provide explanations, justifications, or additional commentary. Instead of saying for a tree frog:
 
@@ -65,7 +67,7 @@ These attributes should be such that they could be a caption for a part of the i
 would not be a reasonable caption for the part of the image showing the children. Instead, say:
 - school children
 
-In the same way, don't say for a bowl
+In the same way, don't say words like "typically" or "usually." For example, for a "bowl" don't say
 - typically made of ceramic or glass
 
 Instead, just list the attributes separately as

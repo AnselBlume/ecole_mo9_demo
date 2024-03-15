@@ -78,8 +78,10 @@ def region_features(args,image_id_to_sam):
         feature_files_in_sam = [f for f in all_feature_files if os.path.splitext(f)[0] in image_id_to_sam]
 
         features_minus_sam = set(all_feature_files) - set(feature_files_in_sam)
-        # if len(features_minus_sam) > 0:
-        #     logger.warning(f'Found {len(features_minus_sam)} feature files that are not in the set of SAM region files: {features_minus_sam}')
+
+        if len(features_minus_sam) > 0:
+            logger.warning(f'Found {len(features_minus_sam)} feature files that are not in the set of SAM region files: {features_minus_sam}')
+
     else:
         features_exist = False 
         logger.warning('No feature directory. Will extract features while processing features')
@@ -88,7 +90,7 @@ def region_features(args,image_id_to_sam):
 
     else:
         prog_bar = tqdm(image_id_to_sam)
-    bad_mask = []
+
     def extract_features(f, args,device='cuda',features_exist=True):
         prog_bar.set_description(f'Region features: {f}')
 
@@ -98,7 +100,7 @@ def region_features(args,image_id_to_sam):
         ext = os.path.splitext(f)[1]
         all_region_features_in_image = []
         sam_regions = image_id_to_sam[file_name.replace(ext,'')]
-        
+
         if args.pooling_method == 'downsample':
             f1, h1, w1 = features[0].shape
 
@@ -135,17 +137,11 @@ def region_features(args,image_id_to_sam):
                     sam_region_feature['instance_id'] = region['instance_id']
                     sam_mask = mask_utils.decode(region['segmentation'])
                     sam_h, sam_w = sam_mask.shape 
-                    # if sam_h != h or sam_w!= w:
-                    #     bad_mask.append((f,region['instance_id']))
-                    #     patch_length = args.dino_patch_length
-                    #     padded_h, padded_w = math.ceil(new_h / patch_length) * patch_length, math.ceil(new_w / patch_length) * patch_length # Get the padded height and width
-                    #     upsample_feature = torch.nn.functional.interpolate(torch.from_numpy(features).cuda(), size=[padded_h,padded_w],mode='bilinear') # First interpolate to the padded size
-                    #     upsample_feature = T.CenterCrop((new_h, new_w)) (upsample_feature).squeeze(dim = 0) # Apply center cropping to the original size
-                    #     f,h,w = upsample_feature.size()
-               
 
 
-                    r_1, r_2 = np.where(sam_mask.astype(np.int32) == 1)
+
+                    r_1, r_2 = np.where(sam_mask == 1)
+
 
                     if args.pooling_method == 'average':
                         try:
@@ -157,13 +153,16 @@ def region_features(args,image_id_to_sam):
                         features_in_sam = input_max.cpu().numpy()
 
                     sam_region_feature['region_feature'] = features_in_sam
+
                     save_file(os.path.join(args.region_feature_dir,region['instance_id']+'.pkl'),sam_region_feature)
                     #all_region_features_in_image.append(sam_region_feature)
         #save_file(os.path.join(args.region_feature_dir, file_name.replace(ext,'.pkl')), all_region_features_in_image)
 
+
     for i,f in enumerate(prog_bar):
         try:
             extract_features(f,args,features_exist=features_exist)
+
 
         except torch.cuda.OutOfMemoryError as e:
             logger.warning(f'Caught CUDA out of memory error for {f}; falling back to CPU')
@@ -172,6 +171,7 @@ def region_features(args,image_id_to_sam):
         # except Exception as e:
         #     print(f'Error: {e}')
         #     continue 
+
 
 
 def load_all_regions(args):
@@ -249,8 +249,9 @@ if __name__ == '__main__':
         choices=['fp16', 'fp32','bf16'],
         help="Which mixed precision to use. Use fp32 for clip and dense_clip"
     )
-    
+
     args = parser.parse_args()
+
 
     image_id_to_mask = load_all_regions(args)
     region_features(args,image_id_to_mask)

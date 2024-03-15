@@ -1,5 +1,5 @@
 # %%
-import os # TODO Change DesCo CUDA device here
+import os # Change DesCo CUDA device here
 os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 import sys
@@ -148,7 +148,7 @@ if __name__ == '__main__':
             accuracies['full'] += 1
 
         # Visualize regions
-        part_masks = results['segmentations']['part_masks']
+        part_masks = results['segmentations'].part_masks
 
         if len(part_masks) == 0:
             part_masks = torch.ones(1, *img_t.shape[-2:], dtype=torch.bool)

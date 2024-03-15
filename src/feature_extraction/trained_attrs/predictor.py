@@ -7,7 +7,7 @@ import torch.linalg as LA
 
 from . import DEFAULT_CKPT_PATH, COLOR_SHAPE_MATERIAL_SUBSET, INDEX_TO_ATTR
 
-class TrainedCLIPAttributePredictor:
+class CLIPTrainedAttributePredictor:
     def __init__(
         self,
         clip_feature_extractor: CLIPFeatureExtractor,
@@ -35,7 +35,7 @@ class TrainedCLIPAttributePredictor:
         else: # Use all attributes
             attr_names = list(INDEX_TO_ATTR.keys())
 
-        self.attr_names = attr_names
+        self.attr_names: list[str] = attr_names
 
         # Stack classifiers for efficiency
         with torch.no_grad():

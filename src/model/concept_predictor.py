@@ -49,6 +49,21 @@ class ConceptPredictorOutput:
         '''
         return self.to('cuda')
 
+class Hadamard(nn.Module):
+    def __init__(self, n_features: int, bias: bool = False):
+        super().__init__()
+
+        self.weights = nn.Parameter(torch.randn(n_features))
+        self.bias = nn.Parameter(torch.randn(n_features)) if bias else None
+
+    def forward(self, x: torch.Tensor):
+        x = x * self.weights
+
+        if self.bias is not None:
+            x = x + self.bias
+
+        return x
+
 class ConceptPredictor(nn.Module):
     # TODO incorporate unnamed visual features
     # TODO detect component concepts
@@ -62,6 +77,7 @@ class ConceptPredictor(nn.Module):
         n_zs_attrs: int,
         use_bias=True,
         use_ln=True,
+        use_probabilities=False,
         use_full_img=True,
         use_regions=True
     ):
@@ -77,30 +93,29 @@ class ConceptPredictor(nn.Module):
         self.use_regions = use_regions
 
         # Modules
-        self.img_predictor = nn.Sequential(
-            nn.LayerNorm(img_feature_dim) if use_ln else nn.Identity(),
-            nn.Linear(img_feature_dim, 1, bias=use_bias)
+        self.n_features = (
+            use_full_img + use_regions
+            + (use_full_img + use_regions) * n_trained_attrs
+            + (use_full_img + use_regions) * n_zs_attrs
         )
 
-        self.region_predictor = nn.Sequential(
-            nn.LayerNorm(region_feature_dim) if use_ln else nn.Identity(),
-            nn.Linear(region_feature_dim, 1, bias=use_bias)
-        )
+        if use_ln and use_probabilities:
+            raise ValueError("Layer normalization and probabilities cannot be used together")
 
-        self.full_img_scale = nn.Parameter(torch.randn(1) + 1)
-        self.region_scale = nn.Parameter(torch.randn(1) + 1)
+        self.ln = nn.LayerNorm(self.n_features) if use_ln else nn.Identity()
+        self.prob_scaler = nn.Sigmoid() if use_probabilities else nn.Identity()
 
-        if n_trained_attrs > 0:
-            self.trained_attr_predictor = nn.Sequential(
-                nn.LayerNorm(n_trained_attrs) if use_ln else nn.Identity(),
-                nn.Linear(n_trained_attrs, n_trained_attrs, bias=use_bias)
-            )
+        self.img_features_predictor = nn.Linear(img_feature_dim, 1, bias=use_bias) # This will only be used if use_full_img is True
+        self.img_features_weight = nn.Linear(1, 1, bias=use_bias) if self.use_full_img else nn.Identity()
 
-        if n_zs_attrs > 0:
-            self.zs_attr_predictor = nn.Sequential(
-                nn.LayerNorm(n_zs_attrs) if use_ln else nn.Identity(),
-                nn.Linear(n_zs_attrs, n_zs_attrs, bias=use_bias)
-            )
+        self.region_features_predictor = nn.Linear(region_feature_dim, 1, bias=use_bias) # This will only be used if use_regions is True
+        self.region_features_weight = nn.Linear(1, 1, bias=use_bias) if self.use_regions else nn.Identity()
+
+        self.img_trained_attr_weights = Hadamard(n_trained_attrs, bias=use_bias) if n_trained_attrs else nn.Identity()
+        self.regions_trained_attr_weights = Hadamard(n_trained_attrs, bias=use_bias) if n_trained_attrs else nn.Identity()
+
+        self.img_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if n_zs_attrs else nn.Identity()
+        self.regions_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if n_zs_attrs else nn.Identity()
 
         self.feature_groups = nn.ModuleDict()
 
@@ -110,59 +125,46 @@ class ConceptPredictor(nn.Module):
 
             # Image and region feature scores
             if self.use_full_img:
-                img_score = self.img_predictor(img_feats.image_features) # (1, 1)
-                img_score = img_score * self.full_img_scale.abs() # (1, 1)
+                img_score = self.img_features_predictor(img_feats.image_features) # (1, 1)
             else:
                 img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             if self.use_regions:
-                region_scores = self.region_predictor(img_feats.region_features) # (n_regions, 1)
-                region_scores = region_scores * region_weights * self.region_scale.abs() # (n_regions, 1)
+                region_scores = self.region_features_predictor(img_feats.region_features) # (n_regions, 1)
+                region_scores = region_scores * region_weights # (n_regions, 1)
                 region_score = region_scores.sum(dim=0, keepdim=True) # (1, 1)
             else:
                 region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             # Trained attributes
-            if self.n_trained_attrs > 0:
-                if self.use_full_img:
-                    trained_attr_img_scores = self.trained_attr_predictor(img_feats.trained_attr_img_scores) # (1, n_trained_attrs)
-                    trained_attr_img_scores = trained_attr_img_scores * self.full_img_scale.abs() # (1, n_trained_attrs)
-                    trained_attr_img_score = trained_attr_img_scores # (1, n_trained_attrs)
-                else:
-                    trained_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
-
-                if self.use_regions:
-                    trained_attr_region_scores = self.trained_attr_predictor(img_feats.trained_attr_region_scores) # (n_regions, n_trained_attrs)
-                    trained_attr_region_scores = trained_attr_region_scores * region_weights * self.region_scale.abs() # (n_regions, n_trained_attrs)
-                    trained_attr_region_score = trained_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_trained_attrs)
-                else:
-                    trained_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
-
+            if self.use_full_img:
+                trained_attr_img_scores = img_feats.trained_attr_img_scores # (1, n_trained_attrs); possibly (1, 0)
+                trained_attr_img_score = trained_attr_img_scores # (1, n_trained_attrs); possibly (1, 0)
             else:
                 trained_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
+
+            if self.use_regions and img_feats.trained_attr_region_scores.numel(): # Using regions and there are trained attributes
+                trained_attr_region_scores = img_feats.trained_attr_region_scores * region_weights # (n_regions, n_trained_attrs); possibly (n_regions, 0)
+                trained_attr_region_score = trained_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_trained_attrs)
+            else:
+                trained_attr_region_scores = torch.tensor([[]], device=region_weights.device) # (1, 0)
                 trained_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
             # Zero shot attributes
-            if self.n_zs_attrs > 0:
-                if self.use_full_img:
-                    zs_attr_img_scores = self.zs_attr_predictor(img_feats.zs_attr_img_scores) # (1, n_zs_attrs)
-                    zs_attr_img_scores = zs_attr_img_scores * self.full_img_scale.abs() # (1, n_zs_attrs)
-                    zs_attr_img_score = zs_attr_img_scores # (1, n_zs_attrs)
-                else:
-                    zs_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
-
-                if self.use_regions:
-                    zs_attr_region_scores = self.zs_attr_predictor(img_feats.zs_attr_region_scores) # (n_regions, n_zs_attrs)
-                    zs_attr_region_scores = zs_attr_region_scores * region_weights * self.region_scale.abs()
-                    zs_attr_region_score = zs_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_zs_attrs)
-                else:
-                    zs_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
-
+            if self.use_full_img:
+                zs_attr_img_scores = img_feats.zs_attr_img_scores # (1, n_zs_attrs); possibly (1, 0)
+                zs_attr_img_score = zs_attr_img_scores # (1, n_zs_attrs); possibly (1, 0)
             else:
                 zs_attr_img_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
+
+            if self.use_regions and img_feats.zs_attr_region_scores.numel(): # Using regions and there are zero-shot attributes
+                zs_attr_region_scores = img_feats.zs_attr_region_scores * region_weights # (n_regions, n_zs_attrs); possibly (n_regions, 0)
+                zs_attr_region_score = zs_attr_region_scores.sum(dim=0, keepdim=True) # (1, n_zs_attrs)
+            else:
+                zs_attr_region_scores = torch.tensor([[]], device=region_weights.device) # (1, 0)
                 zs_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
-            # Concatenate all scores
+            # Concatenate all scores for layer norm
             all_scores = torch.cat([
                 img_score, # (1, 1)
                 region_score, # (1, 1)
@@ -171,6 +173,37 @@ class ConceptPredictor(nn.Module):
                 zs_attr_img_score, # (1, n_zs_attrs)
                 zs_attr_region_score # (1, n_zs_attrs)
             ], dim=1) # (1, 1 + 1 + 2*n_trained_attrs + 2*n_zs_attrs)
+
+            all_scores = self.ln(all_scores)
+            all_scores = self.prob_scaler(all_scores)
+
+            # Split scores and apply weights of linear model
+            img_score, region_score, trained_attr_img_score, trained_attr_region_score, zs_attr_img_score, zs_attr_region_score = all_scores.split((
+                int(self.use_full_img), # 1 or 0
+                int(self.use_regions), # 1 or 0
+                self.use_full_img * self.n_trained_attrs, # n_trained_attrs or 0
+                self.use_regions * self.n_trained_attrs, # n_trained_attrs or 0
+                self.use_full_img * self.n_zs_attrs, # n_zs_attrs or 0
+                self.use_regions * self.n_zs_attrs # n_zs_attrs or 0
+            ), dim=1)
+
+            # Regions and images were set to (X, 0) if not using them, so no need to check use_full_img or use_regions
+            # Trained and zero-shot weights are Identity if there are zero of either, so no need to check len > 0
+            img_score = self.img_features_weight(img_score)
+            region_score = self.region_features_weight(region_score)
+            trained_attr_img_score = self.img_trained_attr_weights(trained_attr_img_score)
+            trained_attr_region_score = self.regions_trained_attr_weights(trained_attr_region_score)
+            zs_attr_img_score = self.img_zs_attr_weights(zs_attr_img_score)
+            zs_attr_region_score = self.regions_zs_attr_weights(zs_attr_region_score)
+
+            all_scores = torch.cat([
+                img_score, # (1, 1)
+                region_score, # (1, 1)
+                trained_attr_img_score, # (1, n_trained_attrs)
+                trained_attr_region_score, # (1, n_trained_attrs)
+                zs_attr_img_score, # (1, n_zs_attrs)
+                zs_attr_region_score # (1, n_zs_attrs)
+            ], dim=1)
 
         else:
             all_scores = img_feats.all_scores
@@ -184,10 +217,10 @@ class ConceptPredictor(nn.Module):
                 img_score=img_score.detach().squeeze() if self.use_full_img else None,
                 region_scores=region_scores.detach().squeeze() if self.use_regions else None,
                 region_score=region_score.detach().squeeze() if self.use_regions else None,
-                trained_attr_img_scores=trained_attr_img_scores.detach().squeeze() if self.n_trained_attrs > 0 and self.use_full_img else None,
-                trained_attr_region_scores=trained_attr_region_scores.detach() if self.n_trained_attrs > 0 and self.use_regions else None,
-                zs_attr_img_scores=zs_attr_img_scores.detach().squeeze() if self.n_zs_attrs > 0 and self.use_full_img else None,
-                zs_attr_region_scores=zs_attr_region_scores.detach() if self.n_zs_attrs > 0 and self.use_regions else None,
+                trained_attr_img_scores=trained_attr_img_scores.detach().squeeze() if self.use_full_img else None,
+                trained_attr_region_scores=trained_attr_region_scores.detach() if self.use_regions else None,
+                zs_attr_img_scores=zs_attr_img_scores.detach().squeeze() if self.use_full_img else None,
+                zs_attr_region_scores=zs_attr_region_scores.detach() if self.use_regions else None,
                 all_scores_weighted=all_scores.detach().squeeze(),
                 cum_score=all_scores.sum()
             )
@@ -209,3 +242,4 @@ class ConceptPredictor(nn.Module):
         # TODO specify which attribute index to remove
         self.n_zs_attrs -= 1
         self.zs_attr_predictor = nn.Linear(self.n_zs_attrs, self.n_zs_attrs, bias=self.use_bias)
+

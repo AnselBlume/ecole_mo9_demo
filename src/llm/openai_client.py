@@ -5,7 +5,8 @@ import os
 from typing import Union, Iterable
 
 # Model pricing at https://openai.com/pricing
-DEFAULT_MODEL= 'gpt-3.5-turbo-0125'
+# DEFAULT_MODEL= 'gpt-3.5-turbo-0125'
+DEFAULT_MODEL= 'gpt-4-0125-preview'
 
 class LLMClient:
     def __init__(

@@ -1,5 +1,6 @@
 from sklearn.linear_model import LogisticRegression
 import pickle
+
 from sklearn.neural_network import MLPClassifier
 import os 
 import sys 
@@ -11,7 +12,6 @@ import os
 import numpy as np
 from tqdm import tqdm
 import argparse 
-# import torch 
 import clip 
 import logging 
 import gc
@@ -85,12 +85,12 @@ def train_multi_class(args,train_feature_dict,initial_features=None):
         classifier = MLPClassifier(hidden_layer_sizes=1000,verbose=True,random_state=1, max_iter=args.iterations)
     else:
         classifier = LogisticRegression(verbose=1,max_iter=args.iterations,n_jobs=1,multi_class='multinomial',solver='sag')
-   
     classifier.fit(train_feature_dict['features'],train_feature_dict['labels'])
     if not os.path.exists(args.save_path):
         os.makedirs(args.save_path)
     with open(os.path.join(args.save_path,f'classifier_{args.class_id}.pkl'),'wb') as f:
         pickle.dump(classifier,f)
+
 def eval_multi_class(args,test_feature_dict):
     with open(os.path.join(args.save_path,f'classifier_{args.class_id}.pkl'),'rb') as f:
         classifier = pickle.load(f)
@@ -115,6 +115,7 @@ def eval_classifier(args,test_feature_dict):
     ap_score = average_precision_score(test_feature_dict['labels'],classifier.decision_function(test_feature_dict['features']))
     print(f'ROC AUC:{roc_auc} for class {args.class_id}')
     print(f'AP SCORE:{ap_score} for class {args.class_id}')
+
     if not os.path.exists(args.results_dir):
         os.makedirs(args.results_dir)
     with open(os.path.join(args.results_dir,f'results_class_{args.class_id}.json'),'w+') as fwrite:
@@ -137,6 +138,7 @@ def train_and_evaluate(args):
         test_feature_dict = load_features_for_class(args,os.path.join(args.feature_dir,'test.pkl'),int(args.class_id),test=True)
         eval_classifier(args,test_feature_dict)
     
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
@@ -154,5 +156,6 @@ if __name__ == '__main__':
     help='Number of iterations to run log regression')
     parser.add_argument('--multi_class',action='store_true',help='use multi class classifier or binary classifier')
     parser.add_argument('--mlp',action='store_true',help='use a mlp or linear layer')
+
     args = parser.parse_args()
     train_and_evaluate(args)

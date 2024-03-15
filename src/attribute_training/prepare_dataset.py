@@ -133,6 +133,7 @@ def create_gt_for_val(annotation_file,attribute_to_index,num_classes=2):
     gt = np.stack(gt)
     with open('/scratch/bcgp/datasets/visual_genome/vaw_dataset/gt/test_gt_three_classes.npy','wb+') as f:
         np.save(f,gt)
+
 def make_new_id_to_attribute(annotation_path:str,save_path:str):
     annotations = open_file(annotation_path)
     all_attributes = set()
@@ -156,6 +157,7 @@ def make_mask_from_bbox(bbox:list,image):
     mask_image[x:x+w,y:y+h] = 1 
     mask_h, mask_w = mask_image.shape 
     if mask_h != h_img or mask_w != w_img:
+
         print(f'Mask shape:{mask_image.shape}')
         print(f'Image shape:{image.size}')
         raise ValueError('Bbox from mask is wrong size')
@@ -176,6 +178,7 @@ def polygon_to_mask(polygons,h,w):
         p_mask += mask
     p_mask = p_mask > 0
     return p_mask.astype(int)
+
 def make_mask_annotations(annotation_file:str,save_dir:str):
     image_dict = {}
     all_annotations = open_file(annotation_file)
@@ -183,6 +186,7 @@ def make_mask_annotations(annotation_file:str,save_dir:str):
         image_id = entry['image_id']
         image = cv2.imread(os.path.join('/scratch/bcgp/datasets/visual_genome/images',image_id+'.jpg'))
         w,h,_ = image.shape
+
         instance_entry = {}
         if entry['image_id'] not in image_dict:
             image_dict[entry['image_id']] = []
@@ -205,6 +209,7 @@ def make_mask_annotations(annotation_file:str,save_dir:str):
         #     converted_mask = np.asfortranarray(make_mask_from_bbox(entry['instance_bbox'],image))
         #     rle_mask = mask_utils.encode(converted_mask.astype(np.uint8))
         
+
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     for img_regions in tqdm(image_dict,desc='Saving images'):
@@ -220,6 +225,7 @@ def check_new_annotations(old_attribute,new_colors,new_materials,new_shape):
     else:
         new_value = new_shape[old_attribute]
     return new_value 
+
 def remove_bbox_features(annotation_file:str,saved_path:str):
     annotations = open_file(annotation_file)
     for entry in tqdm(list(annotations.values())):
@@ -289,6 +295,7 @@ def revised_annotations(annotation_file:str,save_path:str,file_name:str):
             new_instance_entry['negative_attributes'] = negative_attributes
             new_annotations[instance_id] = new_instance_entry
     if not os.path.exists(save_path):
+
         os.makedirs(save_path,exist_ok=True)
     save_file(os.path.join(save_path,file_name),new_annotations)
     print(len(list(new_annotations.keys())))
@@ -298,6 +305,7 @@ make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/d
 make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/val.json',classes=colors,save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data_single_classes',file_name='val.json')
 make_multi_class_annotations('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/test.json',classes=colors,save_path='/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data_single_classes',file_name='test.json')
 
+       
 
 
    

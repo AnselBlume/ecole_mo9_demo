@@ -41,6 +41,24 @@ class CenterPadding(torch.nn.Module):
         output = F.pad(x, pads)
         return output
 
+class CenterPadding(torch.nn.Module):
+    def __init__(self, multiple = 14):
+        super().__init__()
+        self.multiple = multiple
+
+    def _get_pad(self, size):
+        new_size = math.ceil(size / self.multiple) * self.multiple
+        pad_size = new_size - size
+        pad_size_left = pad_size // 2
+        pad_size_right = pad_size - pad_size_left
+        return pad_size_left, pad_size_right
+
+    @torch.inference_mode()
+    def forward(self, x):
+        pads = list(itertools.chain.from_iterable(self._get_pad(m) for m in x.shape[:1:-1]))
+        output = F.pad(x, pads)
+        return output
+
 def extract_clip(args, model, image, preprocess=None):
      image_input = preprocess(image).unsqueeze(0).to(device=args.device)
      with torch.no_grad():
@@ -55,6 +73,7 @@ def extract_dino_v2(args,model,image):
     transform = T.Compose([
         T.ToTensor(),
         lambda x: x.unsqueeze(0),
+
 
         CenterPadding(multiple = args.multiple),
         T.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))])
@@ -116,6 +135,7 @@ if __name__ == '__main__':
         help="Location of feature files",
     )
     parser.add_argument(
+
         "--feature_dir_save",
         type=str,
         default=None,
@@ -158,16 +178,20 @@ if __name__ == '__main__':
         default='fp16',
         choices=['fp16','fp32','bf16']
     )
+
     parser.add_argument(
         "--save_every",
         type=int,
         default=1000,
         help="Save as tar file every",
     )
+
+
     args = parser.parse_args([
         '--image_dir','/scratch/bcgp/datasets/visual_genome/images',
-        '--dtype','bf16',
-        '--feature_dir','/tmp/features'
+        '--feature_dir','/scratch/bcgp/datasets/visual_genome/features',
+        '--dtype','bf16'
+
     ])
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args.device = device 
