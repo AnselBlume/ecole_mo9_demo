@@ -24,4 +24,4 @@ with open(subset_index_path, 'r') as f:
 
 N_ATTRS_SUBSET = sum(len(v) for v in COLOR_SHAPE_MATERIAL_SUBSET.values())
 
-from .predictor import TrainedCLIPAttributePredictor
+from .predictor import CLIPTrainedAttributePredictor

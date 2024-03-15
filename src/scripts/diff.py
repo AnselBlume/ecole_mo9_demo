@@ -3,9 +3,9 @@ import sys
 import os
 sys.path.append('/shared/nas2/michal5/ecole_mo9_demo/src')
 sys.path.append('/shared/nas2/michal5/ecole_mo9_demo/src/image_processing')
-from feature_extraction import CLIPFeatureExtractor, TrainedCLIPAttributePredictor, CLIPAttributePredictor
+from feature_extraction import CLIPFeatureExtractor, CLIPTrainedAttributePredictor, CLIPAttributePredictor
 import torch
-import pandas as pd 
+import pandas as pd
 import json
 from tqdm import tqdm
 from model.concept import ConceptKB
@@ -16,7 +16,7 @@ from kb_ops.dataset import PresegmentedDataset, list_collate
 from kb_ops.train_test_split import split_from_directory
 from torch.utils.data import DataLoader
 import numpy as np
-import itertools 
+import itertools
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from PIL.Image import Image
@@ -166,23 +166,23 @@ def visualize_prediction_contributions(img: Image, region_img: Image, prediction
 def get_dataloader(dataset):
     return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=3, pin_memory=True, collate_fn=list_collate)
 def diff(image_1,image_2,output_dir,top_k=5,figsize=(15,8)):
-    image_1, image_1_attributes,image_1_name = image_1 
+    image_1, image_1_attributes,image_1_name = image_1
     image_1.save(image_1_name+'.jpg')
-    image_2 , image_2_attributes,image_2_name = image_2 
+    image_2 , image_2_attributes,image_2_name = image_2
     image_2.save(image_2_name+'.jpg')
     all_differences = {}
     for attribute in image_1_attributes:
         attribute_diff = abs(image_1_attributes[attribute]-image_2_attributes[attribute])
-        all_differences[attribute]= attribute_diff 
-     # get most different attributes 
+        all_differences[attribute]= attribute_diff
+     # get most different attributes
     sorted_all_difference = [k for k, v in sorted(all_differences.items(), key=lambda item: item[1],reverse=True)]
     image_1_top_values = [image_1_attributes[k] for k in sorted_all_difference]
     image_2_top_values = [image_2_attributes[k] for k in sorted_all_difference]
     ind = np.arange(top_k)
-    width = 0.4 
+    width = 0.4
     fig, ax = plt.subplots()
     ax.barh(ind+width,image_1_top_values[:top_k],width,color='blue',label=image_1_name)
-    
+
     ax.barh(ind,image_2_top_values[:top_k],width,color='orange',label=image_2_name)
     ax.set(yticks=ind + width, yticklabels=sorted_all_difference[:top_k],
     ylim=[2*width - 1, len(ind)])
@@ -190,10 +190,10 @@ def diff(image_1,image_2,output_dir,top_k=5,figsize=(15,8)):
     ax.legend(loc='upper right')
     save_path = os.path.join(output_dir,f'{image_1_name}_{image_2_name}.jpg')
     fig.savefig(save_path, bbox_inches='tight')
-    
-   
-    
-    
+
+
+
+
 
 # %%
 if __name__ == '__main__':
@@ -204,7 +204,7 @@ if __name__ == '__main__':
     kb = ConceptKB.load(args.ckpt_path)
     feature_extractor = build_feature_extractor()
     trainer = ConceptKBTrainer(kb, feature_extractor)
-    trained_attrs = feature_extractor.trained_clip_attr_predictor.attr_names
+    trained_attrs = feature_extractor.trained_attr_predictor.attr_names
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir,exist_ok=True)
     # %%  Build datasets
@@ -218,13 +218,12 @@ if __name__ == '__main__':
             instance = test_ds[i]
             image_path =  os.path.splitext(os.path.basename(instance['segmentations']['image_path']))[0]
             features = feature_extractor.forward(entry['segmentations'][0]['image'],[],[])
-            attributes = feature_extractor.trained_clip_attr_predictor.predictor(features.image_features).sigmoid().squeeze()
+            attributes = feature_extractor.trained_attr_predictor.predictor(features.image_features).sigmoid().squeeze()
             entry_attribute_dict = {att_name:att_value.item() for (att_name,att_value) in zip(trained_attrs,attributes)}
             entry_attributes = (entry['segmentations'][0]['image'],entry_attribute_dict,image_path)
             all_attributes.append(entry_attributes)
     combinations = itertools.combinations(all_attributes,2)
     all_combos = [c for c in combinations]
     for pair in all_combos:
-        attr_1, attr_2 = pair 
+        attr_1, attr_2 = pair
         diff(attr_1,attr_2,args.output_dir)
-   

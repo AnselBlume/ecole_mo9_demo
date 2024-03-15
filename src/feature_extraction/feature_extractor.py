@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from transformers import CLIPModel, CLIPProcessor
-from feature_extraction import CLIPFeatureExtractor, TrainedCLIPAttributePredictor, CLIPAttributePredictor, DinoFeatureExtractor
+from feature_extraction import CLIPFeatureExtractor, CLIPTrainedAttributePredictor, CLIPAttributePredictor, DinoFeatureExtractor
 from PIL.Image import Image
 from model.features import ImageFeatures
 
@@ -16,7 +16,7 @@ class FeatureExtractor(nn.Module):
 
         self.dino_feature_extractor = DinoFeatureExtractor(dino)
         self.clip_feature_extractor = CLIPFeatureExtractor(clip, processor)
-        self.trained_clip_attr_predictor = TrainedCLIPAttributePredictor(self.clip_feature_extractor)
+        self.trained_attr_predictor = CLIPTrainedAttributePredictor(self.clip_feature_extractor)
         self.zs_attr_predictor = CLIPAttributePredictor(clip, processor)
 
     def forward(
@@ -58,8 +58,8 @@ class FeatureExtractor(nn.Module):
 
         # Trained attribute scores from CLIP, soon to be DINO features
         if cached_trained_attr_scores is None:
-            if len(self.trained_clip_attr_predictor.attr_names):
-                trained_attr_scores = self.trained_clip_attr_predictor.predict_from_features(clip_visual_features) # (1 + n_regions, n_learned_attrs)
+            if len(self.trained_attr_predictor.attr_names):
+                trained_attr_scores = self.trained_attr_predictor.predict_from_features(clip_visual_features) # (1 + n_regions, n_learned_attrs)
             else:
                 trained_attr_scores = torch.tensor([[]], device=device) # (1, 0); nop in the indexing below
         else:

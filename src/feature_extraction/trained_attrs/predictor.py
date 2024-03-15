@@ -7,7 +7,7 @@ import torch.linalg as LA
 
 from . import DEFAULT_CKPT_PATH, COLOR_SHAPE_MATERIAL_SUBSET, INDEX_TO_ATTR
 
-class TrainedCLIPAttributePredictor:
+class CLIPTrainedAttributePredictor:
     def __init__(
         self,
         clip_feature_extractor: CLIPFeatureExtractor,

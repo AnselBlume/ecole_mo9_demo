@@ -347,7 +347,7 @@ class Controller:
         concept1 = self.retrieve_concept(concept_name1)
         concept2 = self.retrieve_concept(concept_name2)
 
-        attr_names = self.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
+        attr_names = self.feature_pipeline.feature_extractor.trained_attr_predictor.attr_names
 
         return plot_concept_differences(
             (concept1, concept2),
@@ -430,7 +430,7 @@ class Controller:
             trained_attr_scores2 = trained_attr_scores2.sigmoid()
 
         # Get attribute names
-        attr_names = self.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
+        attr_names = self.feature_pipeline.feature_extractor.trained_attr_predictor.attr_names
 
         # Extract winning predictors if weighting by predictors
         if weight_by_predictors:
@@ -479,7 +479,7 @@ class Controller:
         prediction = self.cached_predictions[index]
 
         if attr_type == 'trained':
-            attr_names = self.feature_pipeline.feature_extractor.trained_clip_attr_predictor.attr_names
+            attr_names = self.feature_pipeline.feature_extractor.trained_attr_predictor.attr_names
             attr_scores = prediction['predicted_concept_outputs'].trained_attr_region_scores
 
         else:
