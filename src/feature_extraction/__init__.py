@@ -120,16 +120,18 @@ def build_dino(model_name: str = 'dinov2_vitb14_reg', device: str = 'cuda'):
 # Feature Extractor #
 #####################
 from .feature_extractor import FeatureExtractor
+import torch.nn as nn
 
 def build_feature_extractor(
-    model: CLIPModel = None,
-    processor: CLIPProcessor = None,
+    dino_model: nn.Module = None,
+    clip_model: CLIPModel = None,
+    clip_processor: CLIPProcessor = None,
     dino_model_name: str = 'dinov2_vitb14_reg',
     clip_model_name: str = 'openai/clip-vit-large-patch14',
     device: str = 'cuda'
 ):
-    if model is None or processor is None:
+    if dino_model is None or clip_model is None or clip_processor is None:
         return FeatureExtractor(build_dino(dino_model_name), *build_clip(clip_model_name)).to(device)
 
     else:
-        return FeatureExtractor(model, processor).to(device)
+        return FeatureExtractor(dino_model, clip_model, clip_processor).to(device)

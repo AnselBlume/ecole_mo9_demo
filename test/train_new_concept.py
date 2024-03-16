@@ -4,7 +4,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import sys
 sys.path.append(os.path.realpath(os.path.join(__file__, '../../src')))
 from model.concept import ConceptKB, ConceptExample
-from feature_extraction import build_feature_extractor, build_sam, build_desco, build_clip
+from feature_extraction import build_feature_extractor, build_sam, build_desco, build_clip, build_dino
 from image_processing import build_localizer_and_segmenter
 from kb_ops import ConceptKBFeaturePipeline, ConceptKBFeatureCacher
 from controller import Controller
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     # loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
     loc_and_seg = build_localizer_and_segmenter(build_sam(), None) # Save time by not loading DesCo for this debugging
     clip = build_clip()
-    feature_extractor = build_feature_extractor(*clip)
+    feature_extractor = build_feature_extractor(dino_model=build_dino(), clip_model=clip[0], clip_processor=clip[1])
     feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
 
     retriever = CLIPConceptRetriever(concept_kb.concepts, *clip)
