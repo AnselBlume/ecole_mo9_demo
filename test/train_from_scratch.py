@@ -1,3 +1,6 @@
+'''
+    Script to train a ConceptKB with a couple of concepts from scratch, one concept after the other.
+'''
 # %%
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
