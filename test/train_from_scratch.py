@@ -18,6 +18,16 @@ logger = logging.getLogger(__file__)
 
 coloredlogs.install(level='DEBUG')
 
+def prepare_concept(img_dir: str, concept_name: str, cache_dir: str, controller: Controller):
+    img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
+
+    concept = controller.add_concept(concept_name)
+    concept.examples = [ConceptExample(image_path=img_path) for img_path in img_paths]
+
+    set_feature_paths([concept], segmentations_dir=cache_dir + '/segmentations')
+
+    return img_paths
+
 # %%
 if __name__ == '__main__':
     pass
@@ -41,34 +51,30 @@ if __name__ == '__main__':
     # %% Build controller
     controller = Controller(loc_and_seg, concept_kb, feature_extractor, retriever=retriever, cacher=cacher)
 
-    # %% Add pizza cutter concept
-    img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/pizza_cutters'
-    concept_name = 'pizza cutter'
-    cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/pizza_cutters'
+    # %% Add first concept
+    # img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/single_concepts/pizza_cutters'
+    # concept_name = 'pizza cutter'
+    # cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/pizza_cutters'
+    img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/single_concepts/hoes'
+    concept_name = 'hoe'
+    cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/hoes'
 
-    img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
+    prepare_concept(img_dir, concept_name, cache_dir, controller)
 
-    concept = controller.add_concept(concept_name)
-    concept.examples = [ConceptExample(image_path=img_path) for img_path in img_paths]
-
-    set_feature_paths([concept], segmentations_dir=cache_dir + '/segmentations')
-
-    # %% Train pizza cutter
+    # %% Train first concept
     controller.train_concept(concept_name)
 
-    # %% Add dog concept
-    img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/dogs'
-    concept_name = 'dog'
-    cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/dogs'
+    # %% Add second concept
+    # img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/single_concepts/dogs'
+    # concept_name = 'dog'
+    # cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/dogs'
+    img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/single_concepts/shovels'
+    concept_name = 'shovel'
+    cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/shovels'
 
-    img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
+    img_paths = prepare_concept(img_dir, concept_name, cache_dir, controller)
 
-    concept = controller.add_concept(concept_name)
-    concept.examples = [ConceptExample(image_path=img_path) for img_path in img_paths]
-
-    set_feature_paths([concept], segmentations_dir=cache_dir + '/segmentations')
-
-    # %% Train concept in isolation
+    # %% Train second concept
     controller.train_concept(concept_name)
 
     # %% Predict examples for verification
