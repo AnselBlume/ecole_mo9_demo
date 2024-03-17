@@ -9,6 +9,10 @@ class CLIPFeatureExtractor(nn.Module):
         self.model: CLIPModel = model.eval()
         self.processor = processor
 
+    @property
+    def device(self):
+        return self.model.device
+
     def forward(self, *, images: list[Image] = None, texts: list[str] = None):
         '''
             image: list[PIL.Image.Image]

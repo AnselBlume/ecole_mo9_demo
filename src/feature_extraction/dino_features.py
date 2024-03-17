@@ -92,7 +92,10 @@ class DinoFeatureExtractor(nn.Module):
         self.model = dino
         self.resize_images = resize_images
         self.transform = get_dino_transform(resize_images)
-        self.device = self.model.cls_token.device
+
+    @property
+    def device(self):
+        return self.model.cls_token.device
 
     def forward(self, images: list[Image]):
         '''
