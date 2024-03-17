@@ -116,6 +116,7 @@ class ConceptKBForwardBase:
                     segmentations,
                     zs_attrs,
                     cached_visual_features=cached_visual_features,
+                    cached_clip_visual_features=cached_clip_visual_features,
                     cached_trained_attr_scores=cached_trained_attr_scores
                 )
 

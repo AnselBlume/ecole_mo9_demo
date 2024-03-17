@@ -18,8 +18,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CachedImageFeatures:
     image_features: torch.Tensor = None # (1, d_img)
+    clip_image_features: torch.Tensor = None # (1, d_img)
 
     region_features: torch.Tensor = None # (n_regions, d_regions)
+    clip_region_features: torch.Tensor = None # (n_regions, d_regions)
     region_weights: torch.Tensor = None # (n_regions,); how much to weight each region in all calculations
 
     trained_attr_img_scores: torch.Tensor = None # (1, n_trained_attrs)
@@ -31,7 +33,9 @@ class CachedImageFeatures:
     def get_image_features(self, concept_name: str):
         return ImageFeatures(
             image_features=self.image_features,
+            clip_image_features=self.clip_image_features,
             region_features=self.region_features,
+            clip_region_features=self.clip_region_features,
             region_weights=self.region_weights,
             trained_attr_img_scores=self.trained_attr_img_scores,
             trained_attr_region_scores=self.trained_attr_region_scores,
@@ -43,11 +47,13 @@ class CachedImageFeatures:
         return self.get_image_features(concept_name)
 
     @staticmethod
-    def from_image_features(self, image_features: ImageFeatures):
+    def from_image_features(image_features: ImageFeatures):
         cached_features = CachedImageFeatures()
 
         cached_features.image_features = image_features.image_features
+        cached_features.clip_image_features = image_features.clip_image_features
         cached_features.region_features = image_features.region_features
+        cached_features.clip_region_features = image_features.clip_region_features
         cached_features.region_weights = image_features.region_weights
         cached_features.trained_attr_img_scores = image_features.trained_attr_img_scores
         cached_features.trained_attr_region_scores = image_features.trained_attr_region_scores
@@ -184,19 +190,25 @@ class ConceptKBFeatureCacher:
             # Generate zero-shot attributes for each concept
             cached_features = CachedImageFeatures()
             cached_visual_features = None
+            cached_clip_visual_features = None
             cached_trained_attr_scores = None
 
+            image = self._image_from_example(example)
             for concept in self.concept_kb:
                 # TODO batched feature computation
                 feats = self.feature_pipeline.get_features(
-                    self._image_from_example(example),
+                    image,
                     segmentations,
                     [attr.query for attr in concept.zs_attributes],
                     cached_visual_features=cached_visual_features,
+                    cached_clip_visual_features=cached_clip_visual_features,
                     cached_trained_attr_scores=cached_trained_attr_scores
                 )
                 if cached_visual_features is None:
                     cached_visual_features = torch.cat([feats.image_features, feats.region_features], dim=0)
+
+                if cached_clip_visual_features is None:
+                    cached_clip_visual_features = torch.cat([feats.clip_image_features, feats.clip_region_features], dim=0)
 
                 if cached_trained_attr_scores is None:
                     cached_trained_attr_scores = torch.cat([feats.trained_attr_img_scores, feats.trained_attr_region_scores], dim=0)
@@ -208,7 +220,9 @@ class ConceptKBFeatureCacher:
             # Store non-unique features
             feats.cpu()
             cached_features.image_features = feats.image_features
+            cached_features.clip_image_features = feats.clip_image_features
             cached_features.region_features = feats.region_features
+            cached_features.clip_region_features = feats.clip_region_features
             cached_features.region_weights = feats.region_weights
             cached_features.trained_attr_img_scores = feats.trained_attr_img_scores
             cached_features.trained_attr_region_scores = feats.trained_attr_region_scores
@@ -250,15 +264,19 @@ class ConceptKBFeatureCacher:
                     segmentations: LocalizeAndSegmentOutput = pickle.load(f)
 
                 # Extract cached features
-                device = self.feature_pipeline.feature_extractor.clip.device
-                visual_features = torch.cat([cached_features.image_features, cached_features.region_features], dim=0).to(device)
-                trained_attr_scores = torch.cat([cached_features.trained_attr_img_scores, cached_features.trained_attr_region_scores], dim=0).to(device)
+                dino_device = self.feature_pipeline.feature_extractor.dino_feature_extractor.device
+                clip_device = self.feature_pipeline.feature_extractor.clip_feature_extractor.device
+
+                visual_features = torch.cat([cached_features.image_features, cached_features.region_features], dim=0).to(dino_device)
+                clip_visual_features = torch.cat([cached_features.clip_image_features, cached_features.clip_region_features], dim=0).to(clip_device)
+                trained_attr_scores = torch.cat([cached_features.trained_attr_img_scores, cached_features.trained_attr_region_scores], dim=0).to(clip_device)
 
                 feats = self.feature_pipeline.get_features(
                     None, # Don't need to pass image since passing visual features
                     segmentations,
                     [attr.query for attr in concept.zs_attributes],
                     cached_visual_features=visual_features,
+                    cached_clip_visual_features=clip_visual_features,
                     cached_trained_attr_scores=trained_attr_scores
                 )
 

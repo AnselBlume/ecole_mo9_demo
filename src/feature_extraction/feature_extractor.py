@@ -25,8 +25,8 @@ class FeatureExtractor(nn.Module):
         regions: list[Image],
         zs_attrs: list[str],
         cached_visual_features: torch.Tensor = None,
-        cached_trained_attr_scores: torch.Tensor = None,
-        cached_clip_visual_features: torch.Tensor = None
+        cached_clip_visual_features: torch.Tensor = None,
+        cached_trained_attr_scores: torch.Tensor = None
     ):
         '''
             If cached_visual_features is provided, does not recompute image and region features.
