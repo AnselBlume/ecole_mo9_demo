@@ -88,6 +88,7 @@ class Concept:
 @dataclass
 class ConceptKBConfig:
     encode_class_in_zs_attr: bool = False
+    include_descriptive_zs_attrs: bool = False
     img_feature_dim: int = 1024 # DINOv2 image feature dimension
     n_trained_attrs: int = None
     use_ln: bool = False # Layer norm the features before passing to ConceptPredictor
@@ -272,7 +273,8 @@ class ConceptKB:
 
         zs_attr_dict = zs_attr_dict if zs_attr_dict else retrieve_attributes(concept.name, llm_client)
 
-        for attr_type in ['required', 'likely']:
+        attr_types = ['required'] + (['likely'] if self.cfg.include_descriptive_zs_attrs else [])
+        for attr_type in attr_types:
             for attr in zs_attr_dict[attr_type]:
                 query = f'{attr} of {determiner.determine(attr)}{concept.name}' if encode_class else attr
                 concept.zs_attributes.append(Attribute(attr, is_necessary=attr_type == 'required', query=query))
