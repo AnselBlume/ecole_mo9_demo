@@ -42,7 +42,7 @@ class FeatureExtractor(nn.Module):
             visual_features = cached_visual_features
 
         # CLIP image features
-        device = visual_features.device
+        clip_device = self.clip_feature_extractor.device
 
         if cached_clip_visual_features is None:
             clip_visual_features = self.clip_feature_extractor(images=[image] + regions)
@@ -54,18 +54,18 @@ class FeatureExtractor(nn.Module):
             zs_features = self.clip_feature_extractor(texts=zs_attrs)
             zs_scores = self.zs_attr_predictor.feature_score(clip_visual_features, zs_features) # (1 + n_regions, n_zs_attrs)
         else:
-            zs_scores = torch.tensor([[]], device=device) # This will be a nop in the indexing below
+            zs_scores = torch.tensor([[]], device=clip_device) # This will be a nop in the indexing below
 
         # Trained attribute scores from CLIP, soon to be DINO features
         if cached_trained_attr_scores is None:
             if len(self.trained_attr_predictor.attr_names):
                 trained_attr_scores = self.trained_attr_predictor.predict_from_features(clip_visual_features) # (1 + n_regions, n_learned_attrs)
             else:
-                trained_attr_scores = torch.tensor([[]], device=device) # (1, 0); nop in the indexing below
+                trained_attr_scores = torch.tensor([[]], device=clip_device) # (1, 0); nop in the indexing below
         else:
             trained_attr_scores = cached_trained_attr_scores
 
-        region_weights = torch.ones(len(regions), device=device) / len(regions) # Uniform weights
+        region_weights = torch.ones(len(regions), device=clip_device) / len(regions) # Uniform weights
 
         return ImageFeatures(
             image_features=visual_features[:1], # (1, d_img)
