@@ -82,7 +82,6 @@ if __name__ == '__main__':
     # %%
     concept_kb.initialize(ConceptKBConfig(
         encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,
-        img_feature_dim=feature_extractor.clip.config.projection_dim,
         n_trained_attrs=N_ATTRS_SUBSET,
         use_ln=args.predictor.use_ln,
         use_probabilities=args.predictor.use_probabilities,

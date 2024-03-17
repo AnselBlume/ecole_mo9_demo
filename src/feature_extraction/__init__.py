@@ -87,7 +87,9 @@ def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT
 ########
 from transformers import CLIPModel, CLIPProcessor
 
-def build_clip(model_name: str = 'openai/clip-vit-large-patch14', device: str = 'cuda') -> tuple[CLIPModel, CLIPProcessor]:
+DEFAULT_CLIP_MODEL = 'openai/clip-vit-large-patch14'
+
+def build_clip(model_name: str = DEFAULT_CLIP_MODEL, device: str = 'cuda') -> tuple[CLIPModel, CLIPProcessor]:
     model = CLIPModel.from_pretrained(model_name).to(device)
     processor = CLIPProcessor.from_pretrained(model_name)
 
@@ -113,7 +115,9 @@ def build_zero_shot_attr_predictor(clip_model: CLIPModel, processor: CLIPProcess
 import torch
 from .dino_features import DinoFeatureExtractor
 
-def build_dino(model_name: str = 'dinov2_vitb14_reg', device: str = 'cuda'):
+DEFAULT_DINO_MODEL = 'dinov2_vitl14_reg'
+
+def build_dino(model_name: str = DEFAULT_DINO_MODEL, device: str = 'cuda'):
     return torch.hub.load('facebookresearch/dinov2', model_name).to(device)
 
 #####################
@@ -126,8 +130,8 @@ def build_feature_extractor(
     dino_model: nn.Module = None,
     clip_model: CLIPModel = None,
     clip_processor: CLIPProcessor = None,
-    dino_model_name: str = 'dinov2_vitb14_reg',
-    clip_model_name: str = 'openai/clip-vit-large-patch14',
+    dino_model_name: str = DEFAULT_DINO_MODEL,
+    clip_model_name: str = DEFAULT_CLIP_MODEL,
     device: str = 'cuda'
 ):
     if dino_model is None or clip_model is None or clip_processor is None:
