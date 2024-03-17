@@ -35,7 +35,6 @@ if __name__ == '__main__':
 
     # %% Initialize ConceptKB
     concept_kb.initialize(ConceptKBConfig(
-        img_feature_dim=feature_extractor.clip.config.projection_dim,
         n_trained_attrs=N_ATTRS_SUBSET,
     ))
 
