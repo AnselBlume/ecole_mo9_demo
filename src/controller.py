@@ -280,7 +280,7 @@ class Controller:
 
         if stopping_condition == 'n_epochs' or len(self.concepts) <= 1:
             if len(self.concepts) == 1:
-                logger.info('No other concepts in the ConceptKB; training concept in isolation for fixed number of epochs.')
+                logger.info(f'No other concepts in the ConceptKB; training concept in isolation for {n_epochs} epochs.')
 
             self.trainer.train_concept(
                 concept,
