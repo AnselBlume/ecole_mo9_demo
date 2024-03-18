@@ -1,26 +1,26 @@
-import os 
-import torch 
+import os
+import torch
 import pickle
-import os 
+import os
 import sys
 import numpy as np
-import gzip 
-import json 
+import gzip
+import json
 import cv2
 from tqdm import tqdm
 from pycocotools import mask as mask_utils
-from PIL import Image 
+from PIL import Image
 import torchvision.transforms as T
 import itertools
-import math 
+import math
 import argparse
 import torch.nn.functional as F
 from pathlib import Path
 import clip
-import pickle 
-import shutil 
-import logging 
-import subprocess 
+import pickle
+import shutil
+import logging
+import subprocess
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 class CenterPadding(torch.nn.Module):
@@ -48,7 +48,7 @@ def extract_clip(args, model, image, preprocess=None):
      return features.detach().cpu().to(torch.float32).numpy()
 def extract_dino_v2(args,model,image):
     layers = eval(args.layers)
-    
+
     # print(f"Using layers:{layers}")
     if args.padding != "center":
         raise Exception("Only padding center is implemented")
@@ -62,12 +62,12 @@ def extract_dino_v2(args,model,image):
         layers = eval(args.layers)
         # intermediate layers does not use a norm or go through the very last layer of output
         img = transform(image).to(device='cuda',dtype=args.dtype)
-        features_out = model.get_intermediate_layers(img, n=layers,reshape=True)    
-        features = torch.cat(features_out, dim=1) # B, C, H, W 
+        features_out = model.get_intermediate_layers(img, n=layers,reshape=True)
+        features = torch.cat(features_out, dim=1) # B, C, H, W
     return features.detach().cpu().to(torch.float32).numpy()
 def e(args):
     '''
-    Save file as tar file 
+    Save file as tar file
     '''
     dir_name = os.path.dirname(args.feature_dir)
     splits = os.path.split(args.feature_dir)
@@ -84,7 +84,7 @@ def extract_features(model, args, preprocess=None):
         cv = cv2.imread(os.path.join(args.image_dir, f))
         try:
             cv = cv2.imread(os.path.join(args.image_dir, f))
-            color_coverted = cv2.cvtColor(cv, cv2.COLOR_BGR2RGB) 
+            color_coverted = cv2.cvtColor(cv, cv2.COLOR_BGR2RGB)
             image = Image.fromarray(color_coverted)
 
         except:
@@ -125,7 +125,7 @@ if __name__ == '__main__':
         "--model",
         type=str,
         default='dinov2_vitl14',
-        choices=['dinov2_vitl14', 'dino_vitb8', 'dinov2_vits14', 'dinov2_vitb14', 'dinov2_vitg14', 'clip','dino_vitb16','dense_clip', 'imagenet'],  
+        choices=['dinov2_vitl14', 'dino_vitb8', 'dinov2_vits14', 'dinov2_vitb14', 'dinov2_vitg14', 'clip','dino_vitb16','dense_clip', 'imagenet'],
         help="Name of model from repo"
     )
     parser.add_argument(
@@ -166,22 +166,22 @@ if __name__ == '__main__':
     )
     args = parser.parse_args([
         '--image_dir','/scratch/bcgp/datasets/visual_genome/images',
-        '--dtype','bf16',
-        '--feature_dir','/tmp/features'
+        '--feature_dir','/tmp/features',
+        '--dtype','bf16'
     ])
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    args.device = device 
+    args.device = device
     if args.dtype == "fp16":
       args.dtype = torch.half
     elif args.dtype == "fp32":
       args.dtype = torch.float ## this change is needed for CLIP model
-    else: 
+    else:
       args.dtype = torch.bfloat16
     if args.model == 'clip':
         model, preprocess = clip.load(args.clip_model, device=device)
         model = model.to(device=args.device,dtype=args.dtype)
         extract_features(model, args, preprocess)
     else:
-        model = torch.hub.load('facebookresearch/dinov2','dinov2_vitl14')
+        model = torch.hub.load('facebookresearch/dinov2','dinov2_vitb14')
         model = model.to(device=args.device,dtype=args.dtype)
         extract_features(model, args)

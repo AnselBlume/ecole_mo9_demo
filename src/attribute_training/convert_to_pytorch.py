@@ -3,39 +3,48 @@ import sys
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
-import clip
+
 import json 
 import torch 
 import pickle 
-import sklearn 
+
 from tqdm import tqdm 
 import torch.nn as nn
 import numpy as np 
 
-def initialize_classifiers(attribute_name, clip_model):
-    classifier = nn.Linear(768, 1, bias=True).double()
-    logit_scale = torch.ones([])*np.log(1/.07)
-    attribute_vec = clip.tokenize([attribute_name]).to('cuda')
-    weight = clip_model.encode_text(attribute_vec).float()
-    weight /=weight.norm(dim=-1,keepdim=True)
-    weight*=logit_scale.exp()
-    classifier.weight.data = weight
-    return classifier.cpu().double() 
-
-with open('/scratch/bcgp/datasets/visual_genome/vaw_dataset/data/index_to_attribute.json','r+') as fopen:
-    index_to_attribute = json.load(fopen)
-num_attributes = 619 
-clip_model = clip.load("ViT-L/14", jit=False, device='cuda')[0].eval().requires_grad_(False)
-classifiers = nn.ModuleList([nn.Linear(768,out_features=1, bias=True) for _ in range(num_attributes+1)])
-for index, attribute_name in tqdm(index_to_attribute.items()):
-    classifier_name = f'classifier_{index}.pkl'
-    classifiers[int(index)] = classifiers[int(index)].double()
-    if os.path.exists(f'sklearn_classifiers/{classifier_name}'):
-        with open(f'sklearn_classifiers/{classifier_name}','rb') as fopen:
-            sklearn_classifier = pickle.load(fopen)
-            classifiers[int(index)].weight.data = torch.from_numpy(sklearn_classifier.coef_)
-            classifiers[int(index)].bias.data = torch.from_numpy(sklearn_classifier.intercept_)
+def open_file(file_path:str,use_json=True):
+    if use_json:
+        with open(file_path) as fopen:
+            data = json.load(fopen)
     else:
-        classifiers[int(index)] = initialize_classifiers(attribute_name, clip_model)
-torch.save(classifiers,'classifiers_official.pth')
+        with open(file_path,'rb') as fopen:
+            data = pickle.load(fopen)
+    return data 
+
+color_classes = open_file('/scratch/bcgp/datasets/visual_genome/vaw_dataset/color_data_single_classes/id_to_class.json')
+material_class = open_file('/scratch/bcgp/datasets/visual_genome/vaw_dataset/material_data_single_classes/id_to_class.json')
+shape_class = open_file('/scratch/bcgp/datasets/visual_genome/vaw_dataset/shape_data_single_classes/id_to_class.json')
+
+total = len(list(color_classes.keys()))+len(list(material_class.keys()))+len(list(shape_class.keys()))
+att_dict = {'color':color_classes,'material':material_class,'shape':shape_class}
+folder_dict = {'color':'dino_classifiers/binary/color','material':'dino_classifiers/binary/material','shape':'dino_classifiers/binary/shape'}
+classifiers = nn.ModuleList([nn.Linear(768,out_features=1, bias=True) for _ in range(total+1)])
+new_class_id_to_key = {}
+current_key = 0 
+for att in tqdm(att_dict):
+    dictionary = att_dict[att]
+    for class_id,class_name in dictionary.items():
+        class_id = int(class_id)
+        f = folder_dict[att]
+        classifier= open_file(os.path.join('/scratch/bcgp/michal5/ecole_mo9_demo/src/attribute_training',f,f'classifier_{str(class_id)}.pkl'),use_json=False)
+        classifier.coef_ = classifier.coef_.astype(np.float32)
+        classifier.intercept_ = classifier.intercept_.astype(np.float32)
+        classifiers[int(current_key)].weight.data = torch.from_numpy(classifier.coef_)
+        classifiers[int(current_key)].bias.data = torch.from_numpy(classifier.intercept_)
+        new_class_id_to_key[current_key] = class_name
+        current_key+=1 
+torch.save(classifiers,'/scratch/bcgp/michal5/ecole_mo9_demo/src/attribute_training/all_dino_classifiers.pth',)
+with open('/scratch/bcgp/michal5/ecole_mo9_demo/src/attribute_training/dino_class_id_to_index.json','w+') as f:
+    json.dump(new_class_id_to_key,f)
+
 
