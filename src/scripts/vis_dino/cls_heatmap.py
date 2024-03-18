@@ -9,7 +9,12 @@ from PIL import Image
 from gen_dino_feats import get_rescaled_features
 from feature_extraction import build_dino, DinoFeatureExtractor
 import matplotlib.pyplot as plt
+import torch
 from rembg import remove, new_session
+
+def normalize(x: torch.Tensor):
+    x = x.squeeze()
+    return (x - x.min()) / (x.max() - x.min())
 
 def get_heatmaps(
     feature_extractor: DinoFeatureExtractor,
@@ -17,9 +22,6 @@ def get_heatmaps(
     image2: Image.Image,
     resize_images: bool = True
 ):
-    def normalize(x):
-        x = x.squeeze()
-        return (x - x.min()) / (x.max() - x.min())
 
     cls_feats1, patch_feats1 = get_rescaled_features(feature_extractor, image1, resize_image=resize_images) # (1, d), (1, n_patches_h, n_patches_w, d)
     cls_feats2, patch_feats2 = get_rescaled_features(feature_extractor, image2, resize_image=resize_images)
