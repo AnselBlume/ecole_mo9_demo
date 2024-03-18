@@ -189,7 +189,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args([
         '--image_dir','/scratch/bcgp/datasets/visual_genome/images',
-        '--feature_dir','/scratch/bcgp/datasets/visual_genome/features',
+        '--feature_dir','/tmp/features',
         '--dtype','bf16'
 
     ])
@@ -206,6 +206,6 @@ if __name__ == '__main__':
         model = model.to(device=args.device,dtype=args.dtype)
         extract_features(model, args, preprocess)
     else:
-        model = torch.hub.load('facebookresearch/dinov2','dinov2_vitl14')
+        model = torch.hub.load('facebookresearch/dinov2','dinov2_vitb14')
         model = model.to(device=args.device,dtype=args.dtype)
         extract_features(model, args)

@@ -107,8 +107,8 @@ def eval_multi_class(args,test_feature_dict):
 def eval_classifier(args,test_feature_dict):
     with open(os.path.join(args.save_path,f'classifier_{args.class_id}.pkl'),'rb') as f:
         classifier = pickle.load(f)
-    #classifier.coef_ = classifier.coef_.astype(np.float32)
-    #classifier.intercept_ = classifier.intercept_.astype(np.float32)
+    classifier.coef_ = classifier.coef_.astype(np.float32)
+    classifier.intercept_ = classifier.intercept_.astype(np.float32)
     print(test_feature_dict['labels'].shape,'shape')
     #print(np.nonzero(test_feature_dict['labels']).any())
     roc_auc = roc_auc_score(test_feature_dict['labels'],classifier.decision_function(test_feature_dict['features']))
@@ -128,13 +128,15 @@ def train_and_evaluate(args):
     print('Loading train features')
     attribute_name = id_to_attribute[str(args.class_id)]
     if args.multi_class:
-        train_feature_dict = load_features_for_multi_class(args,os.path.join(args.feature_dir,'train.pkl'))
-        train_multi_class(args,train_feature_dict,initial_features=None)
+        if not args.eval_only:
+            train_feature_dict = load_features_for_multi_class(args,os.path.join(args.feature_dir,'train.pkl'))
+            train_multi_class(args,train_feature_dict,initial_features=None)
         test_feature_dict = load_features_for_multi_class(args,os.path.join(args.feature_dir,'test.pkl'))
         eval_multi_class(args,test_feature_dict)
     else:
-        train_feature_dict = load_features_for_class(args,os.path.join(args.feature_dir,'train.pkl'),int(args.class_id))
-        train_classifier(args,train_feature_dict)
+        if not args.eval_only:
+            train_feature_dict = load_features_for_class(args,os.path.join(args.feature_dir,'train.pkl'),int(args.class_id))
+            train_classifier(args,train_feature_dict)
         test_feature_dict = load_features_for_class(args,os.path.join(args.feature_dir,'test.pkl'),int(args.class_id),test=True)
         eval_classifier(args,test_feature_dict)
     
@@ -156,6 +158,6 @@ if __name__ == '__main__':
     help='Number of iterations to run log regression')
     parser.add_argument('--multi_class',action='store_true',help='use multi class classifier or binary classifier')
     parser.add_argument('--mlp',action='store_true',help='use a mlp or linear layer')
-
+    parser.add_argument('--eval_only',action='store_true')
     args = parser.parse_args()
     train_and_evaluate(args)
