@@ -21,8 +21,8 @@ def get_heatmaps(
         x = x.squeeze()
         return (x - x.min()) / (x.max() - x.min())
 
-    cls_feats1, patch_feats1 = get_rescaled_features(feature_extractor, image1, resize_images=resize_images) # (1, d), (1, n_patches_h, n_patches_w, d)
-    cls_feats2, patch_feats2 = get_rescaled_features(feature_extractor, image2, resize_images=resize_images)
+    cls_feats1, patch_feats1 = get_rescaled_features(feature_extractor, image1, resize_image=resize_images) # (1, d), (1, n_patches_h, n_patches_w, d)
+    cls_feats2, patch_feats2 = get_rescaled_features(feature_extractor, image2, resize_image=resize_images)
 
     if isinstance(patch_feats1, list): # If the image is not cropped
         patch_feats1 = patch_feats1[0].unsqueeze(0)

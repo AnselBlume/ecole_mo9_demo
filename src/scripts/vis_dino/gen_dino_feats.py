@@ -1,4 +1,8 @@
 # %%
+'''
+    Utility functions to generate DINO features for a given image, and to get the rescaled patch
+    features at the full image resolution.
+'''
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
@@ -8,9 +12,10 @@ sys.path.append('/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src')
 import torch
 import torch.nn.functional as F
 import os
+import pickle
 from feature_extraction import build_dino, DinoFeatureExtractor
 import jsonargparse as argparse
-import pickle
+from typing import Union
 from PIL import Image
 from einops import rearrange
 
@@ -48,11 +53,12 @@ def rescale_features(features: torch.Tensor, img: Image.Image = None, width: int
 
     return features
 
-def get_rescaled_features(feature_extractor, img: Image.Image, resize_images: bool = True):
+def get_rescaled_features(feature_extractor, img: Image.Image, resize_image: bool = True) \
+    -> tuple[torch.Tensor, Union[torch.Tensor, list[torch.Tensor]]]:
     '''
         Extracts features from the image and rescales them to the size of the image.
 
-        Returns: shapes (1, d), (n, h, w, d)
+        Returns: shapes (1, d), (1, h, w, d) or list[(h, w, d) torch.Tensor]
     '''
     with torch.no_grad():
         cls_feats, patch_feats = feature_extractor([img])
@@ -60,7 +66,7 @@ def get_rescaled_features(feature_extractor, img: Image.Image, resize_images: bo
     cls_feats = cls_feats.cpu()
 
     # Rescale patch features
-    if resize_images: # All images are the same size
+    if resize_image: # All images are the same size
         patch_feats = rescale_features(patch_feats, img).cpu()
 
     else:
@@ -84,7 +90,7 @@ if __name__ == '__main__':
 
     # %%
     imgs = [Image.open(p) for p in args.img_paths]
-    cls_feats, patch_feats = get_rescaled_features(feature_extractor, imgs[0], resize_images=resize_images)
+    cls_feats, patch_feats = get_rescaled_features(feature_extractor, imgs[0], resize_image=resize_images)
 
     # %%
     out_dict = {
