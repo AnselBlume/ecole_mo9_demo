@@ -243,7 +243,8 @@ class Controller:
         stopping_condition: Literal['n_epochs', 'until_correct'] = 'until_correct',
         until_correct_examples: list[ConceptExample] = [],
         n_epochs: int = 10,
-        sample_all_negatives: bool = False
+        sample_all_negatives: bool = False,
+        min_prob_margin = .2
     ):
         '''
             Retrains the concept until it correctly predicts the given example images if until_correct_examples
@@ -287,6 +288,7 @@ class Controller:
                 stopping_condition='n_epochs',
                 n_epochs=n_epochs,
                 post_sampling_hook=cache_hook,
+                min_prob_margin=min_prob_margin,
                 lr=1e-2
             )
 
