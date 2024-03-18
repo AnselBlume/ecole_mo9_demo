@@ -3,7 +3,9 @@
 '''
 # %%
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+if __name__ == '__main__':
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
 import sys
 sys.path.append(os.path.realpath(os.path.join(__file__, '../../src')))
 from model.concept import ConceptKB, ConceptExample, ConceptKBConfig
