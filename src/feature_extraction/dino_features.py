@@ -2,6 +2,7 @@ from PIL.Image import Image
 import torch.nn as nn
 from torchvision import transforms
 from typing import Sequence
+from tqdm import tqdm
 import torch
 
 # Copied from https://github.com/facebookresearch/dinov2/blob/main/dinov2/data/transforms.py
@@ -46,6 +47,7 @@ def get_dino_transform(
     ]
     return transforms.Compose(transforms_list)
 
+
 class DinoFeatureExtractor(nn.Module):
     def __init__(self, dino: nn.Module):
         super().__init__()
@@ -62,6 +64,16 @@ class DinoFeatureExtractor(nn.Module):
         '''
         # Prepare inputs
         inputs = torch.stack([self.transform(img) for img in images]).to(self.device)
+        outputs = self.model(inputs, is_training=True) # Set is_training=True to return all outputs
+
+        cls_token = outputs['x_norm_clstoken']
+        patch_tokens = outputs['x_norm_patchtokens']
+
+        return cls_token, patch_tokens
+
+    def forward_from_tensor(self, image: torch.Tensor):
+        # Normalize & crop according to DINOv2 settings for ImageNet
+        inputs = image.to(self.device)
         outputs = self.model(inputs, is_training=True) # Set is_training=True to return all outputs
 
         cls_token = outputs['x_norm_clstoken']
