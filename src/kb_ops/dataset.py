@@ -31,6 +31,7 @@ class ImageDataset(Dataset):
         label = self.labels[idx]
 
         return {
+            'index': idx,
             'image': img,
             'label': label
         }
@@ -60,6 +61,7 @@ class PresegmentedDataset(Dataset):
         label = self.labels[idx]
 
         return {
+            'index': idx,
             'segmentations': segmentations,
             'label': label
         }
@@ -79,6 +81,7 @@ class FeatureDataset(Dataset):
             features: CachedImageFeatures = pickle.load(f)
 
         return {
+            'index': idx,
             'features': features,
             'label': self.labels[idx]
         }

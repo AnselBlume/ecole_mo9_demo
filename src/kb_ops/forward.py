@@ -81,7 +81,8 @@ class ConceptKBForwardBase:
         do_backward: bool = False,
         backward_every_n_concepts: int = None,
         return_segmentations: bool = False,
-        seg_kwargs: dict = {}
+        seg_kwargs: dict = {},
+        set_score_to_zero: bool = False
     ):
 
         # Check __name__ instead of isinstance to avoid pickle versioning issues
@@ -138,6 +139,11 @@ class ConceptKBForwardBase:
             if text_label is not None:
                 binary_label = torch.tensor(int(text_label in self.concept_labels[concept.name]), dtype=score.dtype, device=score.device)
                 concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(self.concept_kb)
+
+                # To prevent loss saturation due to sigmoid
+                if set_score_to_zero:
+                    score = output.cum_score - output.cum_score.detach()
+                    concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(self.concept_kb)
 
                 curr_loss += concept_loss
                 total_loss += concept_loss.item()

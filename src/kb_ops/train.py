@@ -99,7 +99,8 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         imgs_per_optim_step: int = 4,
         ckpt_every_n_epochs: int = 1,
         ckpt_dir: str = 'checkpoints',
-        ckpt_fmt: str = 'concept_kb_epoch_{epoch}.pt'
+        ckpt_fmt: str = 'concept_kb_epoch_{epoch}.pt',
+        set_score_to_zero_at_indices: list[int] = []
     ) -> dict[str, Any]:
 
         if ckpt_dir:
@@ -116,12 +117,16 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 concepts = list(self.concept_kb)
 
         data_key = self._determine_data_key(train_ds)
+
         train_dl = self._get_dataloader(train_ds, is_train=True)
+        train_outputs = []
 
         val_dl = self._get_dataloader(val_ds, is_train=False) if val_ds else None
+        val_outputs = []
         val_losses = [] if val_ds else None
 
         optimizer = torch.optim.Adam(self.concept_kb.parameters(), lr=lr)
+        set_score_to_zero_at_indices = set(set_score_to_zero_at_indices)
 
         for epoch in range(1, n_epochs + 1):
             logger.info(f'======== Starting Epoch {epoch}/{n_epochs} ========')
@@ -129,13 +134,17 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
             for i, batch in enumerate(tqdm(train_dl, desc=f'Epoch {epoch}/{n_epochs}'), start=1):
                 image_data, text_label = batch[data_key], batch['label']
+                index = batch['index'][0] # To check whether to set score to zero
+
                 outputs = self.forward_pass(
                     image_data[0],
                     text_label[0],
                     concepts=concepts,
                     do_backward=True,
-                    backward_every_n_concepts=backward_every_n_concepts
+                    backward_every_n_concepts=backward_every_n_concepts,
+                    set_score_to_zero=set_score_to_zero_at_indices and index in set_score_to_zero_at_indices
                 )
+                train_outputs.append(outputs)
 
                 self.log({'train_loss': outputs['loss'], 'epoch': epoch})
 
@@ -154,18 +163,21 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             # Validate
             if val_dl:
                 outputs = self.validate(val_dl)
-                val_losses.append(outputs['val_loss'])
+                val_outputs.append(outputs)
 
-                self.log({'val_loss': val_losses[-1], 'val_acc': outputs['val_acc'], 'epoch': epoch})
+                self.log({'val_loss': outputs['val_loss'], 'val_acc': outputs['val_acc'], 'epoch': epoch})
                 logger.info(f'Validation loss: {outputs["val_loss"]}, Validation accuracy: {outputs["val_acc"]}')
 
         # Construct return dictionary
+        val_losses = [output['val_loss'] for output in val_outputs] if val_dl else None
         best_ckpt_epoch = np.argmin(val_losses) if val_losses else None
         best_ckpt_path = self._get_ckpt_path(ckpt_dir, ckpt_fmt, best_ckpt_epoch) if val_losses else None
 
         ret_dict = {
             'best_ckpt_epoch': best_ckpt_epoch,
-            'best_ckpt_path': best_ckpt_path
+            'best_ckpt_path': best_ckpt_path,
+            'train_outputs': train_outputs,
+            'val_outputs': val_outputs
         }
 
         return ret_dict
@@ -251,6 +263,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
             # Create dataset
             train_ds = FeatureDataset(all_feature_paths, all_labels)
+            positive_inds = [i for i, label in enumerate(all_labels) if label == concept.name]
             val_ds = FeatureDataset(until_correct_example_paths, [concept.name] * len(until_correct_example_paths))
 
             val_dl = self._get_dataloader(val_ds, is_train=False)
@@ -260,7 +273,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             train_kwargs.update({
                 'ckpt_dir': None,
                 'concepts': [concept],
-                'lr': train_kwargs.get('lr', 1e-2),
+                'lr': train_kwargs.get('lr', 1e-2)
             })
 
             if stopping_condition == 'n_epochs':
@@ -276,19 +289,34 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                     curr_epoch += 1
                     results = self.train(train_ds, None, n_epochs=n_epochs_between_predictions, **train_kwargs)
 
+                    # Predict validation set and check probability margin of each example for stopping condition
                     predictions = predictor.predict(val_dl)
 
-                    # Check probability margin of each example for stopping condition
                     all_scores = torch.stack([pred['predictors_scores'] for pred in predictions])
                     normalized_scores = F.softmax(all_scores, dim=1)
-                    logger.debug(f'Normalized scores: {normalized_scores}')
+                    logger.debug(f'Softmax scores: {normalized_scores}')
 
                     values, indices = normalized_scores.topk(2, dim=1) # Each of values, indices are (n_examples, 2) tensors
 
-                    logger.debug(f'Top two scores: {values}')
-                    logger.debug(f'Target scores: {normalized_scores[:, target_concept_index]}')
+                    logger.debug(f'Top two softmax scores: {values}')
+                    logger.debug(f'Target softmax scores: {normalized_scores[:, target_concept_index]}')
 
-                    if not (indices[:, 0] == target_concept_index).all(): # Not all examples are correctly predicted
+                    target_sigmoid_scores = all_scores[:, target_concept_index].sigmoid()
+                    logger.debug(f'Target sigmoid scores: {target_sigmoid_scores}')
+
+                    # Stop only if for all examples, the target concept is the maximal prediction among all concepts
+                    # and it is predicted as positive
+                    is_maximal_prediction = (indices[:, 0] == target_concept_index).all()
+                    is_predicted_positive = (target_sigmoid_scores > .5).all()
+
+                    if not (is_maximal_prediction and is_predicted_positive): # Not all examples are correctly predicted
+                        # Detect whether the loss is close to zero, since this would make gradient zero
+                        train_losses = [output['loss'] for output in results['train_outputs']]
+
+                        if np.isclose(np.mean(train_losses), 0.):
+                            logger.warning(f'Train loss is close to zero; setting positive scores to zero')
+                            train_kwargs['set_score_to_zero_at_indices'] = positive_inds
+
                         continue
 
                     prob_margins = values[:, 0] - values[:, 1] # Top prediction prob - 2nd prediction prob
