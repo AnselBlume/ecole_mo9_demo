@@ -1,11 +1,15 @@
 import os
 import pickle
-from torch.utils.data import Dataset
+import torch
+
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 from image_processing import LocalizerAndSegmenter
 from image_processing.localize_and_segment import LocalizeAndSegmentOutput
 from kb_ops.feature_cache import CachedImageFeatures
 from PIL import Image
 from tqdm import tqdm
+
 
 def list_collate(batch):
     keys = batch[0].keys()
@@ -101,6 +105,37 @@ def preprocess_segmentations(img_dir: str, out_dir: str, loc_and_seg: LocalizerA
 
         with open(out_path, 'wb') as f:
             pickle.dump(segmentations, f)
+
+
+class ImageNetPathDataset(Dataset):
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.image_paths = []
+        self.labels = []
+
+        # Assume each subdirectory in the root directory is a class label
+        for label_dir in tqdm(os.listdir(root_dir), desc=f'Initializing image paths for ImageNetPathDataset'):
+            label_dir_path = os.path.join(root_dir, label_dir)
+            if os.path.isdir(label_dir_path):
+                for image_name in os.listdir(label_dir_path):
+                    if image_name.endswith('.JPEG'):
+                        self.image_paths.append(os.path.join(label_dir_path, image_name))
+                        self.labels.append(label_dir)  # Using directory name as label
+
+    def __len__(self):
+        return len(self.image_paths)
+
+    def __getitem__(self, idx):
+        image_path = self.image_paths[idx]
+        image = Image.open(image_path).convert('RGB')  # Convert image to RGB
+        label = self.labels[idx]
+
+        if self.transform:
+            image = self.transform(image)
+
+        return image, image_path
+    
 
 if __name__ == '__main__':
     import os
