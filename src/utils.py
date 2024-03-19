@@ -1,6 +1,24 @@
 import torch
-from typing import Union
 import inflect
+import PIL.Image as Image
+
+from typing import Union
+from feature_extraction.dino_features import DinoFeatureExtractor
+
+
+def open_image(img_path: str):
+    # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
+    with open(img_path, 'rb') as f:
+        img = Image.open(f)
+        return img.convert('RGB').copy()
+
+
+def replace_extension(file_name: str):
+    if '/' in file_name:
+        return file_name.split('/')[-1].strip()
+    else:
+        return file_name
+
 
 def to_device(d: dict, device: Union[str, torch.device]):
     '''
@@ -44,3 +62,4 @@ class ArticleDeterminer:
         result = self.p.singular_noun(noun) # Returns False if already singular
 
         return result if result else noun
+    
