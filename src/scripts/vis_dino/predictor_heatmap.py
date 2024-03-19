@@ -13,6 +13,7 @@ sys.path.append(os.path.realpath(os.path.join(__file__, '../../../../test'))) # 
 from model.concept import ConceptKB, ConceptExample, ConceptKBConfig, Concept
 from feature_extraction import build_feature_extractor, build_sam, build_desco, build_clip, build_dino
 import torch
+from kb_ops.train_test_split import split_from_paths
 from train_from_scratch import prepare_concept # in test module
 from image_processing import build_localizer_and_segmenter
 from kb_ops import ConceptKBFeaturePipeline, ConceptKBFeatureCacher
@@ -50,7 +51,7 @@ def vis_concept_predictor_heatmap(
     ).eval().cpu()
 
     # Patch features
-    cls_feats, patch_feats = get_rescaled_features(fe, img, resize_image=False, interpolate_on_cpu=True)
+    cls_feats, patch_feats = get_rescaled_features(fe, [img], resize_image=False, interpolate_on_cpu=True)
     patch_feats = patch_feats[0] # (h, w, d)
 
     # Get heatmap
@@ -71,7 +72,7 @@ def vis_concept_predictor_heatmap(
     axs[0].axis('off')
 
     axs[1].imshow(heatmap, cmap='rainbow')
-    axs[1].set_title(f'Predictor Heatmap (Score: {cum_score * 100:.2f})')
+    axs[1].set_title(f'Predictor Heatmap (Feature Score: {cum_score * 100:.2f})')
     axs[1].axis('off')
 
     if title:
@@ -79,26 +80,22 @@ def vis_concept_predictor_heatmap(
 
     return fig, axs
 
-# %%
-if __name__ == '__main__':
-    pass
-    # %% Build controller components
+def vis_evolution():
+    '''
+        Visualize the evolution of concept predictor heatmaps after training a new concept one example at a time.
+        Both the original and the new concept have limited training data.
+
+        Takes a new concept's images, and trains its concept predictor (and an existing similar one) iteratively,
+        adding one image at a time to the train set.
+    '''
     concept_kb = ConceptKB()
-
-    # loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
-    loc_and_seg = build_localizer_and_segmenter(build_sam(), None) # Save time by not loading DesCo for this debugging
-    clip = build_clip()
-    feature_extractor = build_feature_extractor(dino_model=build_dino(), clip_model=clip[0], clip_processor=clip[1])
-    dino_fe = feature_extractor.dino_feature_extractor
-    feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
-
-    retriever = CLIPConceptRetriever(concept_kb.concepts, *clip)
-    cacher = ConceptKBFeatureCacher(concept_kb, feature_pipeline)
-
-    # %% Initialize ConceptKB
     concept_kb.initialize(ConceptKBConfig(
         n_trained_attrs=N_ATTRS_SUBSET,
     ))
+
+    feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
+    retriever = CLIPConceptRetriever(concept_kb.concepts, *clip)
+    cacher = ConceptKBFeatureCacher(concept_kb, feature_pipeline)
 
     # %% Build controller
     controller = Controller(loc_and_seg, concept_kb, feature_extractor, retriever=retriever, cacher=cacher)
@@ -120,6 +117,9 @@ if __name__ == '__main__':
     img_paths = prepare_concept(img_dir, concept2_name, cache_dir, controller)
 
     # %% Train second concept, visualizing each
+    vis_dir = 'vis_evolution'
+    os.makedirs(vis_dir, exist_ok=True)
+
     controller.train_concept(concept2_name)
     img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
     concept2 = controller.add_concept(concept2_name)
@@ -136,9 +136,9 @@ if __name__ == '__main__':
             dino_fe,
             title=f'{concept2_name.capitalize()} Predictor Heatmap Before Image {i}'
         )
-        fig.savefig(f' {concept2_name}_heatmap_before_image_{i}.jpg')
+        fig.savefig(f'{vis_dir}/{concept2_name}_heatmap_before_image_{i}.jpg')
 
-        controller.train_concept(concept2_name, until_correct_examples=[concept2.examples[-1]])
+        controller.train_concept(concept2_name) # Train on all existing images up to this point, like concept 1
 
         fig, axs = vis_concept_predictor_heatmap(
             concept2,
@@ -146,7 +146,7 @@ if __name__ == '__main__':
             dino_fe,
             title=f'{concept2_name.capitalize()} Predictor Heatmap After Image {i}'
         )
-        fig.savefig(f'{concept2_name}_heatmap_after_image_{i}.jpg')
+        fig.savefig(f'{vis_dir}/{concept2_name}_heatmap_after_image_{i}.jpg')
 
         # %% Visualize, train, and visualize concept 1
         fig, axs = vis_concept_predictor_heatmap(
@@ -155,9 +155,9 @@ if __name__ == '__main__':
             dino_fe,
             title=f'{concept1_name.capitalize()} Predictor Heatmap Before Image {i}'
         )
-        fig.savefig(f'{concept1_name}_heatmap_before_image_{i}')
+        fig.savefig(f'{vis_dir}/{concept1_name}_heatmap_before_image_{i}')
 
-        controller.train_concept(concept1_name, stopping_condition='n_epochs', n_epochs=3)
+        controller.train_concept(concept1_name, stopping_condition='n_epochs', n_epochs=5)
 
         fig, axs = vis_concept_predictor_heatmap(
             concept1,
@@ -165,14 +165,120 @@ if __name__ == '__main__':
             dino_fe,
             title=f'{concept1_name.capitalize()} Predictor Heatmap After Image {i}'
         )
-        fig.savefig(f'{concept1_name}_heatmap_after_image_{i}.jpg')
+        fig.savefig(f'{vis_dir}/{concept1_name}_heatmap_after_image_{i}.jpg')
 
-    # %% Predict examples for verification
-    # for img_path in img_paths:
-    #     img = Image.open(img_path).convert('RGB')
-    #     output = controller.predict_concept(img) # Displays image in Jupyter
-    #     logger.info('Predicted label: ' + output['predicted_label'])
+def vis_checkpoint_new_concept(max_to_vis_per_concept: int = 3):
+    '''
+        Visualize the heatmaps of the concept predictors after adding a new concept to the ConceptKB.
+        First trains the new concept, then retrains an old similar concept on the new data for comparison.
+    '''
+    vis_dir = 'vis_checkpointed_kb_new_concept'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_17-00:21:30-wqv6b6wu-hierarchical_v3-dino/concept_kb_epoch_50.pt'
 
-    # # %% Test the controller's train function to train everything
-    # controller.train()
+    os.makedirs(vis_dir, exist_ok=True)
+    concept_kb = ConceptKB.load(ckpt_path)
+
+    feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
+    retriever = CLIPConceptRetriever(concept_kb.concepts, *clip)
+    cacher = ConceptKBFeatureCacher(concept_kb, feature_pipeline)
+
+    # %% Build controller
+    controller = Controller(loc_and_seg, concept_kb, feature_extractor, retriever=retriever, cacher=cacher)
+
+    # %% Add new concept (hoe/concept1 is already added)
+    img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/single_concepts/shovels'
+    concept2_name = 'shovel'
+    cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/shovels'
+
+    prepare_concept(img_dir, concept2_name, cache_dir, controller)
+    concept2 = controller.retrieve_concept(concept2_name)
+    controller.train_concept(concept2_name)
+
+    # Visualize concept 1 before training on concept 2 examples
+    concept1_name = 'hoe' # For comparison to concept 2
+    concept1 = controller.retrieve_concept(concept1_name)
+
+    for i, img_path in enumerate([e.image_path for e in concept2.examples], start=1):
+        fig, axs = vis_concept_predictor_heatmap(concept1, img_path, dino_fe, title=f'Before Retraining {concept1_name.capitalize()} Predictor Heatmap')
+        fig.savefig(f'{vis_dir}/image_{i}_before_retraining_{concept1_name}_heatmap.jpg')
+
+    # Retrain concept one
+    controller.train_concept(concept1_name, stopping_condition='n_epochs', n_epochs=10)
+
+    # For each image in each concept, visualize the heatmaps of both predictors
+    for concept in [concept1, concept2]:
+        img_paths = [e.image_path for e in concept.examples][:max_to_vis_per_concept]
+
+        for i, img_path in enumerate(img_paths, start=1):
+            # Visualize predictions from both predictors
+            fig, axs = vis_concept_predictor_heatmap(concept1, img_path, dino_fe, title=f'{concept1.name.capitalize()} Predictor Heatmap')
+            fig.savefig(f'{vis_dir}/image_{i}_after_retraining_{concept1_name}_heatmap.jpg')
+
+            fig, axs = vis_concept_predictor_heatmap(concept2, img_path, dino_fe, title=f'{concept2.name.capitalize()} Predictor Heatmap')
+            fig.savefig(f'{vis_dir}/image_{i}_{concept2_name}_heatmap.jpg')
+
+def vis_checkpoint(max_to_vis_per_concept: int = 3):
+    '''
+        Visualize the heatmaps of existing checkpointed concept predictors on each other's test images.
+    '''
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_17-00:21:30-wqv6b6wu-hierarchical_v3-dino/concept_kb_epoch_50.pt'
+    concept_kb = ConceptKB.load(ckpt_path)
+
+    feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
+    retriever = CLIPConceptRetriever(concept_kb.concepts, *clip)
+    cacher = ConceptKBFeatureCacher(concept_kb, feature_pipeline)
+
+    #  Build controller
+    controller = Controller(loc_and_seg, concept_kb, feature_extractor, retriever=retriever, cacher=cacher)
+
+    # Concepts to evaluate
+    concept1_name = 'bowl'
+    concept2_name = 'mug'
+
+    concept1 = controller.retrieve_concept(concept1_name)
+    concept2 = controller.retrieve_concept(concept2_name)
+
+    # Get image paths for concepts 1, 2
+    all_paths = [
+        e.image_path
+        for concept in concept_kb
+        for e in concept.examples
+    ]
+
+    (_, _), (_, _), (test_paths, test_labels) = split_from_paths(all_paths)
+
+    concept1_paths = [path for i, path in enumerate(test_paths) if test_labels[i] == concept1_name][:max_to_vis_per_concept]
+    concept2_paths = [path for i, path in enumerate(test_paths) if test_labels[i] == concept2_name][:max_to_vis_per_concept]
+
+    # Visualize
+    vis_dir = 'vis_checkpointed_kb'
+    os.makedirs(vis_dir, exist_ok=True)
+
+    for i, img_path in enumerate(concept1_paths, start=1):
+        fig, axs = vis_concept_predictor_heatmap(concept1, img_path, dino_fe, title=f'{concept1_name.capitalize()} Predictor Heatmap')
+        fig.savefig(f'{vis_dir}/{concept1_name}_image_{i}_{concept1_name}_heatmap.jpg')
+
+        fig, axs = vis_concept_predictor_heatmap(concept2, img_path, dino_fe, title=f'{concept2_name.capitalize()} Predictor Heatmap')
+        fig.savefig(f'{vis_dir}/{concept1_name}_image_{i}_{concept2_name}_heatmap.jpg')
+
+    for i, img_path in enumerate(concept2_paths, start=1):
+        fig, axs = vis_concept_predictor_heatmap(concept1, img_path, dino_fe, title=f'{concept1_name.capitalize()} Predictor Heatmap')
+        fig.savefig(f'{vis_dir}/{concept2_name}_image_{i}_{concept1_name}_heatmap.jpg')
+
+        fig, axs = vis_concept_predictor_heatmap(concept2, img_path, dino_fe, title=f'{concept2_name.capitalize()} Predictor Heatmap')
+        fig.savefig(f'{vis_dir}/{concept2_name}_image_{i}_{concept2_name}_heatmap.jpg')
+
 # %%
+if __name__ == '__main__':
+    pass
+
+    # %% Build controller components
+    # loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
+    loc_and_seg = build_localizer_and_segmenter(build_sam(), None) # Save time by not loading DesCo for this debugging
+    clip = build_clip()
+    feature_extractor = build_feature_extractor(dino_model=build_dino(), clip_model=clip[0], clip_processor=clip[1])
+    dino_fe = feature_extractor.dino_feature_extractor
+
+    vis_evolution()
+    vis_checkpoint_new_concept()
+    vis_checkpoint()

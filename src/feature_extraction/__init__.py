@@ -115,7 +115,7 @@ def build_zero_shot_attr_predictor(clip_model: CLIPModel, processor: CLIPProcess
 import torch
 from .dino_features import DinoFeatureExtractor
 
-DEFAULT_DINO_MODEL = 'dinov2_vitl14_reg'
+DEFAULT_DINO_MODEL = 'dinov2_vitl14'
 
 def build_dino(model_name: str = DEFAULT_DINO_MODEL, device: str = 'cuda'):
     return torch.hub.load('facebookresearch/dinov2', model_name).to(device)
