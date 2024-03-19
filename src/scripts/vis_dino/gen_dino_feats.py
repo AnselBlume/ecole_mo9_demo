@@ -44,7 +44,7 @@ def rescale_features(features: torch.Tensor, img: Image.Image = None, width: int
         features = features.unsqueeze(0)
 
     features = F.interpolate(
-        rearrange(features, 'n h w d -> n d h w'),
+        rearrange(features, 'n h w d -> n d h w').contiguous(),
         size=(height, width),
         mode='bilinear'
     )
@@ -53,8 +53,12 @@ def rescale_features(features: torch.Tensor, img: Image.Image = None, width: int
 
     return features
 
-def get_rescaled_features(feature_extractor, img: Image.Image, resize_image: bool = True) \
-    -> tuple[torch.Tensor, Union[torch.Tensor, list[torch.Tensor]]]:
+def get_rescaled_features(
+    feature_extractor,
+    img: Image.Image,
+    resize_image: bool = True,
+    interpolate_on_cpu: bool = False
+) -> tuple[torch.Tensor, Union[torch.Tensor, list[torch.Tensor]]]:
     '''
         Extracts features from the image and rescales them to the size of the image.
 
@@ -64,6 +68,17 @@ def get_rescaled_features(feature_extractor, img: Image.Image, resize_image: boo
         cls_feats, patch_feats = feature_extractor([img])
 
     cls_feats = cls_feats.cpu()
+
+    # Avoid CUDA oom errors by interpolating on CPU
+    if interpolate_on_cpu:
+        if resize_image:
+            patch_feats = patch_feats.cpu()
+
+        else:
+            patch_feats = [
+                patch_feat.cpu()
+                for patch_feat in patch_feats
+            ]
 
     # Rescale patch features
     if resize_image: # All images are the same size
