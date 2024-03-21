@@ -61,20 +61,25 @@ def _make_normalize_transform(
 ) -> transforms.Normalize:
     return transforms.Normalize(mean=mean, std=std)
 
+DEFAULT_RESIZE_SIZE = 256
+DEFAULT_RESIZE_INTERPOLATION = transforms.InterpolationMode.BICUBIC
+DEFAULT_CROP_SIZE = 224
+
 def get_dino_transform(
     crop_img: bool,
     *,
     padding_multiple: int = 14, # aka DINOv2 model patch size
-    do_resize: bool = True,
-    resize_size: int = 256,
-    interpolation=transforms.InterpolationMode.BICUBIC,
-    crop_size: int = 224,
+    resize_img: bool = True,
+    resize_size: int = DEFAULT_RESIZE_SIZE,
+    interpolation = DEFAULT_RESIZE_INTERPOLATION,
+    crop_size: int = DEFAULT_CROP_SIZE,
     mean: Sequence[float] = IMAGENET_DEFAULT_MEAN,
     std: Sequence[float] = IMAGENET_DEFAULT_STD,
 ) -> transforms.Compose:
     '''
-        If crop_img is True, will automatically set do_resize to True.
+        If crop_img is True, will automatically set resize_img to True.
     '''
+    # With the default parameters, this is the transform used for DINO classification
     if crop_img:
         transforms_list = [
             transforms.Resize(resize_size, interpolation=interpolation),
@@ -83,10 +88,12 @@ def get_dino_transform(
             _make_normalize_transform(mean=mean, std=std),
         ]
 
+    # Transform used for DINO segmentation in Region-Based Representations revisited and at
+    # https://github.com/facebookresearch/dinov2/blob/main/notebooks/semantic_segmentation.ipynb
     else:
         transforms_list = []
 
-        if do_resize:
+        if resize_img:
             transforms_list.append(transforms.Resize(resize_size, interpolation=interpolation))
 
         transforms_list.extend([
@@ -99,12 +106,13 @@ def get_dino_transform(
     return transforms.Compose(transforms_list)
 
 class DINOFeatureExtractor(nn.Module):
-    def __init__(self, dino: nn.Module, crop_images: bool = True):
+    def __init__(self, dino: nn.Module, resize_images: bool = True, crop_images: bool = False):
         super().__init__()
 
         self.model = dino.eval()
+        self.resize_images = resize_images
         self.crop_images = crop_images
-        self.transform = get_dino_transform(crop_images)
+        self.transform = get_dino_transform(crop_images, resize_img=resize_images)
 
     @property
     def device(self):
@@ -162,7 +170,14 @@ class DINOFeatureExtractor(nn.Module):
 
         return cls_token, patch_tokens
 
-def rescale_features(features: torch.Tensor, img: Image = None, height: int = None, width: int = None):
+def rescale_features(
+    features: torch.Tensor,
+    img: Image = None,
+    height: int = None,
+    width: int = None,
+    do_resize: bool = False,
+    resize_size: Union[int, tuple[int,int]] = DEFAULT_RESIZE_SIZE
+):
     '''
         Returns the features rescaled to the size of the image.
 
@@ -170,20 +185,23 @@ def rescale_features(features: torch.Tensor, img: Image = None, height: int = No
 
         Returns: Interpolated features to the size of the image.
     '''
-    assert bool(img) ^ bool(width and height), 'Exactly one of img or (width and height) must be provided'
-
-    if img:
-        width, height = img.size
+    if bool(img) + bool(width and height) + bool(do_resize) != 1:
+        raise ValueError('Exactly one of img, (width and height), or do_resize must be provided')
 
     has_batch_dim = features.dim() > 3
     if not has_batch_dim: # Create batch dimension for interpolate
         features = features.unsqueeze(0)
 
-    features = F.interpolate(
-        rearrange(features, 'n h w d -> n d h w').contiguous(),
-        size=(height, width),
-        mode='bilinear'
-    )
+    features = rearrange(features, 'n h w d -> n d h w').contiguous()
+
+    # Resize based on min dimension or interpolate to specified dimensions
+    if do_resize:
+        features = TF.resize(features, resize_size, interpolation=DEFAULT_RESIZE_INTERPOLATION)
+
+    else:
+        if img:
+            width, height = img.size
+        features = F.interpolate(features, size=(height, width), mode='bilinear')
 
     features = rearrange(features, 'n d h w -> n h w d')
 
@@ -196,8 +214,9 @@ def get_rescaled_features(
     feature_extractor: DINOFeatureExtractor,
     images: list[Image],
     patch_size: int = 14,
-    crop_height: int = 224,
-    crop_width: int = 224,
+    resize_size: int = DEFAULT_RESIZE_SIZE,
+    crop_height: int = DEFAULT_CROP_SIZE,
+    crop_width: int = DEFAULT_CROP_SIZE,
     interpolate_on_cpu: bool = False,
     fall_back_to_cpu: bool = False,
     return_on_cpu: bool = False
@@ -221,6 +240,7 @@ def get_rescaled_features(
         cls_feats, patch_feats = feature_extractor(images)
 
     are_images_cropped = feature_extractor.crop_images
+    are_images_resized = feature_extractor.resize_images
 
     if return_on_cpu:
         cls_feats = cls_feats.cpu()
@@ -263,16 +283,38 @@ def get_rescaled_features(
         if return_on_cpu:
             patch_feats = patch_feats.cpu()
 
-    else:
+    else: # Images aren't cropped, so each patch feature has a different dimension and comes in a list
         # Rescale to padded size
         rescaled_patch_feats = []
 
         for patch_feat, img in zip(patch_feats, images):
-            width, height = img.size
-            padded_height = math.ceil(height / patch_size) * patch_size
-            padded_width = math.ceil(width / patch_size) * patch_size
+            if are_images_resized: # Interpolate to padded resized size
+                # Compute resized dimensions for padding removal
+                resized_dims = [None, None]
+                spatial_shapes = list(reversed(img.size)) # (h, w)
 
-            rescale_func = partial(rescale_features, height=padded_height, width=padded_width)
+                smaller_dim = 0 if spatial_shapes[0] < spatial_shapes[1] else 1
+                resized_dims[smaller_dim] = resize_size
+
+                # _compute_resized_output_size floors the scaled larger dimension:
+                # https://pytorch.org/vision/0.15/_modules/torchvision/transforms/functional.html
+                larger_dim = 1 - smaller_dim
+                resized_dims[larger_dim] = int(spatial_shapes[larger_dim] * resize_size / spatial_shapes[smaller_dim]) # Exact implementation in torch resize; multiplication first helps avoids fp errors
+                # scale_factor = resize_size / spatial_shapes[smaller_dim]
+                # resized_dims[larger_dim] = int(spatial_shapes[larger_dim] * scale_factor + 1e-6) # + epsilon to avoid floating point errors during floor
+
+                height, width = resized_dims
+
+                # Interpolate to padded resized size
+                padded_resize_size = math.ceil(DEFAULT_RESIZE_SIZE / patch_size) * patch_size
+                rescale_func = partial(rescale_features, do_resize=True, resize_size=padded_resize_size)
+
+            else: # Interpolate to full, padded image size
+                width, height = img.size
+                padded_height = math.ceil(height / patch_size) * patch_size
+                padded_width = math.ceil(width / patch_size) * patch_size
+                rescale_func = partial(rescale_features, height=padded_height, width=padded_width)
+
             rescaled = try_rescale(rescale_func, patch_feat)
 
             # Remove padding from upscaled features
@@ -288,6 +330,24 @@ def get_rescaled_features(
         patch_feats = rescaled_patch_feats
 
     return cls_feats, patch_feats
+
+def interpolate_masks(
+    masks: torch.BoolTensor,
+    do_resize: bool = False,
+    do_crop: bool = False,
+    resize_size: Union[int, tuple[int, int]] = DEFAULT_RESIZE_SIZE,
+    resize_interpolation = DEFAULT_RESIZE_INTERPOLATION,
+    crop_size: Union[int, tuple[int, int]] = DEFAULT_CROP_SIZE
+):
+    masks = masks.float()
+
+    if do_resize:
+        masks = TF.resize(masks, resize_size, resize_interpolation)
+
+    if do_crop:
+        masks = TF.center_crop(masks, crop_size)
+
+    return masks.round().bool() # Nop if not resized or cropped
 
 def region_pool(masks: torch.BoolTensor, features: torch.Tensor):
     assert masks.shape[-2:] == features.shape[-3:-1]

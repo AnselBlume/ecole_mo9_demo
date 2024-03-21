@@ -63,15 +63,19 @@ class ConceptKBFeaturePipeline:
     ) -> ImageFeatures:
         # Get region crops
         region_crops = segmentations.part_crops
+        region_masks = segmentations.part_masks
+
         if region_crops == []:
+            assert len(region_masks) == 0
             region_crops = [image]
+            region_masks = torch.ones(1, *image.size[::-1], dtype=torch.bool)
 
         with torch.no_grad():
             features: ImageFeatures = self.feature_extractor(
                 image,
                 region_crops,
                 zs_attrs,
-                segmentations.part_masks,
+                region_masks,
                 cached_features=cached_features
             )
 
