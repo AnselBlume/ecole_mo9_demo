@@ -12,7 +12,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from feature_extraction.dino_features import DinoFeatureExtractor, get_dino_transform
+from feature_extraction.dino_features import DINOFeatureExtractor, get_dino_transform
 from utils import open_image, replace_extension
 
 logger = logging.getLogger(__name__)
@@ -70,13 +70,13 @@ def main(args):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         logger.info(f"device : [ {device} ]")
         dino_model = torch.hub.load('facebookresearch/dinov2', args.vis_encoder)  #.to(device)
-        encoder = DinoFeatureExtractor(dino_model)
+        encoder = DINOFeatureExtractor(dino_model)
     else:
         pass # TODO Implement case for additional vision encoders
 
     img2ids, ids2imgs = {}, {}
     img_embeds, img_paths = [], []
-    
+
     logger.info("[ # of images ] : ", len(dataloader))
 
     # Encode images
@@ -126,7 +126,7 @@ def main(args):
         num_cluster = args.num_cluster
         num_iter = args.num_iter
         verbose = True
-        
+
         # Save kmeans centroids for replication
         faiss_ncentroid_path = f"subset-whole_unit-100-faiss-n_{num_cluster}-iter_{num_iter}-kcentroid.npy"
         faiss_ncentroid_path = os.path.join(args.out_dir, faiss_ncentroid_path)
@@ -139,7 +139,7 @@ def main(args):
             centroids = kmeans.centroids
         else:
             centroids = np.load(faiss_ncentroid_path)  # use with 'kmeans.train(data, init_centroids=centroids)'
-    
+
         # Search for top-k images per centroid
         top_k = args.top_k
         dist, top_k_indices = index_mapped.search(centroids, top_k)
@@ -159,9 +159,9 @@ def main(args):
         else:
             with open(nearest_img_path, "r") as fp:
                 nearest_img_dict = json.load(fp)
-        
+
         # Try visualizing each image using 'extract_img_features.ipynb'
-        
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Unify data formats for Web navigation datasets")
@@ -174,7 +174,7 @@ if __name__ == "__main__":
     parser.add_argument("--faiss_ncentroid_path", type=str, default="subset-whole_unit-100-faiss-kcentroid.npy")
     parser.add_argument("--nearest_img_path", type=str, default="nearest_img_path.pkl", help="Image paths to the 'top_k' nearest features for 'n' centroids")
     parser.add_argument("--vis_encoder", type=str, default="dinov2_vits14")
-    
+
     parser.add_argument("--num_cluster", type=int, default=10, help="The number of clusters for K-means clustering")
     parser.add_argument("--num_iter", type=int, default=200, help="The number of iterations for K-means clustering")
     parser.add_argument("--top_k", type=int, default=5, help="Top-K nearest features to each centroid after K-means clustering")

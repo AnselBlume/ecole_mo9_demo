@@ -3,8 +3,6 @@ import inflect
 import PIL.Image as Image
 
 from typing import Union
-from feature_extraction.dino_features import DinoFeatureExtractor
-
 
 def open_image(img_path: str):
     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
@@ -62,4 +60,3 @@ class ArticleDeterminer:
         result = self.p.singular_noun(noun) # Returns False if already singular
 
         return result if result else noun
-    
