@@ -81,6 +81,7 @@ class CLIPTrainedAttributePredictor:
             Returns a torch.Tensor with shape (n_imgs, num_cls) of scores in [-1, 1]
         '''
         return self.predictor(img_feats) / LA.norm(img_feats, dim=-1, keepdim=True)
+
 class DINOTrainedAttributePredictor:
     def __init__(
         self,
