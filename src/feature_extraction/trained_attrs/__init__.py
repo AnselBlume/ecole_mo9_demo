@@ -21,17 +21,24 @@ subset_index_path = os.path.join(
 
 with open(subset_index_path, 'r') as f:
     COLOR_SHAPE_MATERIAL_SUBSET = json.load(f)
-# DINO mapping 
+
+N_ATTRS_SUBSET = sum(len(v) for v in COLOR_SHAPE_MATERIAL_SUBSET.values())
+
+# DINO mapping
 dino_index_path = os.path.join(
     os.path.dirname(__file__),
     'dino_class_id_to_index.json'
 )
+
 with open(dino_index_path, 'r') as f:
-    DINO_INDEX_TO_ATTR = json.load(f)
+    DINO_INDEX_TO_ATTR = {int(k) : v for k, v in json.load(f).items()}
+
 DINO_CKPT_PATH = os.path.join(
     os.path.dirname(__file__),
-    '../../attribute_training/dino_classifiers_official.pth')
-N_ATTRS_SUBSET = sum(len(v) for v in COLOR_SHAPE_MATERIAL_SUBSET.values())
+    '../../attribute_training/dino_classifiers_official.pth'
+)
+
+N_ATTRS_DINO = len(DINO_INDEX_TO_ATTR)
 
 from .predictor import CLIPTrainedAttributePredictor
 from .predictor import DINOTrainedAttributePredictor

@@ -13,7 +13,7 @@ from kb_ops.dataset import FeatureDataset
 from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline
 from typing import Any
 import logging, coloredlogs
-from feature_extraction.trained_attrs import N_ATTRS_SUBSET
+from feature_extraction.trained_attrs import N_ATTRS_DINO
 from kb_ops.train import ConceptKBTrainer
 import wandb
 import jsonargparse as argparse
@@ -57,7 +57,7 @@ if __name__ == '__main__':
     concept_kb.initialize(ConceptKBConfig(
         encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,
         img_feature_dim=768, # Set arbitrarily for this testing script
-        n_trained_attrs=N_ATTRS_SUBSET,
+        n_trained_attrs=N_ATTRS_DINO,
         use_ln=args.predictor.use_ln,
         use_probabilities=args.predictor.use_probabilities,
         use_full_img=args.predictor.use_full_img,

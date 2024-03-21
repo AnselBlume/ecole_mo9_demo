@@ -12,7 +12,7 @@ from model.concept import ConceptKB, ConceptExample, ConceptKBConfig
 from feature_extraction import build_feature_extractor, build_sam, build_desco, build_clip, build_dino
 from image_processing import build_localizer_and_segmenter
 from kb_ops import ConceptKBFeaturePipeline, ConceptKBFeatureCacher
-from feature_extraction.trained_attrs import N_ATTRS_SUBSET
+from feature_extraction.trained_attrs import N_ATTRS_DINO
 from controller import Controller
 from kb_ops import CLIPConceptRetriever
 from scripts.utils import set_feature_paths
@@ -50,7 +50,7 @@ if __name__ == '__main__':
 
     # %% Initialize ConceptKB
     concept_kb.initialize(ConceptKBConfig(
-        n_trained_attrs=N_ATTRS_SUBSET,
+        n_trained_attrs=N_ATTRS_DINO,
     ))
 
     # %% Build controller

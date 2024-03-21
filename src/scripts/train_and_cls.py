@@ -2,8 +2,9 @@
 import os # Change DesCo CUDA device here
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
+# Prepend to path so starts searching at src first
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path = [os.path.join(os.path.dirname(__file__), '..')] + sys.path
 
 from llm import LLMClient
 from kb_ops import kb_from_img_dir
@@ -12,12 +13,12 @@ from kb_ops.train_test_split import split_from_directory, split_from_paths
 from kb_ops.dataset import FeatureDataset
 from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline
 import logging, coloredlogs
-from feature_extraction.trained_attrs import N_ATTRS_SUBSET
+from feature_extraction.trained_attrs import N_ATTRS_DINO
 from kb_ops.train import ConceptKBTrainer
 import wandb
 import jsonargparse as argparse
 from itertools import chain
-from .utils import set_feature_paths, get_timestr
+from scripts.utils import set_feature_paths, get_timestr
 
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
@@ -60,8 +61,8 @@ if __name__ == '__main__':
     # args = parser.parse_args([]) # For debugging or jupyter notebook
 
     # %%
-    run = wandb.init(project='ecole_mo9_demo', config=args.as_flat(), dir=args.wandb_dir, reinit=True)
-    # run = None # Comment me to use wandb
+    # run = wandb.init(project='ecole_mo9_demo', config=args.as_flat(), dir=args.wandb_dir, reinit=True)
+    run = None # Comment me to use wandb
 
     # %% Initialize concept KB
     concept_kb = kb_from_img_dir(args.img_dir)
@@ -82,7 +83,7 @@ if __name__ == '__main__':
     # %%
     concept_kb.initialize(ConceptKBConfig(
         encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,
-        n_trained_attrs=N_ATTRS_SUBSET,
+        n_trained_attrs=N_ATTRS_DINO,
         use_ln=args.predictor.use_ln,
         use_probabilities=args.predictor.use_probabilities,
         use_full_img=args.predictor.use_full_img,

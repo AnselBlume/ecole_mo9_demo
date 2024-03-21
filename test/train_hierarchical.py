@@ -6,8 +6,9 @@
 import os # Change DesCo CUDA device here
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
+# Prepend to path so starts searching at src first
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '../src'))
+sys.path = [os.path.join(os.path.dirname(__file__), '..')] + sys.path
 
 from llm import LLMClient, retrieve_parts
 from kb_ops import kb_from_img_dir
@@ -16,7 +17,7 @@ from kb_ops.train_test_split import split_from_paths
 from kb_ops.dataset import FeatureDataset
 from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline
 import logging, coloredlogs
-from feature_extraction.trained_attrs import N_ATTRS_SUBSET
+from feature_extraction.trained_attrs import N_ATTRS_DINO
 from kb_ops.train import ConceptKBTrainer
 import wandb
 import jsonargparse as argparse
@@ -49,17 +50,17 @@ def get_parser():
     parser.add_argument('--config', action=argparse.ActionConfigFile)
 
     parser.add_argument('--img_dir', type=str,
-                        default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/xiaomeng_augmented_data_v1',
+                        default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/xiaomeng_augmented_data_v3',
                         help='Path to directory of images or preprocessed segmentations')
 
-    parser.add_argument('--cache.root', default='/shared/nas2/blume5/fa23/ecole/cache/xiaomeng_augmented_data_v1', help='Directory to save feature cache')
+    parser.add_argument('--cache.root', default='/shared/nas2/blume5/fa23/ecole/cache/xiaomeng_augmented_data_v3', help='Directory to save feature cache')
     parser.add_argument('--cache.segmentations', default='segmentations', help='Subdirectory of cache_dir to save segmentations')
     parser.add_argument('--cache.features', default='features', help='Subdirectory of cache_dir to save segmentations')
 
     parser.add_argument('--wandb_project', type=str, default='ecole_mo9_demo', help='WandB project name')
     parser.add_argument('--wandb_dir', default='/shared/nas2/blume5/fa23/ecole', help='WandB log directory')
 
-    parser.add_argument('--predictor.use_ln', type=bool, default=True, help='Whether to use LayerNorm')
+    parser.add_argument('--predictor.use_ln', type=bool, default=False, help='Whether to use LayerNorm')
     parser.add_argument('--predictor.use_probabilities', type=bool, default=False, help='Whether to sigmoid raw scores instead of layer-norming them for prediction')
     parser.add_argument('--predictor.use_full_img', type=bool, default=True, help='Whether to use full image as input')
     parser.add_argument('--predictor.use_regions', type=bool, default=True, help='Whether to use regions as input')
@@ -78,7 +79,7 @@ def get_parser():
 if __name__ == '__main__':
     parser = get_parser()
     args = parser.parse_args()
-    # args = parser.parse_args(['--cache.features', 'features_hierarchical_v1']) # For debugging or jupyter notebook
+    # args = parser.parse_args([]) # For debugging or jupyter notebook
 
     # %%
     run = wandb.init(project='ecole_mo9_demo', config=args.as_flat(), dir=args.wandb_dir, reinit=True)
@@ -111,7 +112,7 @@ if __name__ == '__main__':
     from feature_extraction import (
         build_feature_extractor,
         build_desco,
-        build_sam,
+        build_sam
     )
     from image_processing import build_localizer_and_segmenter
 
@@ -123,8 +124,7 @@ if __name__ == '__main__':
     # %%
     concept_kb.initialize(ConceptKBConfig(
         encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,
-        img_feature_dim=feature_extractor.clip.config.projection_dim,
-        n_trained_attrs=N_ATTRS_SUBSET,
+        n_trained_attrs=N_ATTRS_DINO,
         use_ln=args.predictor.use_ln,
         use_probabilities=args.predictor.use_probabilities,
         use_full_img=args.predictor.use_full_img,

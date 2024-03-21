@@ -10,7 +10,7 @@ from kb_ops.train_test_split import split_from_directory, split_from_paths
 from kb_ops.dataset import PresegmentedDataset, list_collate
 from kb_ops import ConceptKBFeaturePipeline
 import logging, coloredlogs
-from feature_extraction.trained_attrs import N_ATTRS_SUBSET
+from feature_extraction.trained_attrs import N_ATTRS_DINO
 from kb_ops.train import ConceptKBTrainer
 from .utils import set_feature_paths
 from torchmetrics import Accuracy

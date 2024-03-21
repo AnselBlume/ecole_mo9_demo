@@ -17,7 +17,7 @@ from kb_ops.train_test_split import split_from_paths
 from train_from_scratch import prepare_concept # in test module
 from image_processing import build_localizer_and_segmenter
 from kb_ops import ConceptKBFeaturePipeline, ConceptKBFeatureCacher
-from feature_extraction.trained_attrs import N_ATTRS_SUBSET
+from feature_extraction.trained_attrs import N_ATTRS_DINO
 from controller import Controller
 from kb_ops import CLIPConceptRetriever
 from scripts.utils import set_feature_paths
@@ -90,7 +90,7 @@ def vis_evolution():
     '''
     concept_kb = ConceptKB()
     concept_kb.initialize(ConceptKBConfig(
-        n_trained_attrs=N_ATTRS_SUBSET,
+        n_trained_attrs=N_ATTRS_DINO,
     ))
 
     feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
