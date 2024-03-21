@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from transformers import CLIPModel, CLIPProcessor
-from feature_extraction import CLIPFeatureExtractor, CLIPTrainedAttributePredictor, CLIPAttributePredictor, DinoFeatureExtractor
+from feature_extraction import CLIPFeatureExtractor, CLIPTrainedAttributePredictor, CLIPAttributePredictor, DINOFeatureExtractor
 from PIL.Image import Image
 from model.features import ImageFeatures
 
@@ -14,9 +14,9 @@ class FeatureExtractor(nn.Module):
         self.clip = clip
         self.processor = processor
 
-        self.dino_feature_extractor = DinoFeatureExtractor(dino)
+        self.dino_feature_extractor = DINOFeatureExtractor(dino)
         self.clip_feature_extractor = CLIPFeatureExtractor(clip, processor)
-        self.trained_attr_predictor = CLIPTrainedAttributePredictor(self.clip_feature_extractor)
+        self.trained_attr_predictor = CLIPTrainedAttributePredictor(self.clip_feature_extractor, device=clip.device)
         self.zs_attr_predictor = CLIPAttributePredictor(clip, processor)
 
     def forward(

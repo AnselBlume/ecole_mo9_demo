@@ -98,7 +98,7 @@ class DINOFeatureExtractor(nn.Module):
     def __init__(self, dino: nn.Module, resize_images: bool = True):
         super().__init__()
 
-        self.model = dino
+        self.model = dino.eval()
         self.resize_images = resize_images
         self.transform = get_dino_transform(resize_images)
 
