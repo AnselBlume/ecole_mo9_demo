@@ -20,12 +20,11 @@ def normalize(x: torch.Tensor):
 def get_heatmaps(
     feature_extractor: DINOFeatureExtractor,
     image1: Image.Image,
-    image2: Image.Image,
-    resize_images: bool = True
+    image2: Image.Image
 ):
 
-    cls_feats1, patch_feats1 = get_rescaled_features(feature_extractor, [image1], resize_image=resize_images) # (1, d), (1, n_patches_h, n_patches_w, d)
-    cls_feats2, patch_feats2 = get_rescaled_features(feature_extractor, [image2], resize_image=resize_images)
+    cls_feats1, patch_feats1 = get_rescaled_features(feature_extractor, [image1]) # (1, d), (1, n_patches_h, n_patches_w, d)
+    cls_feats2, patch_feats2 = get_rescaled_features(feature_extractor, [image2])
 
     if isinstance(patch_feats1, list): # If the image is not cropped
         patch_feats1 = patch_feats1[0].unsqueeze(0)
@@ -94,11 +93,11 @@ if __name__ == '__main__':
     img1_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/xiaomeng_augmented_data_v3/hoe_1_original.jpg'
     img2_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/xiaomeng_augmented_data_v3/shovel_15.jpg'
 
-    resize_images = False
+    crop_images = False
     remove_bg = True
 
     # %%
-    feature_extractor = DINOFeatureExtractor(build_dino(), resize_images=resize_images)
+    feature_extractor = DINOFeatureExtractor(build_dino(), crop_images=crop_images)
 
     # %%
     image1 = Image.open(img1_path).convert('RGB')
@@ -109,6 +108,6 @@ if __name__ == '__main__':
         image1 = remove(image1, session=rembg_session, post_process_mask=True).convert('RGB')
         image2 = remove(image2, session=rembg_session, post_process_mask=True).convert('RGB')
 
-    heatmaps = get_heatmaps(feature_extractor, image1, image2, resize_images=resize_images)
+    heatmaps = get_heatmaps(feature_extractor, image1, image2)
     fig, axs = vis_heatmaps(heatmaps, image1, image2)
 # %%

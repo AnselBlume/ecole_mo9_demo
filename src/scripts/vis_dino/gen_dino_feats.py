@@ -32,12 +32,12 @@ if __name__ == '__main__':
     ])
 
     # %%
-    resize_images = True
-    feature_extractor = DINOFeatureExtractor(build_dino(), resize_images=resize_images)
+    crop_images = True
+    feature_extractor = DINOFeatureExtractor(build_dino(), crop_images=crop_images)
 
     # %%
     imgs = [Image.open(p) for p in args.img_paths]
-    cls_feats, patch_feats = get_rescaled_features(feature_extractor, [imgs[0]], resize_image=resize_images)
+    cls_feats, patch_feats = get_rescaled_features(feature_extractor, [imgs[0]])
 
     # %%
     out_dict = {

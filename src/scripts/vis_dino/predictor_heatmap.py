@@ -51,7 +51,7 @@ def vis_concept_predictor_heatmap(
     ).eval().cpu()
 
     # Patch features
-    cls_feats, patch_feats = get_rescaled_features(fe, [img], resize_image=False, interpolate_on_cpu=True)
+    cls_feats, patch_feats = get_rescaled_features(fe, [img], interpolate_on_cpu=True)
     patch_feats = patch_feats[0] # (h, w, d)
 
     # Get heatmap

@@ -24,7 +24,7 @@ class FeatureExtractor(nn.Module):
         self.processor = processor
 
         # Can't resize DINO images as region masks won't correspond to image size, unless we resize the masks as well
-        self.dino_feature_extractor = DINOFeatureExtractor(dino, resize_images=False)
+        self.dino_feature_extractor = DINOFeatureExtractor(dino, crop_images=False)
         self.clip_feature_extractor = CLIPFeatureExtractor(clip, processor)
         self.trained_attr_predictor = DINOTrainedAttributePredictor(self.dino_feature_extractor, device=self.dino_feature_extractor.device)
         self.zs_attr_predictor = CLIPAttributePredictor(clip, processor)
@@ -63,6 +63,7 @@ class FeatureExtractor(nn.Module):
 
             except RuntimeError as e:
                 logger.info('Ran out of memory rescaling patch features; falling back to CPU')
+                torch.cuda.empty_cache()
                 image_features, patch_features = get_rescaled_features(**rescale_kwargs, interpolate_on_cpu=True, return_on_cpu=True)
                 is_on_cpu = True
 

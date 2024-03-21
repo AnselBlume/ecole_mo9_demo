@@ -62,16 +62,20 @@ def _make_normalize_transform(
     return transforms.Normalize(mean=mean, std=std)
 
 def get_dino_transform(
-    resize_img: bool,
+    crop_img: bool,
     *,
     padding_multiple: int = 14, # aka DINOv2 model patch size
+    do_resize: bool = True,
     resize_size: int = 256,
     interpolation=transforms.InterpolationMode.BICUBIC,
     crop_size: int = 224,
     mean: Sequence[float] = IMAGENET_DEFAULT_MEAN,
     std: Sequence[float] = IMAGENET_DEFAULT_STD,
 ) -> transforms.Compose:
-    if resize_img:
+    '''
+        If crop_img is True, will automatically set do_resize to True.
+    '''
+    if crop_img:
         transforms_list = [
             transforms.Resize(resize_size, interpolation=interpolation),
             transforms.CenterCrop(crop_size),
@@ -80,27 +84,27 @@ def get_dino_transform(
         ]
 
     else:
-        transforms_list = [
+        transforms_list = []
+
+        if do_resize:
+            transforms_list.append(transforms.Resize(resize_size, interpolation=interpolation))
+
+        transforms_list.extend([
             transforms.ToTensor(),
             lambda x: x.unsqueeze(0),
             CenterPadding(multiple=padding_multiple),
             transforms.Normalize(mean=mean, std=std)
-        ]
+        ])
 
     return transforms.Compose(transforms_list)
 
-<<<<<<< HEAD
-
-class DinoFeatureExtractor(nn.Module):
-=======
 class DINOFeatureExtractor(nn.Module):
->>>>>>> 0494d03 (Rename DinoFeatureExtractor to DINOFeatureExtractor)
-    def __init__(self, dino: nn.Module, resize_images: bool = True):
+    def __init__(self, dino: nn.Module, crop_images: bool = True):
         super().__init__()
 
         self.model = dino.eval()
-        self.resize_images = resize_images
-        self.transform = get_dino_transform(resize_images)
+        self.crop_images = crop_images
+        self.transform = get_dino_transform(crop_images)
 
     @property
     def device(self):
@@ -115,7 +119,7 @@ class DINOFeatureExtractor(nn.Module):
         # Prepare inputs
         inputs = [self.transform(img).to(self.device) for img in images]
 
-        if self.resize_images:
+        if self.crop_images:
             inputs = torch.stack(inputs) # (n_imgs, 3, 224, 224)
             outputs = self.model(inputs, is_training=True) # Set is_training=True to return all outputs
 
@@ -192,8 +196,8 @@ def get_rescaled_features(
     feature_extractor: DINOFeatureExtractor,
     images: list[Image],
     patch_size: int = 14,
-    resize_crop_height: int = 224,
-    resize_crop_width: int = 224,
+    crop_height: int = 224,
+    crop_width: int = 224,
     interpolate_on_cpu: bool = False,
     fall_back_to_cpu: bool = False,
     return_on_cpu: bool = False
@@ -203,8 +207,8 @@ def get_rescaled_features(
 
         patch_size: The patch size of the Dino model used in the DinoFeatureExtractor.
             Accessible by feature_extractor.model.patch_size.
-        resize_crop_height: The height of the resized and cropped image, if resizing is used in the DinoFeatureExtractor.
-        resize_crop_weidth: The width of the resized and cropped image, if resizing is used in the DinoFeatureExtractor.
+        crop_height: The height of the cropped image, if cropping is used in the DinoFeatureExtractor.
+        crop_weidth: The width of the cropped image, if cropping is used in the DinoFeatureExtractor.
         interpolate_on_cpu: If True, interpolates on CPU to avoid CUDA OOM errors.
         fall_back_to_cpu: If True, falls back to CPU if CUDA OOM error is caught.
         return_on_cpu: If True, returns the features on CPU, helping to prevent out of memory errors when storing patch features
@@ -216,7 +220,7 @@ def get_rescaled_features(
     with torch.no_grad():
         cls_feats, patch_feats = feature_extractor(images)
 
-    are_images_resized = feature_extractor.resize_images
+    are_images_cropped = feature_extractor.crop_images
 
     if return_on_cpu:
         cls_feats = cls_feats.cpu()
@@ -252,8 +256,8 @@ def get_rescaled_features(
         patch_feats = patch_feats_to_cpu(patch_feats)
 
     # Rescale patch features
-    if are_images_resized: # All images are the same size
-        rescale_func = partial(rescale_features, height=resize_crop_height, width=resize_crop_width)
+    if are_images_cropped: # All images are the same size
+        rescale_func = partial(rescale_features, height=crop_height, width=crop_width)
         patch_feats = try_rescale(rescale_func, patch_feats)
 
         if return_on_cpu:
