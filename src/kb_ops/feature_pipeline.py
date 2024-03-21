@@ -59,9 +59,7 @@ class ConceptKBFeaturePipeline:
         image: Image,
         segmentations: LocalizeAndSegmentOutput,
         zs_attrs: list[str],
-        cached_visual_features: Optional[torch.Tensor] = None,
-        cached_clip_visual_features: Optional[torch.Tensor] = None,
-        cached_trained_attr_scores: Optional[torch.Tensor] = None
+        cached_features: ImageFeatures = None
     ) -> ImageFeatures:
         # Get region crops
         region_crops = segmentations.part_crops
@@ -73,9 +71,8 @@ class ConceptKBFeaturePipeline:
                 image,
                 region_crops,
                 zs_attrs,
-                cached_visual_features=cached_visual_features,
-                cached_clip_visual_features=cached_clip_visual_features,
-                cached_trained_attr_scores=cached_trained_attr_scores
+                segmentations.part_masks,
+                cached_features=cached_features
             )
 
         return features

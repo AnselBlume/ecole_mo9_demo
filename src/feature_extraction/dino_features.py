@@ -158,7 +158,7 @@ class DINOFeatureExtractor(nn.Module):
 
         return cls_token, patch_tokens
 
-def rescale_features(features: torch.Tensor, img: Image.Image = None, height: int = None, width: int = None,):
+def rescale_features(features: torch.Tensor, img: Image = None, height: int = None, width: int = None):
     '''
         Returns the features rescaled to the size of the image.
 
@@ -190,7 +190,7 @@ def rescale_features(features: torch.Tensor, img: Image.Image = None, height: in
 
 def get_rescaled_features(
     feature_extractor: DINOFeatureExtractor,
-    images: list[Image.Image],
+    images: list[Image],
     patch_size: int = 14,
     resize_crop_height: int = 224,
     resize_crop_width: int = 224,
@@ -272,18 +272,22 @@ def get_rescaled_features(
             rescaled = try_rescale(rescale_func, patch_feat)
 
             # Remove padding from upscaled features
+            rescaled = rearrange(rescaled, 'h w d -> d h w')
             rescaled = TF.center_crop(rescaled, (height, width))
+            rescaled = rearrange(rescaled, 'd h w -> h w d')
 
             if return_on_cpu:
                 rescaled = rescaled.cpu()
 
             rescaled_patch_feats.append(rescaled)
 
+        patch_feats = rescaled_patch_feats
+
     return cls_feats, patch_feats
 
 def region_pool(masks: torch.BoolTensor, features: torch.Tensor):
-    assert (masks.shape[:-2] == features.shape[:-2]).all()
-    region_sums = einsum(masks, features, 'n h w, n h w d -> n d')
+    assert masks.shape[-2:] == features.shape[-3:-1]
+    region_sums = einsum(masks.float(), features, 'n h w, n h w d -> n d') # Einsum needs floats
 
     # Divide by number of elements in each mask
     region_feats = region_sums / reduce(masks, 'n h w -> n', 'sum').unsqueeze(-1)

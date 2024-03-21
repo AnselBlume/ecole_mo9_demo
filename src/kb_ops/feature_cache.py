@@ -16,16 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 @dataclass
-class CachedImageFeatures:
-    image_features: torch.Tensor = None # (1, d_img)
-    clip_image_features: torch.Tensor = None # (1, d_img)
-
-    region_features: torch.Tensor = None # (n_regions, d_regions)
-    clip_region_features: torch.Tensor = None # (n_regions, d_regions)
-    region_weights: torch.Tensor = None # (n_regions,); how much to weight each region in all calculations
-
-    trained_attr_img_scores: torch.Tensor = None # (1, n_trained_attrs)
-    trained_attr_region_scores: torch.Tensor = None # (n_regions, n_trained_attrs,)
+class CachedImageFeatures(ImageFeatures):
 
     concept_to_zs_attr_img_scores: dict[str, torch.Tensor] = field(default_factory=dict) # (1, n_zs_attrs)
     concept_to_zs_attr_region_scores: dict[str, torch.Tensor] = field(default_factory=dict) # (n_regions, n_zs_attrs)
@@ -188,10 +179,7 @@ class ConceptKBFeatureCacher:
                 segmentations = pickle.load(f)
 
             # Generate zero-shot attributes for each concept
-            cached_features = CachedImageFeatures()
-            cached_visual_features = None
-            cached_clip_visual_features = None
-            cached_trained_attr_scores = None
+            cached_features = None
 
             image = self._image_from_example(example)
             for concept in self.concept_kb:
@@ -200,32 +188,17 @@ class ConceptKBFeatureCacher:
                     image,
                     segmentations,
                     [attr.query for attr in concept.zs_attributes],
-                    cached_visual_features=cached_visual_features,
-                    cached_clip_visual_features=cached_clip_visual_features,
-                    cached_trained_attr_scores=cached_trained_attr_scores
+                    cached_features=cached_features # CachedImageFeatures has same cacheable elements as ImageFeatures
                 )
-                if cached_visual_features is None:
-                    cached_visual_features = torch.cat([feats.image_features, feats.region_features], dim=0)
 
-                if cached_clip_visual_features is None:
-                    cached_clip_visual_features = torch.cat([feats.clip_image_features, feats.clip_region_features], dim=0)
-
-                if cached_trained_attr_scores is None:
-                    cached_trained_attr_scores = torch.cat([feats.trained_attr_img_scores, feats.trained_attr_region_scores], dim=0)
+                if cached_features is None:
+                    cached_features = CachedImageFeatures.from_image_features(feats)
 
                 # Store zero-shot features
                 cached_features.concept_to_zs_attr_img_scores[concept.name] = feats.zs_attr_img_scores.cpu()
                 cached_features.concept_to_zs_attr_region_scores[concept.name] = feats.zs_attr_region_scores.cpu()
 
-            # Store non-unique features
-            feats.cpu()
-            cached_features.image_features = feats.image_features
-            cached_features.clip_image_features = feats.clip_image_features
-            cached_features.region_features = feats.region_features
-            cached_features.clip_region_features = feats.clip_region_features
-            cached_features.region_weights = feats.region_weights
-            cached_features.trained_attr_img_scores = feats.trained_attr_img_scores
-            cached_features.trained_attr_region_scores = feats.trained_attr_region_scores
+            cached_features.cpu()
 
             # Write to cache
             cache_path = self._get_features_cache_path(example)
@@ -245,14 +218,16 @@ class ConceptKBFeatureCacher:
             If only_not_present is True, only recaches features for examples which do not have the specified
             concept's zero-shot attribute features. So this will not overwrite existing zs attribute features.
         '''
-        # TODO Update when we have separate image features and CLIP features for zs attributes
         examples = examples if examples else self._get_examples([concept])
+
         for example in examples:
             if example.image_features_path is None:
                 continue
 
             with open(example.image_features_path, 'rb') as f:
                 cached_features: CachedImageFeatures = pickle.load(f)
+
+            cached_features.cuda() # For zero-shot attribute feature computation
 
             if (
                 not only_not_present
@@ -263,25 +238,16 @@ class ConceptKBFeatureCacher:
                 with open(example.image_segmentations_path, 'rb') as f:
                     segmentations: LocalizeAndSegmentOutput = pickle.load(f)
 
-                # Extract cached features
-                dino_device = self.feature_pipeline.feature_extractor.dino_feature_extractor.device
-                clip_device = self.feature_pipeline.feature_extractor.clip_feature_extractor.device
-
-                visual_features = torch.cat([cached_features.image_features, cached_features.region_features], dim=0).to(dino_device)
-                clip_visual_features = torch.cat([cached_features.clip_image_features, cached_features.clip_region_features], dim=0).to(clip_device)
-                trained_attr_scores = torch.cat([cached_features.trained_attr_img_scores, cached_features.trained_attr_region_scores], dim=0).to(clip_device)
-
                 feats = self.feature_pipeline.get_features(
-                    None, # Don't need to pass image since passing visual features
+                    None, # Don't need to pass raw image since passing cached features
                     segmentations,
                     [attr.query for attr in concept.zs_attributes],
-                    cached_visual_features=visual_features,
-                    cached_clip_visual_features=clip_visual_features,
-                    cached_trained_attr_scores=trained_attr_scores
+                    cached_features=cached_features
                 )
 
                 cached_features.concept_to_zs_attr_img_scores[concept.name] = feats.zs_attr_img_scores.cpu()
                 cached_features.concept_to_zs_attr_region_scores[concept.name] = feats.zs_attr_region_scores.cpu()
+                cached_features.cpu() # Back to CPU for saving
 
                 # Update cached features
                 with open(example.image_features_path, 'wb') as f:
