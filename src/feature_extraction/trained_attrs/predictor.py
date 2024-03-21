@@ -3,7 +3,7 @@ import torch.nn as nn
 from PIL.Image import Image
 from typing import Optional
 from feature_extraction.clip_features import CLIPFeatureExtractor
-from feature_extraction.dino_features import DinoFeatureExtractor
+from feature_extraction.dino_features import DINOFeatureExtractor
 import torch.linalg as LA
 
 from . import DEFAULT_CKPT_PATH, COLOR_SHAPE_MATERIAL_SUBSET, INDEX_TO_ATTR, DINO_CKPT_PATH, DINO_INDEX_TO_ATTR
@@ -84,7 +84,7 @@ class CLIPTrainedAttributePredictor:
 class DINOTrainedAttributePredictor:
     def __init__(
         self,
-        dino_feature_extractor: DinoFeatureExtractor,
+        dino_feature_extractor: DINOFeatureExtractor,
         use_subset: bool = True,
         ckpt_path=DINO_CKPT_PATH,
         device='cuda',
@@ -98,7 +98,7 @@ class DINOTrainedAttributePredictor:
             classifier_subset = []
             attr_names = []
             ind_to_attr = DINO_INDEX_TO_ATTR
-           
+
             for ind,attr in ind_to_attr.items():
                 classifier_subset.append(classifiers[ind])
                 attr_names.append(attr)
@@ -114,7 +114,7 @@ class DINOTrainedAttributePredictor:
         # Stack classifiers for efficiency
         with torch.no_grad():
             stacked_weight = torch.stack([classifier.weight.squeeze() for classifier in classifiers]) # (num_cls, enc_dim)
-            # no normalization in dino 
+            # no normalization in dino
             stacked_bias = torch.cat([classifier.bias for classifier in classifiers]) # (num_cls,)
 
         self.predictor = nn.Linear(stacked_weight.shape[1], stacked_weight.shape[0], bias=True)
@@ -153,4 +153,4 @@ class DINOTrainedAttributePredictor:
 
             Returns a torch.Tensor with shape (n_imgs, num_cls) of scores in [-1, 1]
         '''
-        return self.predictor(img_feats) 
+        return self.predictor(img_feats)

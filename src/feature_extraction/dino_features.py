@@ -89,8 +89,12 @@ def get_dino_transform(
 
     return transforms.Compose(transforms_list)
 
+<<<<<<< HEAD
 
 class DinoFeatureExtractor(nn.Module):
+=======
+class DINOFeatureExtractor(nn.Module):
+>>>>>>> 0494d03 (Rename DinoFeatureExtractor to DINOFeatureExtractor)
     def __init__(self, dino: nn.Module, resize_images: bool = True):
         super().__init__()
 
@@ -185,13 +189,13 @@ def rescale_features(features: torch.Tensor, img: Image.Image = None, height: in
     return features
 
 def get_rescaled_features(
-    feature_extractor: DinoFeatureExtractor,
-    imgs: list[Image.Image],
+    feature_extractor: DINOFeatureExtractor,
+    images: list[Image.Image],
     patch_size: int = 14,
     resize_crop_height: int = 224,
     resize_crop_width: int = 224,
     interpolate_on_cpu: bool = False,
-    fall_back_to_cpu: bool = True,
+    fall_back_to_cpu: bool = False,
     return_on_cpu: bool = False
 ) -> tuple[torch.Tensor, Union[torch.Tensor, list[torch.Tensor]]]:
     '''
@@ -210,7 +214,7 @@ def get_rescaled_features(
     '''
 
     with torch.no_grad():
-        cls_feats, patch_feats = feature_extractor(imgs)
+        cls_feats, patch_feats = feature_extractor(images)
 
     are_images_resized = feature_extractor.resize_images
 
@@ -259,7 +263,7 @@ def get_rescaled_features(
         # Rescale to padded size
         rescaled_patch_feats = []
 
-        for patch_feat, img in zip(patch_feats, imgs):
+        for patch_feat, img in zip(patch_feats, images):
             width, height = img.size
             padded_height = math.ceil(height / patch_size) * patch_size
             padded_width = math.ceil(width / patch_size) * patch_size

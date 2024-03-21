@@ -98,7 +98,7 @@ def build_clip(model_name: str = DEFAULT_CLIP_MODEL, device: str = 'cuda') -> tu
 #########################
 # Attribute Classifiers #
 #########################
-from feature_extraction.trained_attrs import CLIPTrainedAttributePredictor
+from feature_extraction.trained_attrs import CLIPTrainedAttributePredictor, DINOTrainedAttributePredictor
 from feature_extraction.clip_features import CLIPFeatureExtractor
 from feature_extraction.zero_shot_attrs import CLIPAttributePredictor
 
@@ -113,7 +113,7 @@ def build_zero_shot_attr_predictor(clip_model: CLIPModel, processor: CLIPProcess
 # DiNOv2 #
 ##########
 import torch
-from .dino_features import DinoFeatureExtractor
+from .dino_features import DINOFeatureExtractor
 
 DEFAULT_DINO_MODEL = 'dinov2_vitl14'
 

@@ -25,7 +25,7 @@ from kb_ops.build_kb import list_paths
 import torch.nn as nn
 import matplotlib.pyplot as plt
 from PIL import Image
-from gen_dino_feats import build_dino, DinoFeatureExtractor, get_rescaled_features
+from gen_dino_feats import build_dino, DINOFeatureExtractor, get_rescaled_features
 from cls_heatmap import normalize
 import logging, coloredlogs
 from rembg import remove, new_session
@@ -37,7 +37,7 @@ coloredlogs.install(level='DEBUG')
 def vis_concept_predictor_heatmap(
     concept: Concept,
     img_path: str,
-    fe: DinoFeatureExtractor,
+    fe: DINOFeatureExtractor,
     figsize=(15, 10),
     title=None
 ):

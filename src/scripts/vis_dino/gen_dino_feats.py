@@ -11,7 +11,7 @@ sys.path.append('/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src')
 
 import os
 import pickle
-from feature_extraction import build_dino, DinoFeatureExtractor
+from feature_extraction import build_dino, DINOFeatureExtractor
 import jsonargparse as argparse
 from PIL import Image
 from feature_extraction.dino_features import get_rescaled_features
@@ -33,7 +33,7 @@ if __name__ == '__main__':
 
     # %%
     resize_images = True
-    feature_extractor = DinoFeatureExtractor(build_dino(), resize_images=resize_images)
+    feature_extractor = DINOFeatureExtractor(build_dino(), resize_images=resize_images)
 
     # %%
     imgs = [Image.open(p) for p in args.img_paths]

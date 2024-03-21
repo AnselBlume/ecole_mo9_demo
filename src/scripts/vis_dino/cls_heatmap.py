@@ -8,7 +8,7 @@ sys.path.append('/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src')
 
 from PIL import Image
 from gen_dino_feats import get_rescaled_features
-from feature_extraction import build_dino, DinoFeatureExtractor
+from feature_extraction import build_dino, DINOFeatureExtractor
 import matplotlib.pyplot as plt
 import torch
 from rembg import remove, new_session
@@ -18,7 +18,7 @@ def normalize(x: torch.Tensor):
     return (x - x.min()) / (x.max() - x.min())
 
 def get_heatmaps(
-    feature_extractor: DinoFeatureExtractor,
+    feature_extractor: DINOFeatureExtractor,
     image1: Image.Image,
     image2: Image.Image,
     resize_images: bool = True
@@ -98,7 +98,7 @@ if __name__ == '__main__':
     remove_bg = True
 
     # %%
-    feature_extractor = DinoFeatureExtractor(build_dino(), resize_images=resize_images)
+    feature_extractor = DINOFeatureExtractor(build_dino(), resize_images=resize_images)
 
     # %%
     image1 = Image.open(img1_path).convert('RGB')
