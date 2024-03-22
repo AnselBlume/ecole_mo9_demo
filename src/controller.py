@@ -166,8 +166,6 @@ class Controller:
 
             concept = Concept(concept_name)
 
-        # Otherwise, Concept obj provided; don't modify name
-
         # TODO add error check to make sure that the concept doesn't already exist in the ConceptKB
 
         # Get zero shot attributes (query LLM)
@@ -178,7 +176,7 @@ class Controller:
         )
 
         self.concepts.init_predictor(concept)
-        concept.predictor.cuda() # Assumes all other predictors are also on cuda
+        concept.predictor.to(self.concepts.device) # Assumes all other predictors are also on cuda
 
         # TODO Determine if it has any obvious parent or child concepts
 

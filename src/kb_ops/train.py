@@ -284,7 +284,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 curr_epoch = 0
                 target_concept_index = predictor.leaf_name_to_leaf_ind[concept.name]
 
-                while True:
+                while True and curr_epoch < 50:
                     # Train for one epoch then check the probability margins
                     curr_epoch += 1
                     results = self.train(train_ds, None, n_epochs=n_epochs_between_predictions, **train_kwargs)

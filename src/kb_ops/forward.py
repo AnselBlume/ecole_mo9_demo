@@ -144,7 +144,6 @@ class ConceptKBForwardBase:
                 if set_score_to_zero:
                     score = output.cum_score - output.cum_score.detach()
                     concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(self.concept_kb)
-                print(f"output of {concept.name} is in device {concept.predictor.img_features_predictor.weight.device}")
                 curr_loss += concept_loss
                 total_loss += concept_loss.item()
 

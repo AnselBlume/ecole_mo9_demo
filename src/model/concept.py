@@ -107,6 +107,7 @@ class ConceptKB:
     def __init__(self, concepts: list[Concept] = [], neg_concept_examples: list[ConceptExample] = []):
         self._concepts = {concept.name : concept for concept in concepts}
         self._neg_concept_examples = neg_concept_examples
+        self.device = 'cpu'
 
     @property
     def leaf_concepts(self) -> list[Concept]:
@@ -176,6 +177,7 @@ class ConceptKB:
         '''
         for concept in self.concepts:
             concept.predictor.to(device)
+        self.device = device
 
     def save(self, path):
         '''

@@ -216,6 +216,7 @@ class ConceptKBFeatureCacher:
                 # Store zero-shot features
                 cached_features.concept_to_zs_attr_img_scores[concept.name] = feats.zs_attr_img_scores.cpu()
                 cached_features.concept_to_zs_attr_region_scores[concept.name] = feats.zs_attr_region_scores.cpu()
+                print(f'Cached zs features for {concept.name} on {example.image_path}')
 
             # Store non-unique features
             feats.cpu()
