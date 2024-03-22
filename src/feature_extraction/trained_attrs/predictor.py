@@ -8,7 +8,7 @@ import torch.linalg as LA
 
 from . import DEFAULT_CKPT_PATH, COLOR_SHAPE_MATERIAL_SUBSET, INDEX_TO_ATTR, DINO_CKPT_PATH, DINO_INDEX_TO_ATTR
 
-class CLIPTrainedAttributePredictor:
+class CLIPTrainedAttributePredictor(nn.Module):
     def __init__(
         self,
         clip_feature_extractor: CLIPFeatureExtractor,
@@ -16,6 +16,7 @@ class CLIPTrainedAttributePredictor:
         ckpt_path=DEFAULT_CKPT_PATH,
         device='cuda',
     ):
+        super().__init__()
         self.clip_feature_extractor = clip_feature_extractor.eval()
 
         # Load all classifiers and potentially select a subset of attributes
@@ -82,7 +83,7 @@ class CLIPTrainedAttributePredictor:
         '''
         return self.predictor(img_feats) / LA.norm(img_feats, dim=-1, keepdim=True)
 
-class DINOTrainedAttributePredictor:
+class DINOTrainedAttributePredictor(nn.Module):
     def __init__(
         self,
         dino_feature_extractor: DINOFeatureExtractor,
@@ -90,6 +91,7 @@ class DINOTrainedAttributePredictor:
         ckpt_path=DINO_CKPT_PATH,
         device='cuda',
     ):
+        super().__init__()
         self.dino_feature_extractor = dino_feature_extractor.eval()
 
         # Load all classifiers and potentially select a subset of attributes

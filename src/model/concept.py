@@ -7,10 +7,12 @@ from llm import LLMClient, retrieve_attributes
 from tqdm import tqdm
 import logging
 from utils import ArticleDeterminer
-from typing import Union, Any
+from typing import Union, Any, Iterable
+from torch.nn import Parameter
 from image_processing import LocalizeAndSegmentOutput
 from .features import ImageFeatures
 from PIL.Image import Image
+from itertools import chain
 
 logger = logging.getLogger(__name__)
 
@@ -146,15 +148,11 @@ class ConceptKB:
 
         return list(subtree.values())
 
-    def parameters(self):
+    def parameters(self) -> Iterable[Parameter]:
         '''
             Returns all parameters of the concept predictors.
         '''
-        params = []
-        for concept in self.concepts:
-            params.extend(list(concept.predictor.parameters()))
-
-        return params
+        return chain.from_iterable(concept.predictor.parameters() for concept in self.concepts)
 
     def train(self):
         '''

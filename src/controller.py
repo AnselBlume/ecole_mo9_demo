@@ -178,7 +178,11 @@ class Controller:
         )
 
         self.concepts.init_predictor(concept)
-        concept.predictor.cuda() # Assumes all other predictors are also on cuda
+
+        if len(self.concepts) and next(iter(self.concepts)).predictor is not None:
+            concept.predictor.to(next(self.concepts.parameters()).device) # Assumes all concepts are on the same device
+        else: # Assume there aren't any other initialized concept predictors
+            concept.predictor.cuda()
 
         # TODO Determine if it has any obvious parent or child concepts
 
@@ -476,7 +480,6 @@ class Controller:
 
         concept1_scores, concept2_scores = scores.split(len(concept1.zs_attributes), len(concept2.zs_attributes))
 
-        # TODO Plot the scores
         if weight_scores_by_predictors:
             concept1_weights = concept1.predictor.zs_attr_predictor.weight.data.cpu()
             concept2_weights = concept2.predictor.zs_attr_predictor.weight.data.cpu()

@@ -119,6 +119,10 @@ class ConceptPredictor(nn.Module):
 
         self.feature_groups = nn.ModuleDict()
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
     def forward(self, img_feats: ImageFeatures) -> ConceptPredictorOutput:
         if img_feats.all_scores is None: # If scores are not provided for feature_group-weighting, calculate them
             region_weights = img_feats.region_weights.unsqueeze(-1) # (n_regions, 1)
