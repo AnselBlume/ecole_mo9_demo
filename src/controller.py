@@ -476,9 +476,8 @@ class Controller:
 
         concept1_scores, concept2_scores = scores.split(len(concept1.zs_attributes), len(concept2.zs_attributes))
 
-        # TODO Plot the scores
         if weight_scores_by_predictors:
-            concept1_weights = concept1.predictor.zs_attr_predictor.weight.data.cpu()
+            concept1_weights = concept1.predictor.zs_attr_predictor.weight.data.cpu()  # TODO Q) Where do the weights come from?
             concept2_weights = concept2.predictor.zs_attr_predictor.weight.data.cpu()
             predictor_weights = concept1_weights, concept2_weights
 
@@ -487,6 +486,7 @@ class Controller:
 
         return plot_zs_attr_differences(
             image,
+            zs_attributes=zs_attrs,
             concept_names=(concept1.name, concept2.name),
             concept_scores=(concept1_scores, concept2_scores),
             weight_scores_by_predictors=predictor_weights
