@@ -62,6 +62,7 @@ def _make_normalize_transform(
     return transforms.Normalize(mean=mean, std=std)
 
 DEFAULT_RESIZE_SIZE = 256
+DEFAULT_RESIZE_MAX_SIZE = 1000
 DEFAULT_RESIZE_INTERPOLATION = transforms.InterpolationMode.BICUBIC
 DEFAULT_CROP_SIZE = 224
 
@@ -71,6 +72,7 @@ def get_dino_transform(
     padding_multiple: int = 14, # aka DINOv2 model patch size
     resize_img: bool = True,
     resize_size: int = DEFAULT_RESIZE_SIZE,
+    resize_max_size: int = DEFAULT_RESIZE_MAX_SIZE,
     interpolation = DEFAULT_RESIZE_INTERPOLATION,
     crop_size: int = DEFAULT_CROP_SIZE,
     mean: Sequence[float] = IMAGENET_DEFAULT_MEAN,
@@ -82,7 +84,9 @@ def get_dino_transform(
     # With the default parameters, this is the transform used for DINO classification
     if crop_img:
         transforms_list = [
-            transforms.Resize(resize_size, interpolation=interpolation),
+            # DINO's orig transform doesn't have the max_size set, but we set it here to match
+            # the behavior of our resize without cropping
+            transforms.Resize(resize_size, interpolation=interpolation, max_size=resize_max_size),
             transforms.CenterCrop(crop_size),
             _MaybeToTensor(),
             _make_normalize_transform(mean=mean, std=std),
@@ -94,7 +98,9 @@ def get_dino_transform(
         transforms_list = []
 
         if resize_img:
-            transforms_list.append(transforms.Resize(resize_size, interpolation=interpolation))
+            transforms_list.append(
+                transforms.Resize(resize_size, interpolation=interpolation, max_size=resize_max_size)
+            )
 
         transforms_list.extend([
             transforms.ToTensor(),
@@ -336,13 +342,14 @@ def interpolate_masks(
     do_resize: bool = False,
     do_crop: bool = False,
     resize_size: Union[int, tuple[int, int]] = DEFAULT_RESIZE_SIZE,
+    resize_max_size: int = DEFAULT_RESIZE_MAX_SIZE,
     resize_interpolation = DEFAULT_RESIZE_INTERPOLATION,
     crop_size: Union[int, tuple[int, int]] = DEFAULT_CROP_SIZE
 ):
     masks = masks.float()
 
     if do_resize:
-        masks = TF.resize(masks, resize_size, resize_interpolation)
+        masks = TF.resize(masks, resize_size, resize_interpolation, max_size=resize_max_size)
 
     if do_crop:
         masks = TF.center_crop(masks, crop_size)

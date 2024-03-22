@@ -24,7 +24,7 @@ class FeatureExtractor(nn.Module):
         self.processor = processor
 
         # Can't resize DINO images as region masks won't correspond to image size, unless we resize the masks as well
-        self.dino_feature_extractor = DINOFeatureExtractor(dino, crop_images=False)
+        self.dino_feature_extractor = DINOFeatureExtractor(dino, crop_images=True)
         self.clip_feature_extractor = CLIPFeatureExtractor(clip, processor)
         self.trained_attr_predictor = DINOTrainedAttributePredictor(self.dino_feature_extractor, device=self.dino_feature_extractor.device)
         self.zs_attr_predictor = CLIPAttributePredictor(clip, processor)
@@ -52,7 +52,17 @@ class FeatureExtractor(nn.Module):
 
         if None in [cached_features.image_features, cached_features.region_features]:
             # Generate DINO features
-            cls_features = self.dino_feature_extractor([image] + regions)[0]
+            try:
+                cls_features = self.dino_feature_extractor([image] + regions)[0]
+
+            except RuntimeError:
+                logger.info(f'Out of memory on DINO forward for image with size {image.size[::-1]} with {len(regions)} regions; performing forward individually')
+                cls_features = []
+                for img in [image] + regions:
+                    cls_features.append(self.dino_feature_extractor([img])[0])
+
+                cls_features = torch.cat(cls_features, dim=0)
+
             image_features, region_features = cls_features[:1], cls_features[1:]
 
             # TODO uncomment below

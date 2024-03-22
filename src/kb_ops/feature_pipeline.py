@@ -3,7 +3,7 @@ from image_processing import LocalizerAndSegmenter, LocalizeAndSegmentOutput
 from model.concept import ConceptKB
 from model.features import ImageFeatures
 from feature_extraction import FeatureExtractor
-from typing import Union, Optional
+from typing import Union
 from PIL.Image import Image
 
 class ConceptKBFeaturePipeline:
