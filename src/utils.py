@@ -3,7 +3,7 @@ import inflect
 import PIL.Image as Image
 
 from typing import Union
-from feature_extraction.dino_features import DinoFeatureExtractor
+# from feature_extraction.dino_features import DinoFeatureExtractor
 
 
 def open_image(img_path: str):
