@@ -18,7 +18,7 @@ from feature_extraction import CLIPAttributePredictor
 from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 from kb_ops.feature_cache import ConceptKBFeatureCacher
 from utils import to_device
-from vis_utils import plot_predicted_classes, plot_image_differences, plot_concept_differences
+from vis_utils import plot_predicted_classes, plot_image_differences, plot_concept_differences, plot_zs_attr_differences
 from itertools import chain
 
 logger = logging.getLogger(__name__)
@@ -452,6 +452,44 @@ class Controller:
             weight_imgs_by_predictors=predictors,
             region_masks=(region_mask1, region_mask2),
             return_img=True,
+        )
+
+    def compare_zs_attributes(
+        self,
+        concept_names: tuple[str,str],
+        image: Image,
+        use_sigmoid: bool = False,
+        weight_scores_by_predictors: bool = False
+    ):
+        if len(concept_names) != 2:
+            raise ValueError('concepts must be a tuple of length 2.')
+
+        concept1 = self.retrieve_concept(concept_names[0])
+        concept2 = self.retrieve_concept(concept_names[1])
+
+        zs_attrs = list(set(concept1.zs_attributes + concept2.zs_attributes))
+
+        # Forward pass through CLIP
+        scores = self.feature_pipeline.feature_extractor.zs_attr_predictor.predict([image], zs_attrs, apply_sigmoid=True) # (1, n_zs_attrs)
+        if use_sigmoid:
+            scores = scores.sigmoid()
+
+        concept1_scores, concept2_scores = scores.split(len(concept1.zs_attributes), len(concept2.zs_attributes))
+
+        # TODO Plot the scores
+        if weight_scores_by_predictors:
+            concept1_weights = concept1.predictor.zs_attr_predictor.weight.data.cpu()
+            concept2_weights = concept2.predictor.zs_attr_predictor.weight.data.cpu()
+            predictor_weights = concept1_weights, concept2_weights
+
+        else:
+            predictor_weights = ()
+
+        return plot_zs_attr_differences(
+            image,
+            concept_names=(concept1.name, concept2.name),
+            concept_scores=(concept1_scores, concept2_scores),
+            weight_scores_by_predictors=predictor_weights
         )
 
     def get_maximizing_region(

@@ -224,6 +224,26 @@ def plot_rectangle(
     rect = plt.Rectangle((x_lim[0], y_lim[0]), width, height, linewidth=line_width, edgecolor=color, facecolor='none')
     ax.add_patch(rect)
 
+def plot_zs_attr_differences(
+    image: Image,
+    concept_names: tuple[str, str],
+    concept_scores: tuple[torch.Tensor, torch.Tensor],
+    weight_scores_by_predictors: tuple[ConceptPredictor, ConceptPredictor] = ()
+):
+    scores1, scores2 = concept_scores
+
+    if weight_scores_by_predictors:
+        predictor1, predictor2 = weight_scores_by_predictors
+        weights1 = predictor1.zs_attr_predictor.weight.data.cpu()
+        weights2 = predictor2.zs_attr_predictor.weight.data.cpu()
+
+        scores1 = scores1 * weights1
+        scores2 = scores2 * weights2
+
+    # TODO Display image next to horizontal bar chart of scores
+    # One label/color be concept 1 name, the other be concept 2 name
+    # Display scores in decreasing order
+
 def plot_image_differences(
     images: tuple[Image,Image],
     attr_probs: tuple[torch.Tensor, torch.Tensor],

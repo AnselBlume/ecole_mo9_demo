@@ -20,8 +20,8 @@ class CLIPAttributePredictor:
     @torch.no_grad()
     def predict(self, images: Iterable[Image], texts: list[str], apply_sigmoid: bool = False, threshold: Optional[float] = None):
         '''
-            Returns a torch.Tensor of matching scores in [0, 1] with shape (1, num_texts) if threshold is None.
-            Otherwise, returns a torch.BoolTensor with shape (1, num_texts) indicating values above threshold.
+            Returns a torch.Tensor of matching scores in [0, 1] with shape (n_imgs, num_texts) if threshold is None.
+            Otherwise, returns a torch.BoolTensor with shape (n_imgs, num_texts) indicating values above threshold.
         '''
         # Prepare model inputs
         preprocessed = self.processor(images=images, text=texts, return_tensors='pt', padding=True, truncation=True)
