@@ -62,6 +62,7 @@ def _make_normalize_transform(
     return transforms.Normalize(mean=mean, std=std)
 
 DEFAULT_RESIZE_SIZE = 256
+DEFAULT_RESIZE_MAX_SIZE = 1000
 DEFAULT_RESIZE_INTERPOLATION = transforms.InterpolationMode.BICUBIC
 DEFAULT_CROP_SIZE = 224
 
@@ -71,6 +72,7 @@ def get_dino_transform(
     padding_multiple: int = 14, # aka DINOv2 model patch size
     resize_img: bool = True,
     resize_size: int = DEFAULT_RESIZE_SIZE,
+    resize_max_size: int = DEFAULT_RESIZE_MAX_SIZE,
     interpolation = DEFAULT_RESIZE_INTERPOLATION,
     crop_size: int = DEFAULT_CROP_SIZE,
     mean: Sequence[float] = IMAGENET_DEFAULT_MEAN,
@@ -82,7 +84,9 @@ def get_dino_transform(
     # With the default parameters, this is the transform used for DINO classification
     if crop_img:
         transforms_list = [
-            transforms.Resize(resize_size, interpolation=interpolation),
+            # DINO's orig transform doesn't have the max_size set, but we set it here to match
+            # the behavior of our resize without cropping
+            transforms.Resize(resize_size, interpolation=interpolation, max_size=resize_max_size),
             transforms.CenterCrop(crop_size),
             _MaybeToTensor(),
             _make_normalize_transform(mean=mean, std=std),
@@ -94,7 +98,9 @@ def get_dino_transform(
         transforms_list = []
 
         if resize_img:
-            transforms_list.append(transforms.Resize(resize_size, interpolation=interpolation))
+            transforms_list.append(
+                transforms.Resize(resize_size, interpolation=interpolation, max_size=resize_max_size)
+            )
 
         transforms_list.extend([
             transforms.ToTensor(),
@@ -336,24 +342,35 @@ def interpolate_masks(
     do_resize: bool = False,
     do_crop: bool = False,
     resize_size: Union[int, tuple[int, int]] = DEFAULT_RESIZE_SIZE,
+    resize_max_size: int = DEFAULT_RESIZE_MAX_SIZE,
     resize_interpolation = DEFAULT_RESIZE_INTERPOLATION,
     crop_size: Union[int, tuple[int, int]] = DEFAULT_CROP_SIZE
 ):
     masks = masks.float()
 
     if do_resize:
-        masks = TF.resize(masks, resize_size, resize_interpolation)
+        masks = TF.resize(masks, resize_size, resize_interpolation, max_size=resize_max_size)
 
     if do_crop:
         masks = TF.center_crop(masks, crop_size)
 
     return masks.round().bool() # Nop if not resized or cropped
 
-def region_pool(masks: torch.BoolTensor, features: torch.Tensor):
+def region_pool(masks: torch.BoolTensor, features: torch.Tensor, allow_empty_masks: bool = False):
     assert masks.shape[-2:] == features.shape[-3:-1]
-    region_sums = einsum(masks.float(), features, 'n h w, n h w d -> n d') # Einsum needs floats
+    feature_sums = einsum(masks.float(), features, 'n h w, n h w d -> n d') # Einsum needs floats
+    n_pixels_per_mask = reduce(masks, 'n h w -> n', 'sum').unsqueeze(-1)
+
+    empty_masks = n_pixels_per_mask == 0
+    if empty_masks.any():
+        if not allow_empty_masks:
+            raise RuntimeError('Some masks have no pixels; cannot divide by zero')
+
+        # Set empty masks to 1 to avoid division by zero
+        logger.warning('Some masks have no pixels; setting number of pixels to 1 to avoid division by zero. This outputs a zero vector of features for empty masks.')
+        n_pixels_per_mask[empty_masks] = 1
 
     # Divide by number of elements in each mask
-    region_feats = region_sums / reduce(masks, 'n h w -> n', 'sum').unsqueeze(-1)
+    region_feats = feature_sums / n_pixels_per_mask
 
     return region_feats

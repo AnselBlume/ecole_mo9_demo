@@ -135,7 +135,9 @@ def build_feature_extractor(
     device: str = 'cuda'
 ):
     if dino_model is None or clip_model is None or clip_processor is None:
-        return FeatureExtractor(build_dino(dino_model_name), *build_clip(clip_model_name)).to(device)
+        fe = FeatureExtractor(build_dino(dino_model_name), *build_clip(clip_model_name))
 
     else:
-        return FeatureExtractor(dino_model, clip_model, clip_processor).to(device)
+        fe = FeatureExtractor(dino_model, clip_model, clip_processor)
+
+    return fe.to(device)
