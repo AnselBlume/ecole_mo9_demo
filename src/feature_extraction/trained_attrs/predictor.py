@@ -8,7 +8,7 @@ import torch.linalg as LA
 
 from . import DEFAULT_CKPT_PATH, COLOR_SHAPE_MATERIAL_SUBSET, INDEX_TO_ATTR, DINO_CKPT_PATH, DINO_INDEX_TO_ATTR
 
-class CLIPTrainedAttributePredictor:
+class CLIPTrainedAttributePredictor(nn.Module):
     def __init__(
         self,
         clip_feature_extractor: CLIPFeatureExtractor,
@@ -16,6 +16,7 @@ class CLIPTrainedAttributePredictor:
         ckpt_path=DEFAULT_CKPT_PATH,
         device='cuda',
     ):
+        super().__init__()
         self.clip_feature_extractor = clip_feature_extractor.eval()
 
         # Load all classifiers and potentially select a subset of attributes
@@ -80,15 +81,21 @@ class CLIPTrainedAttributePredictor:
 
             Returns a torch.Tensor with shape (n_imgs, num_cls) of scores in [-1, 1]
         '''
+        print("self.clip_feature_extractor device", self.clip_feature_extractor.device)
+        print("img_feats", img_feats.device)
         return self.predictor(img_feats) / LA.norm(img_feats, dim=-1, keepdim=True)
-class DINOTrainedAttributePredictor:
+
+
+class DINOTrainedAttributePredictor(nn.Module):
+
     def __init__(
         self,
         dino_feature_extractor: DinoFeatureExtractor,
         use_subset: bool = True,
         ckpt_path=DINO_CKPT_PATH,
-        device='cuda',
+        device="cuda",
     ):
+        super().__init__()
         self.dino_feature_extractor = dino_feature_extractor.eval()
 
         # Load all classifiers and potentially select a subset of attributes
@@ -98,7 +105,7 @@ class DINOTrainedAttributePredictor:
             classifier_subset = []
             attr_names = []
             ind_to_attr = DINO_INDEX_TO_ATTR
-           
+
             for ind,attr in ind_to_attr.items():
                 classifier_subset.append(classifiers[ind])
                 attr_names.append(attr)
@@ -114,7 +121,7 @@ class DINOTrainedAttributePredictor:
         # Stack classifiers for efficiency
         with torch.no_grad():
             stacked_weight = torch.stack([classifier.weight.squeeze() for classifier in classifiers]) # (num_cls, enc_dim)
-            # no normalization in dino 
+            # no normalization in dino
             stacked_bias = torch.cat([classifier.bias for classifier in classifiers]) # (num_cls,)
 
         self.predictor = nn.Linear(stacked_weight.shape[1], stacked_weight.shape[0], bias=True)
