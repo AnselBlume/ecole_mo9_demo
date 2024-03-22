@@ -97,6 +97,7 @@ class ConceptKBConfig:
     use_probabilities: bool = False # Sigmoid scores instead of using raw scores for concept predictor inputs
     use_full_img: bool = True
     use_regions: bool = True
+    use_region_features: bool = True # Use region features for class prediction, not just for region attr scores. use_regions must be true to have an effect
 
     def __post_init__(self):
         if not self.use_full_img and not self.use_regions:
@@ -229,7 +230,8 @@ class ConceptKB:
             use_ln=self.cfg.use_ln,
             use_probabilities=self.cfg.use_probabilities,
             use_full_img=self.cfg.use_full_img,
-            use_regions=self.cfg.use_regions
+            use_regions=self.cfg.use_regions,
+            use_region_features=self.cfg.use_region_features
         )
 
     def _init_zs_attrs(

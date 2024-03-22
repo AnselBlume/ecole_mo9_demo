@@ -143,6 +143,7 @@ class FeatureExtractor(nn.Module):
         else:
             trained_attr_scores = torch.cat([cached_features.trained_attr_img_scores, cached_features.trained_attr_region_scores], dim=0)
 
+        # While empty regions output a zero feature-vect, the ConceptPredictor's affine predictor still adds a bias, so they still contribute
         region_weights = torch.ones(len(regions), device=clip_device) / len(regions) # Uniform weights
 
         return ImageFeatures(
@@ -156,4 +157,3 @@ class FeatureExtractor(nn.Module):
             zs_attr_img_scores=zs_scores[:1],
             zs_attr_region_scores=zs_scores[1:],
         )
-
