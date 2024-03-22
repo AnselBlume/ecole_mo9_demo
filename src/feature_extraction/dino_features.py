@@ -1,4 +1,4 @@
-from PIL.Image import Image
+from PIL import Image
 import torch.nn as nn
 from torchvision import transforms
 from typing import Sequence
