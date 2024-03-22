@@ -226,23 +226,38 @@ def plot_rectangle(
 
 def plot_zs_attr_differences(
     image: Image,
+    zs_attributes: list[str],
     concept_names: tuple[str, str],
     concept_scores: tuple[torch.Tensor, torch.Tensor],
-    weight_scores_by_predictors: tuple[ConceptPredictor, ConceptPredictor] = ()
+    weight_scores_by_predictors,
 ):
-    scores1, scores2 = concept_scores
+    scores1, scores2 = concept_scores  # features for the concept predictor
 
     if weight_scores_by_predictors:
         predictor1, predictor2 = weight_scores_by_predictors
-        weights1 = predictor1.zs_attr_predictor.weight.data.cpu()
-        weights2 = predictor2.zs_attr_predictor.weight.data.cpu()
+        weights1 = predictor1.zs_attr_predictor.weight.data.cpu().numpy()
+        weights2 = predictor2.zs_attr_predictor.weight.data.cpu().numpy()
 
         scores1 = scores1 * weights1
         scores2 = scores2 * weights2
 
-    # TODO Display image next to horizontal bar chart of scores
-    # One label/color be concept 1 name, the other be concept 2 name
-    # Display scores in decreasing order
+    scores1 = np.array(sorted(scores1, reverse=True))
+    scores2 = np.array(sorted(scores2, reverse=True))
+
+    indices = np.arange(len(scores1))
+
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 2)
+    plt.barh(indices + 0.2, scores1, height=0.4, label=concept_names[0], color='blue')
+    plt.barh(indices - 0.2, -scores2, height=0.4, label=concept_names[1], color='orange')
+    plt.xlabel('Scores')
+    plt.title('Concept Scores Comparison')
+    plt.yticks(indices, zs_attributes)
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+        
 
 def plot_image_differences(
     images: tuple[Image,Image],
