@@ -34,6 +34,7 @@ class FeatureExtractor(nn.Module):
         image: Image,
         regions: list[Image],
         zs_attrs: list[str],
+        object_mask: torch.BoolTensor,
         region_masks: torch.BoolTensor,
         cached_features: ImageFeatures = None
     ):
@@ -51,49 +52,53 @@ class FeatureExtractor(nn.Module):
 
         if None in [cached_features.image_features, cached_features.region_features]:
             # Generate DINO features
-            rescale_kwargs = {
-                'feature_extractor': self.dino_feature_extractor,
-                'images': [image],
-                'patch_size': self.dino_feature_extractor.model.patch_size,
-            }
+            cls_features = self.dino_feature_extractor([image] + regions)[0]
+            image_features, region_features = cls_features[:1], cls_features[1:]
 
-            is_on_cpu = False # Whether getting rescaled features fails and we fall back to CPU
+            # TODO uncomment below
+            # rescale_kwargs = {
+            #     'feature_extractor': self.dino_feature_extractor,
+            #     'images': [image],
+            #     'patch_size': self.dino_feature_extractor.model.patch_size,
+            # }
 
-            try:
-                image_features, patch_features = get_rescaled_features(**rescale_kwargs)
+            # is_on_cpu = False # Whether getting rescaled features fails and we fall back to CPU
 
-            except RuntimeError:
-                logger.info('Ran out of memory rescaling patch features; falling back to CPU')
-                torch.cuda.empty_cache()
-                image_features, patch_features = get_rescaled_features(**rescale_kwargs, interpolate_on_cpu=True, return_on_cpu=True)
-                is_on_cpu = True
+            # try:
+            #     image_features, patch_features = get_rescaled_features(**rescale_kwargs)
 
-            # DINOFeatureExtractor returns a list for patch features if not resizing image, which we don't to region pool
-            if isinstance(patch_features, list):
-                patch_features = patch_features[0].unsqueeze(0) # (1, h, w, d)
+            # except RuntimeError:
+            #     logger.info('Ran out of memory rescaling patch features; falling back to CPU')
+            #     torch.cuda.empty_cache()
+            #     image_features, patch_features = get_rescaled_features(**rescale_kwargs, interpolate_on_cpu=True, return_on_cpu=True)
+            #     is_on_cpu = True
 
-            # TODO include image foreground mask and use image_features as pooled features
+            # # DINOFeatureExtractor returns a list for patch features if not resizing image, which we don't to region pool
+            # if isinstance(patch_features, list):
+            #     patch_features = patch_features[0].unsqueeze(0) # (1, h, w, d)
 
-            # Potentially resize or crop region masks to match patch features
-            region_masks = interpolate_masks(
-                region_masks,
-                do_resize=self.dino_feature_extractor.resize_images,
-                do_crop=self.dino_feature_extractor.crop_images
-            )
+            # # TODO include image foreground mask and use image_features as pooled features
 
-            # Perform region pooling
-            try:
-                region_features = region_pool(region_masks.to(patch_features.device), patch_features) # (n, d)
+            # # Potentially resize or crop region masks to match patch features
+            # region_masks = interpolate_masks(
+            #     region_masks,
+            #     do_resize=self.dino_feature_extractor.resize_images,
+            #     do_crop=self.dino_feature_extractor.crop_images
+            # )
 
-            except RuntimeError:
-                logger.info('Ran out of memory region pooling; falling back to CPU')
-                torch.cuda.empty_cache()
-                region_features = region_pool(region_masks.cpu(), patch_features.cpu()) # (n, d)
-                is_on_cpu = True
+            # # Perform region pooling
+            # try:
+            #     region_features = region_pool(region_masks.to(patch_features.device), patch_features) # (n, d)
 
-            if is_on_cpu:
-                image_features = image_features.to(dino_device)
-                region_features = region_features.to(dino_device)
+            # except RuntimeError:
+            #     logger.info('Ran out of memory region pooling; falling back to CPU')
+            #     torch.cuda.empty_cache()
+            #     region_features = region_pool(region_masks.cpu(), patch_features.cpu()) # (n, d)
+            #     is_on_cpu = True
+
+            # if is_on_cpu:
+            #     image_features = image_features.to(dino_device)
+            #     region_features = region_features.to(dino_device)
 
         else:
             image_features = cached_features.image_features

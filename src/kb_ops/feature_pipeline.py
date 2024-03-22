@@ -75,6 +75,7 @@ class ConceptKBFeaturePipeline:
                 image,
                 region_crops,
                 zs_attrs,
+                segmentations.object_mask,
                 region_masks,
                 cached_features=cached_features
             )
