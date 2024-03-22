@@ -51,6 +51,11 @@ class LocalizeAndSegmentOutput:
         metadata={'description': 'Bounding box of the localized concept in XYXY format with shape (4,)'}
     )
 
+    object_mask: torch.BoolTensor = field(
+        default=None,
+        metadata={'description': 'Mask of the localized concept corresponding to the localized bbox with shape (h, w)'}
+    )
+
     part_crops: list[Image] = field(
         default=None,
         metadata={'description': 'List of cropped part images, if return_crops is True'}
@@ -99,7 +104,7 @@ class LocalizerAndSegmenter:
         '''
         # Localize the concept
         caption = self._get_parts_caption(concept_name, concept_parts) if concept_parts else concept_name
-        bboxes = self.localizer.localize(image, caption=caption, tokens_to_ground=[concept_name])
+        bboxes, object_masks = self.localizer.localize(image, caption=caption, tokens_to_ground=[concept_name], return_object_masks=True)
 
         if len(bboxes) == 0: # Fall back to rembg if DesCo fails
             if concept_name:
@@ -156,6 +161,7 @@ class LocalizerAndSegmenter:
         output = LocalizeAndSegmentOutput(
             part_masks=part_masks,
             localized_bbox=bboxes[0],
+            object_mask=object_masks[0]
         )
 
         if return_crops:
