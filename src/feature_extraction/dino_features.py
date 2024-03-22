@@ -356,11 +356,21 @@ def interpolate_masks(
 
     return masks.round().bool() # Nop if not resized or cropped
 
-def region_pool(masks: torch.BoolTensor, features: torch.Tensor):
+def region_pool(masks: torch.BoolTensor, features: torch.Tensor, allow_empty_masks: bool = False):
     assert masks.shape[-2:] == features.shape[-3:-1]
-    region_sums = einsum(masks.float(), features, 'n h w, n h w d -> n d') # Einsum needs floats
+    feature_sums = einsum(masks.float(), features, 'n h w, n h w d -> n d') # Einsum needs floats
+    n_pixels_per_mask = reduce(masks, 'n h w -> n', 'sum').unsqueeze(-1)
+
+    empty_masks = n_pixels_per_mask == 0
+    if empty_masks.any():
+        if not allow_empty_masks:
+            raise RuntimeError('Some masks have no pixels; cannot divide by zero')
+
+        # Set empty masks to 1 to avoid division by zero
+        logger.warning('Some masks have no pixels; setting number of pixels to 1 to avoid division by zero. This outputs a zero vector of features for empty masks.')
+        n_pixels_per_mask[empty_masks] = 1
 
     # Divide by number of elements in each mask
-    region_feats = region_sums / reduce(masks, 'n h w -> n', 'sum').unsqueeze(-1)
+    region_feats = feature_sums / n_pixels_per_mask
 
     return region_feats
