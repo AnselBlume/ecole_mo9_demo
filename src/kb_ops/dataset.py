@@ -1,57 +1,74 @@
 import os
 import pickle
-import torch
-
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
+from torch.utils.data import Dataset
 from image_processing import LocalizerAndSegmenter
 from image_processing.localize_and_segment import LocalizeAndSegmentOutput
 from kb_ops.feature_cache import CachedImageFeatures
 from PIL import Image
 from tqdm import tqdm
 
-
 def list_collate(batch):
     keys = batch[0].keys()
 
     return {k : [d[k] for d in batch] for k in keys}
 
-class ImageDataset(Dataset):
-    def __init__(self, img_paths: list[str], labels: list[str]):
-        assert len(img_paths) == len(labels)
+NEGATIVE_LABEL = '[NEGATIVE_LABEL]'
 
-        self.img_paths = img_paths
+class BaseDataset(Dataset):
+    NEGATIVE_LABEL = NEGATIVE_LABEL
+
+    def __init__(self, data: list, labels: list[str], concepts_to_train: list[list[str]] = None):
+        if not concepts_to_train:
+            concepts_to_train = [None for _ in range(len(data))]
+
+        assert len(data) == len(labels) == len(concepts_to_train)
+
+        self.data = data
         self.labels = labels
+        self.concepts_to_train = concepts_to_train
+
+    def extend(self, data: list, labels: list[str], concepts_to_train: list[list[str]] = None):
+        if not concepts_to_train:
+            concepts_to_train = [None for _ in range(len(data))]
+
+        assert len(data) == len(labels) == len(concepts_to_train)
+
+        self.data.extend(data)
+        self.labels.extend(labels)
+        self.concepts_to_train.extend(concepts_to_train)
 
     def __len__(self):
-        return len(self.img_paths)
+        return len(self.data)
+
+class ImageDataset(BaseDataset):
+    def __init__(self, img_paths: list[str], labels: list[str], concepts_to_train: list[list[str]] = None):
+        super().__init__(img_paths, labels)
+        self.img_paths = self.data
 
     def __getitem__(self, idx):
         img = Image.open(self.img_paths[idx])
         label = self.labels[idx]
+        concepts_to_train = self.concepts_to_train[idx] if self.concepts_to_train else None
 
         return {
             'index': idx,
             'image': img,
-            'label': label
+            'label': label,
+            'concepts_to_train': concepts_to_train
         }
 
 '''
     # TODO Make this more space efficient by
     not saving the crops with return_crops, but generating them in the dataset below
 '''
-class PresegmentedDataset(Dataset):
+class PresegmentedDataset(BaseDataset):
     '''
         Dataset for preprocessed images. segmentation_paths should be the paths to the image segmentations
         corresponding to the labels.
     '''
-    def __init__(self, segmentation_paths: list[str], labels: list[str]):
-        assert len(segmentation_paths) == len(labels)
-        self.segmentation_paths = segmentation_paths
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.segmentation_paths)
+    def __init__(self, segmentation_paths: list[str], labels: list[str], concepts_to_train: list[list[str]] = None):
+        super().__init__(segmentation_paths, labels)
+        self.segmentation_paths = self.data
 
     def __getitem__(self, idx):
         with open(self.segmentation_paths[idx], 'rb') as f:
@@ -59,31 +76,32 @@ class PresegmentedDataset(Dataset):
 
         segmentations.input_image = Image.open(segmentations.input_image_path)
         label = self.labels[idx]
+        concepts_to_train = self.concepts_to_train[idx] if self.concepts_to_train else None
 
         return {
             'index': idx,
             'segmentations': segmentations,
-            'label': label
+            'label': label,
+            'concepts_to_train': concepts_to_train
         }
 
-class FeatureDataset(Dataset):
-    def __init__(self, feature_paths: list[str], labels: list[str]):
-        assert len(feature_paths) == len(labels)
-
-        self.feature_paths = feature_paths
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.feature_paths)
+class FeatureDataset(BaseDataset):
+    def __init__(self, feature_paths: list[str], labels: list[str], concepts_to_train: list[list[str]] = None):
+        super().__init__(feature_paths, labels)
+        self.feature_paths = self.data
 
     def __getitem__(self, idx):
         with open(self.feature_paths[idx], 'rb') as f:
             features: CachedImageFeatures = pickle.load(f)
 
+        label = self.labels[idx]
+        concepts_to_train = self.concepts_to_train[idx] if self.concepts_to_train else None
+
         return {
             'index': idx,
             'features': features,
-            'label': self.labels[idx]
+            'label': label,
+            'concepts_to_train': concepts_to_train
         }
 
 def preprocess_segmentations(img_dir: str, out_dir: str, loc_and_seg: LocalizerAndSegmenter):
