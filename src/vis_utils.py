@@ -260,12 +260,10 @@ def plot_zs_attr_differences(
 
     concept1_mask = sorted_concept_names == concept_names[0]
     concept1_scores = sorted_scores[concept1_mask]
-    concept1_labels = sorted_attr_names[concept1_mask]
     concept1_ys = yticks[concept1_mask]
 
     concept2_mask = sorted_concept_names == concept_names[1]
     concept2_scores = sorted_scores[concept2_mask]
-    concept2_labels = sorted_attr_names[concept2_mask]
     concept2_ys = yticks[concept2_mask]
 
     axs[1].barh(concept1_ys, concept1_scores, color='blue', label=concept_names[0])
