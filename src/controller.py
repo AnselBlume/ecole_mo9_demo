@@ -182,7 +182,7 @@ class Controller:
         if len(self.concepts) and next(iter(self.concepts)).predictor is not None:
             concept.predictor.to(next(self.concepts.parameters()).device) # Assumes all concepts are on the same device
         else: # Assume there aren't any other initialized concept predictors
-            concept.predictor.cuda()
+            concept.predictor.to(self.concepts.device)
 
         # TODO Determine if it has any obvious parent or child concepts
 
