@@ -43,7 +43,7 @@ def vis_concept_predictor_heatmap(
 ):
     # Image and image predictor
     img = Image.open(img_path).convert('RGB')
-    img = remove(img, post_process_mask=True, session=new_session('isnet-general-use')).convert('RGB')
+    img = remove(img, post_process_mask=True, session=new_session('isnet-general-use'), only_mask=True)
 
     feature_predictor = nn.Sequential(
         concept.predictor.img_features_predictor,
@@ -105,7 +105,7 @@ def vis_evolution():
     concept1_name = 'hoe'
     cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/hoes'
 
-    prepare_concept(img_dir, concept1_name, cache_dir, controller)
+    prepare_concept(img_dir, concept1_name, cache_dir, controller, set_segmentation_paths=False)
     concept1 = controller.retrieve_concept(concept1_name)
     controller.train_concept(concept1_name)
 
@@ -114,7 +114,7 @@ def vis_evolution():
     concept2_name = 'shovel'
     cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/shovels'
 
-    img_paths = prepare_concept(img_dir, concept2_name, cache_dir, controller)
+    img_paths = prepare_concept(img_dir, concept2_name, cache_dir, controller, set_segmentation_paths=False)
 
     # %% Train second concept, visualizing each
     vis_dir = 'vis_evolution'
@@ -127,7 +127,7 @@ def vis_evolution():
     for i, img_path in enumerate(img_paths, start=1):
         new_example = ConceptExample(image_path=img_path)
         concept2.examples.append(new_example)
-        set_feature_paths([concept2], segmentations_dir=cache_dir + '/segmentations')
+        # set_feature_paths([concept2], segmentations_dir=cache_dir + '/segmentations')
 
         # %% Visualize, train, and visualize concept 2
         fig, axs = vis_concept_predictor_heatmap(
@@ -173,7 +173,7 @@ def vis_checkpoint_new_concept(max_to_vis_per_concept: int = 3):
         First trains the new concept, then retrains an old similar concept on the new data for comparison.
     '''
     vis_dir = 'vis_checkpointed_kb_new_concept'
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_17-00:21:30-wqv6b6wu-hierarchical_v3-dino/concept_kb_epoch_50.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_22-15:06:03-xob6535d-v3-dino_pool/concept_kb_epoch_50.pt'
 
     os.makedirs(vis_dir, exist_ok=True)
     concept_kb = ConceptKB.load(ckpt_path)
@@ -190,7 +190,7 @@ def vis_checkpoint_new_concept(max_to_vis_per_concept: int = 3):
     concept2_name = 'shovel'
     cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/shovels'
 
-    prepare_concept(img_dir, concept2_name, cache_dir, controller)
+    prepare_concept(img_dir, concept2_name, cache_dir, controller, set_segmentation_paths=False)
     concept2 = controller.retrieve_concept(concept2_name)
     controller.train_concept(concept2_name)
 
@@ -221,7 +221,7 @@ def vis_checkpoint(max_to_vis_per_concept: int = 3):
     '''
         Visualize the heatmaps of existing checkpointed concept predictors on each other's test images.
     '''
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_17-00:21:30-wqv6b6wu-hierarchical_v3-dino/concept_kb_epoch_50.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_22-15:06:03-xob6535d-v3-dino_pool/concept_kb_epoch_50.pt'
     concept_kb = ConceptKB.load(ckpt_path)
 
     feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
