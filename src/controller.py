@@ -430,7 +430,10 @@ class Controller:
             trained_attr_scores2 = predictions2['predicted_concept_outputs'].trained_attr_img_scores
             region_mask2 = None
 
-        # Trained attribute scores are sigmoided by default; no need to here
+        # Convert to probabilities if not already
+        if not self.concepts.cfg.use_probabilities:
+            trained_attr_scores1 = trained_attr_scores1.sigmoid()
+            trained_attr_scores2 = trained_attr_scores2.sigmoid()
 
         # Get attribute names
         attr_names = self.feature_pipeline.feature_extractor.trained_attr_predictor.attr_names
@@ -446,16 +449,14 @@ class Controller:
         else:
             predictors = ()
 
-        trained_attr_plot = plot_image_differences(
+        return plot_image_differences(
             images,
             (trained_attr_scores1, trained_attr_scores2),
             attr_names,
-            weight_scores_by_predictors=weight_by_predictors,
+            weight_imgs_by_predictors=predictors,
             region_masks=(region_mask1, region_mask2),
             return_img=True,
         )
-
-        # ZS attributes
 
     def compare_zs_attributes(
         self,
@@ -483,7 +484,7 @@ class Controller:
         concept1_scores, concept2_scores = scores[0].split((len(concept1.zs_attributes), len(concept2.zs_attributes)))
 
         if weight_scores_by_predictors:
-            concept1_weights = concept1.predictor.zs_attr_predictor.weight.data.cpu()
+            concept1_weights = concept1.predictor.zs_attr_predictor.weight.data.cpu()  # TODO Q) Where do the weights come from?
             concept2_weights = concept2.predictor.zs_attr_predictor.weight.data.cpu()
             predictor_weights = concept1_weights, concept2_weights
 
