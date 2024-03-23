@@ -123,7 +123,6 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
         val_dl = self._get_dataloader(val_ds, is_train=False) if val_ds else None
         val_outputs = []
-        val_losses = [] if val_ds else None
 
         optimizer = torch.optim.Adam(self.concept_kb.parameters(), lr=lr)
         set_score_to_zero_at_indices = set(set_score_to_zero_at_indices)
