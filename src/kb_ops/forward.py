@@ -101,7 +101,7 @@ class ConceptKBForwardBase:
         # Cache to avoid recomputation for each image
         cached_features = None
 
-        concepts = concepts if concepts is not None else self.concept_kb
+        concepts = concepts if concepts else self.concept_kb
         for i, concept in enumerate(concepts, start=1):
             if features_were_provided:
                 device = concept.predictor.img_features_predictor.weight.device
