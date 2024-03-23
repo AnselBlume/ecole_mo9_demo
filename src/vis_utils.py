@@ -226,7 +226,7 @@ def plot_rectangle(
 
 def plot_zs_attr_differences(
     image: Image,
-    zs_attributes: list[str],
+    zs_attr_names: tuple[list[str], list[str]],
     concept_names: tuple[str, str],
     concept_scores: tuple[torch.Tensor, torch.Tensor],
     weight_scores_by_predictors,
@@ -241,23 +241,45 @@ def plot_zs_attr_differences(
         scores1 = scores1 * weights1
         scores2 = scores2 * weights2
 
-    scores1 = np.array(sorted(scores1, reverse=True))
-    scores2 = np.array(sorted(scores2, reverse=True))
+    concept1_attr_names, concept2_attr_names = zs_attr_names
+    all_attr_names = concept1_attr_names + concept2_attr_names
+    all_concept_names = [concept_names[0]] * len(concept1_attr_names) + [concept_names[1]] * len(concept2_attr_names)
+    all_scores = torch.cat([scores1, scores2], dim=0)
+    perm = list(np.argsort(all_scores.cpu().numpy()))
 
-    indices = np.arange(len(scores1))
+    sorted_scores = all_scores[perm].cpu().numpy()
+    sorted_concept_names = np.array([all_concept_names[i] for i in perm])
+    sorted_attr_names = np.array([all_attr_names[i] for i in perm])
 
-    plt.figure(figsize=(12, 6))
-    plt.subplot(1, 2, 2)
-    plt.barh(indices + 0.2, scores1, height=0.4, label=concept_names[0], color='blue')
-    plt.barh(indices - 0.2, -scores2, height=0.4, label=concept_names[1], color='orange')
-    plt.xlabel('Scores')
-    plt.title('Concept Scores Comparison')
-    plt.yticks(indices, zs_attributes)
-    plt.legend()
+    yticks = np.arange(len(sorted_scores))
 
-    plt.tight_layout()
-    plt.show()
-        
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+
+    axs[0].imshow(image)
+    axs[0].axis('off')
+
+    concept1_mask = sorted_concept_names == concept_names[0]
+    concept1_scores = sorted_scores[concept1_mask]
+    concept1_labels = sorted_attr_names[concept1_mask]
+    concept1_ys = yticks[concept1_mask]
+
+    concept2_mask = sorted_concept_names == concept_names[1]
+    concept2_scores = sorted_scores[concept2_mask]
+    concept2_labels = sorted_attr_names[concept2_mask]
+    concept2_ys = yticks[concept2_mask]
+
+    axs[1].barh(concept1_ys, concept1_scores, color='blue', label=concept_names[0])
+    axs[1].barh(concept2_ys, concept2_scores, color='orange', label=concept_names[1])
+    axs[1].set_yticks(yticks, sorted_attr_names)
+    axs[1].set_xlabel('Scores')
+    axs[1].legend()
+
+    fig.suptitle('Concept-Specific Attribute Score Comparison')
+
+    fig.tight_layout()
+    fig.show()
+
+    return fig, axs
 
 def plot_image_differences(
     images: tuple[Image,Image],

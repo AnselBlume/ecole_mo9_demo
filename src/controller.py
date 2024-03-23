@@ -471,14 +471,17 @@ class Controller:
         concept1 = self.retrieve_concept(concept_names[0])
         concept2 = self.retrieve_concept(concept_names[1])
 
-        zs_attrs = list(set(concept1.zs_attributes + concept2.zs_attributes))
+        concept1_zs_attr_names = [a.name for a in concept1.zs_attributes]
+        concept2_zs_attr_names = [a.name for a in concept2.zs_attributes]
+        all_queries = [a.query for a in concept1.zs_attributes + concept2.zs_attributes]
 
         # Forward pass through CLIP
-        scores = self.feature_pipeline.feature_extractor.zs_attr_predictor.predict([image], zs_attrs, apply_sigmoid=True) # (1, n_zs_attrs)
+        scores = self.feature_pipeline.feature_extractor.zs_attr_predictor.predict([image], all_queries, apply_sigmoid=use_sigmoid) # (1, n_zs_attrs)
+
         if use_sigmoid:
             scores = scores.sigmoid()
 
-        concept1_scores, concept2_scores = scores.split(len(concept1.zs_attributes), len(concept2.zs_attributes))
+        concept1_scores, concept2_scores = scores[0].split((len(concept1.zs_attributes), len(concept2.zs_attributes)))
 
         if weight_scores_by_predictors:
             concept1_weights = concept1.predictor.zs_attr_predictor.weight.data.cpu()  # TODO Q) Where do the weights come from?
@@ -490,7 +493,7 @@ class Controller:
 
         return plot_zs_attr_differences(
             image,
-            zs_attributes=zs_attrs,
+            zs_attr_names=(concept1_zs_attr_names, concept2_zs_attr_names),
             concept_names=(concept1.name, concept2.name),
             concept_scores=(concept1_scores, concept2_scores),
             weight_scores_by_predictors=predictor_weights
@@ -600,4 +603,7 @@ if __name__ == '__main__':
     # %% Explain difference between concepts
     controller.compare_concepts('spoon', 'fork')
 
-# %%
+    # %% Visualize difference between zero-shot attributes
+    controller.compare_zs_attributes(('spoon', 'fork'), img)
+
+    # %%
