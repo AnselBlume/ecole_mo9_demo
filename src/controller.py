@@ -569,12 +569,12 @@ if __name__ == '__main__':
     coloredlogs.install(level=logging.INFO)
 
     # %%
-    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
+    img_path = "https://blender02.cs.illinois.edu/images/65fe5df2bcbabb1c1418df02"
     ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_22-15:06:03-xob6535d-v3-dino_pool/concept_kb_epoch_50.pt'
 
     # %%
     kb = ConceptKB.load(ckpt_path)
-    loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
+    loc_and_seg = build_localizer_and_segmenter(build_sam(), None)
     fe = build_feature_extractor()
 
     retriever = CLIPConceptRetriever(kb.concepts, fe.clip, fe.processor)

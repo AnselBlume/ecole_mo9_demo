@@ -57,30 +57,30 @@ def build_sam_amg(model: Sam = None, part_based: bool = False):
 # DesCo #
 #########
 # from maskrcnn_benchmark.engine.predictor_FIBER import GLIPDemo
-from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
-from maskrcnn_benchmark.config import cfg as BASE_DESCO_CONFIG
+# from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
+# from maskrcnn_benchmark.config import cfg as BASE_DESCO_CONFIG
 
-DEFAULT_DESCO_CFG_PATH = '/shared/nas2/blume5/fa23/ecole/src/patch_mining/DesCo/configs/pretrain_new/desco_glip.yaml'
-DEFAULT_DESCO_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/desco/part_desco_glip_tiny.pth'
+# DEFAULT_DESCO_CFG_PATH = '/shared/nas2/blume5/fa23/ecole/src/patch_mining/DesCo/configs/pretrain_new/desco_glip.yaml'
+# DEFAULT_DESCO_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/desco/part_desco_glip_tiny.pth'
 
-def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT_DESCO_CKPT_PATH, device: str = 'cuda'):
-    if 'fiber' in (cfg_path + ckpt_path).lower():
-        raise NotImplementedError('FIBER GLIPDemo not supported')
+# def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT_DESCO_CKPT_PATH, device: str = 'cuda'):
+#     if 'fiber' in (cfg_path + ckpt_path).lower():
+#         raise NotImplementedError('FIBER GLIPDemo not supported')
 
-    if 'cuda' not in device:
-        raise NotImplementedError('DesCo requires GPU')
+#     if 'cuda' not in device:
+#         raise NotImplementedError('DesCo requires GPU')
 
-    cfg = BASE_DESCO_CONFIG.clone()
+#     cfg = BASE_DESCO_CONFIG.clone()
 
-    cfg.merge_from_file(cfg_path)
-    cfg.merge_from_list(['MODEL.WEIGHT', ckpt_path])
+#     cfg.merge_from_file(cfg_path)
+#     cfg.merge_from_list(['MODEL.WEIGHT', ckpt_path])
 
-    cfg.local_rank = 0 if device == 'cuda' else int(device.split(':')[-1])
-    cfg.num_gpus = 1
+#     cfg.local_rank = 0 if device == 'cuda' else int(device.split(':')[-1])
+#     cfg.num_gpus = 1
 
-    desco = GLIPDemo(cfg, min_image_size=800)
+#     desco = GLIPDemo(cfg, min_image_size=800)
 
-    return desco
+#     return desco
 
 ########
 # CLIP #
@@ -135,7 +135,7 @@ def build_feature_extractor(
     device: str = 'cuda'
 ):
     if dino_model is None or clip_model is None or clip_processor is None:
-        fe = FeatureExtractor(build_dino(dino_model_name), *build_clip(clip_model_name))
+        fe = FeatureExtractor(build_dino(dino_model_name, device=device), *build_clip(clip_model_name, device=device))
 
     else:
         fe = FeatureExtractor(dino_model, clip_model, clip_processor)
