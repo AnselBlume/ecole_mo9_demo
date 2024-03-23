@@ -23,13 +23,14 @@ logger = logging.getLogger(__file__)
 
 coloredlogs.install(level='DEBUG')
 
-def prepare_concept(img_dir: str, concept_name: str, cache_dir: str, controller: Controller):
+def prepare_concept(img_dir: str, concept_name: str, cache_dir: str, controller: Controller, set_segmentation_paths: bool = True):
     img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
 
     concept = controller.add_concept(concept_name)
     concept.examples = [ConceptExample(image_path=img_path) for img_path in img_paths]
 
-    set_feature_paths([concept], segmentations_dir=cache_dir + '/segmentations')
+    if set_segmentation_paths:
+        set_feature_paths([concept], segmentations_dir=cache_dir + '/segmentations')
 
     return img_paths
 
