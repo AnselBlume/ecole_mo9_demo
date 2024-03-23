@@ -1,13 +1,14 @@
 import os
-from model.concept import ConceptKB, Concept
+from model.concept import ConceptKB, Concept, ConceptExample
 from datetime import datetime
 from typing import Union
+from itertools import chain
 
 def get_timestr():
     return datetime.now().strftime('%Y_%m_%d-%H:%M:%S')
 
 def set_feature_paths(
-    concepts: Union[list[Concept], ConceptKB],
+    concepts_or_examples: Union[list[Concept], ConceptKB, list[ConceptExample]],
     *,
     segmentations_dir: str = None,
     features_dir: str = None
@@ -23,18 +24,25 @@ def set_feature_paths(
     if segmentations_dir is None and features_dir is None:
         raise ValueError('At least one of features_dir or segmentations_dir must be provided')
 
-    def set_paths_if_exists(concepts: Union[list[Concept], ConceptKB], attr_name: str, base_dir):
-        for concept in concepts:
-            for example in concept.examples:
-                base_path = os.path.splitext(os.path.basename(example.image_path))[0] + '.pkl'
-                target_path = os.path.join(base_dir, base_path)
-                if os.path.exists(target_path):
-                    setattr(example, attr_name, target_path)
+    if isinstance(concepts_or_examples[0], ConceptExample):
+        examples = concepts_or_examples
+
+    else:
+        examples = chain.from_iterable([
+            concept.examples for concept in concepts_or_examples
+        ])
+
+    def set_paths_if_exists(examples: list[ConceptExample], attr_name: str, base_dir):
+        for example in examples:
+            base_path = os.path.splitext(os.path.basename(example.image_path))[0] + '.pkl'
+            target_path = os.path.join(base_dir, base_path)
+            if os.path.exists(target_path):
+                setattr(example, attr_name, target_path)
 
     if segmentations_dir and os.path.exists(segmentations_dir):
         # Store presegmented paths in concept examples
-        set_paths_if_exists(concepts, 'image_segmentations_path', segmentations_dir)
+        set_paths_if_exists(examples, 'image_segmentations_path', segmentations_dir)
 
     if features_dir and os.path.exists(features_dir):
         # Store pre-computed feature paths in concept examples
-        set_paths_if_exists(concepts, 'image_features_path', features_dir)
+        set_paths_if_exists(examples, 'image_features_path', features_dir)
