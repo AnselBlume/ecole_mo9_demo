@@ -281,12 +281,15 @@ def plot_zs_attr_differences(
 
 def plot_image_differences(
     images: tuple[Image,Image],
-    attr_probs: tuple[torch.Tensor, torch.Tensor],
-    attr_names: List[str],
-    top_k=5,
+    concepts: tuple[Concept, Concept],
+    trained_attr_probs: tuple[torch.Tensor, torch.Tensor],
+    trained_attr_names: List[str],
+    zs_attr_scores: tuple[torch.Tensor, torch.Tensor],
+    top_k_trained_attrs=5,
     figsize=(10,7),
-    colors=('orange', 'blue'),
-    weight_imgs_by_predictors: tuple[ConceptPredictor, ConceptPredictor] = (),
+    trained_attr_colors=('orange', 'blue'),
+    zs_attr_colors=('purple', 'yellow'),
+    weight_scores_by_predictors: bool = True,
     region_masks: tuple[torch.Tensor, torch.Tensor] = (),
     return_img=False
 ):
@@ -298,8 +301,9 @@ def plot_image_differences(
     '''
     # Unpack
     img1, img2 = images
-    attr_probs1, attr_probs2 = attr_probs
-    color1, color2 = colors
+    attr_probs1, attr_probs2 = trained_attr_probs
+    trained_attr_color1, trained_attr_color2 = trained_attr_colors
+    concept1, concept2 = concepts
 
     # Compute top attribute probability differences
     probs1 = attr_probs1.squeeze()
@@ -307,24 +311,24 @@ def plot_image_differences(
 
     diffs = (probs1 - probs2).abs()
 
-    top_k = min(top_k, len(attr_names))
+    top_k_trained_attrs = min(top_k_trained_attrs, len(trained_attr_names))
 
-    if weight_imgs_by_predictors:
-        assert len(weight_imgs_by_predictors) == 2
-        predictor1, predictor2 = weight_imgs_by_predictors
+    if weight_scores_by_predictors:
+        assert len(weight_scores_by_predictors) == 2
+        predictor1, predictor2 = concept1.predictor, concept2.predictor
         attr_weights1 = predictor1.img_trained_attr_weights.weights.data.cpu()
         attr_weights2 = predictor2.img_trained_attr_weights.weights.data.cpu()
 
         # Weight the differences by the attribute weights
         weighted_diffs = diffs * (attr_weights1.abs() + attr_weights2.abs())
-        top_diffs, top_inds = weighted_diffs.topk(top_k)
+        top_diffs, top_inds = weighted_diffs.topk(top_k_trained_attrs)
 
     else:
-        top_diffs, top_inds = diffs.topk(top_k)
+        top_diffs, top_inds = diffs.topk(top_k_trained_attrs)
 
     top_inds = np.array(list(reversed(top_inds))) # Put highest diff at top
 
-    top_attr_names = [attr_names[i] for i in top_inds]
+    top_attr_names = [trained_attr_names[i] for i in top_inds]
 
     if region_masks: # Plot region masks on images
         imgs = []
@@ -341,21 +345,24 @@ def plot_image_differences(
 
         img1, img2 = imgs
 
+    # Handle zero-shot attributes
+
+
     # Plot
     fig = plt.figure(figsize=figsize, constrained_layout=True)
-    grid = GridSpec(2, 2, figure=fig, wspace=.05, hspace=.05)
+    grid = GridSpec(2, 3, figure=fig, wspace=.05, hspace=.05)
 
     # Image 1
     img1_ax = fig.add_subplot(grid[0,0])
     img1_ax.imshow(img1)
     img1_ax.axis('off')
-    plot_rectangle(img1_ax, color=color1)
+    plot_rectangle(img1_ax, color=trained_attr_color1)
 
     # Image 2
     img2_ax = fig.add_subplot(grid[1,0])
     img2_ax.imshow(img2)
     img2_ax.axis('off')
-    plot_rectangle(img2_ax, color=color2)
+    plot_rectangle(img2_ax, color=trained_attr_color2)
 
     # Attribute differences
     diffs_ax = fig.add_subplot(grid[:,1])
@@ -364,10 +371,10 @@ def plot_image_differences(
 
     # See tutorial here https://matplotlib.org/stable/gallery/lines_bars_and_markers/barchart.html
     bar_width = .25
-    label_loc_offsets = np.arange(top_k) * 3 * bar_width
+    label_loc_offsets = np.arange(top_k_trained_attrs) * 3 * bar_width
     for label_offset, prob1, prob2 in zip(label_loc_offsets, probs1, probs2):
-        diffs_ax.barh(label_offset, prob2, bar_width, color=color2)
-        diffs_ax.barh(label_offset + bar_width, prob1, bar_width, color=color1)
+        diffs_ax.barh(label_offset, prob2, bar_width, color=trained_attr_color2)
+        diffs_ax.barh(label_offset + bar_width, prob1, bar_width, color=trained_attr_color1)
 
     diffs_ax.set_yticks(label_loc_offsets + bar_width / 2, top_attr_names)
 
