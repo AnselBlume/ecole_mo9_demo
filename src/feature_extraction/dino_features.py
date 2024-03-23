@@ -1,8 +1,7 @@
 from PIL.Image import Image
 import torch.nn as nn
 from torchvision import transforms
-from typing import Sequence
-from tqdm import tqdm
+from typing import Sequence, Optional
 import torch
 import math
 import itertools
@@ -62,7 +61,7 @@ def _make_normalize_transform(
     return transforms.Normalize(mean=mean, std=std)
 
 DEFAULT_RESIZE_SIZE = 256
-DEFAULT_RESIZE_MAX_SIZE = 1000
+DEFAULT_RESIZE_MAX_SIZE = 800
 DEFAULT_RESIZE_INTERPOLATION = transforms.InterpolationMode.BICUBIC
 DEFAULT_CROP_SIZE = 224
 
@@ -216,11 +215,41 @@ def rescale_features(
 
     return features
 
+def _compute_resized_output_size(
+    image_size: tuple[int, int], size: list[int], max_size: Optional[int] = None
+) -> list[int]:
+    '''
+        Method to compute the output size for the resize operation.
+        Copied from https://pytorch.org/vision/0.15/_modules/torchvision/transforms/functional.html
+        since the PyTorch version used in desco environment doesn't have this method.
+    '''
+    if len(size) == 1:  # specified size only for the smallest edge
+        h, w = image_size
+        short, long = (w, h) if w <= h else (h, w)
+        requested_new_short = size if isinstance(size, int) else size[0]
+
+        new_short, new_long = requested_new_short, int(requested_new_short * long / short)
+
+        if max_size is not None:
+            if max_size <= requested_new_short:
+                raise ValueError(
+                    f"max_size = {max_size} must be strictly greater than the requested "
+                    f"size for the smaller edge size = {size}"
+                )
+            if new_long > max_size:
+                new_short, new_long = int(max_size * new_short / new_long), max_size
+
+        new_w, new_h = (new_short, new_long) if w <= h else (new_long, new_short)
+    else:  # specified both h and w
+        new_w, new_h = size[1], size[0]
+    return [new_h, new_w]
+
 def get_rescaled_features(
     feature_extractor: DINOFeatureExtractor,
     images: list[Image],
     patch_size: int = 14,
     resize_size: int = DEFAULT_RESIZE_SIZE,
+    resize_max_size: int = DEFAULT_RESIZE_MAX_SIZE,
     crop_height: int = DEFAULT_CROP_SIZE,
     crop_width: int = DEFAULT_CROP_SIZE,
     interpolate_on_cpu: bool = False,
@@ -295,21 +324,8 @@ def get_rescaled_features(
 
         for patch_feat, img in zip(patch_feats, images):
             if are_images_resized: # Interpolate to padded resized size
-                # Compute resized dimensions for padding removal
-                resized_dims = [None, None]
-                spatial_shapes = list(reversed(img.size)) # (h, w)
-
-                smaller_dim = 0 if spatial_shapes[0] < spatial_shapes[1] else 1
-                resized_dims[smaller_dim] = resize_size
-
-                # _compute_resized_output_size floors the scaled larger dimension:
-                # https://pytorch.org/vision/0.15/_modules/torchvision/transforms/functional.html
-                larger_dim = 1 - smaller_dim
-                resized_dims[larger_dim] = int(spatial_shapes[larger_dim] * resize_size / spatial_shapes[smaller_dim]) # Exact implementation in torch resize; multiplication first helps avoids fp errors
-                # scale_factor = resize_size / spatial_shapes[smaller_dim]
-                # resized_dims[larger_dim] = int(spatial_shapes[larger_dim] * scale_factor + 1e-6) # + epsilon to avoid floating point errors during floor
-
-                height, width = resized_dims
+                # Compute resized dimensions used in resize method
+                height, width = _compute_resized_output_size(img.size[::-1], [resize_size], max_size=resize_max_size)
 
                 # Interpolate to padded resized size
                 padded_resize_size = math.ceil(DEFAULT_RESIZE_SIZE / patch_size) * patch_size

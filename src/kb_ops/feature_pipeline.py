@@ -65,7 +65,7 @@ class ConceptKBFeaturePipeline:
         region_crops = segmentations.part_crops
         region_masks = segmentations.part_masks
 
-        if region_crops == []:
+        if region_crops == [] and not cached_features:
             assert len(region_masks) == 0
             region_crops = [image]
             region_masks = torch.ones(1, *image.size[::-1], dtype=torch.bool)
