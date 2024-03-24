@@ -7,6 +7,7 @@ from kb_ops.feature_cache import CachedImageFeatures
 from PIL import Image
 from tqdm import tqdm
 from model.concept import ConceptExample
+from typing import Optional
 
 def list_collate(batch):
     keys = batch[0].keys()
@@ -18,7 +19,12 @@ NEGATIVE_LABEL = '[NEGATIVE_LABEL]'
 class BaseDataset(Dataset):
     NEGATIVE_LABEL = NEGATIVE_LABEL
 
-    def __init__(self, data: list, labels: list[str], concepts_to_train: list[list[str]] = None):
+    def __init__(self, data: list, labels: list[str], concepts_to_train: list[list[Optional[str]]] = None):
+        '''
+            concepts_to_train: List of length n_examples of lists of concept names to train for each example.
+                None for an example indicates all concepts should be trained for that example.
+                Passing in None as the list of lists will result in all concepts being trained for all examples.
+        '''
         if not concepts_to_train:
             concepts_to_train = [None for _ in range(len(data))]
 
