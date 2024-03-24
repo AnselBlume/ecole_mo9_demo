@@ -1,6 +1,7 @@
 import os
 from model.concept import Concept, ConceptKB, ConceptExample
 from typing import Callable
+import numpy as np
 
 def label_from_path(path):
     return os.path.basename(path).split('_')[0].lower()
@@ -59,7 +60,14 @@ def kb_from_img_dir(
 
     return kb
 
-def add_global_negatives(concept_kb: ConceptKB, img_dir: str, exts: list[str] = ['.jpg', '.png']):
+def add_global_negatives(
+    concept_kb: ConceptKB,
+    img_dir: str,
+    exts: list[str] = ['.jpg', '.png'],
+    limit: int = None,
+    shuffle_paths: bool = True,
+    shuffle_seed: int = 42
+):
     '''
         Adds global negatives to a concept knowledge base.
 
@@ -67,7 +75,15 @@ def add_global_negatives(concept_kb: ConceptKB, img_dir: str, exts: list[str] = 
             concept_kb (ConceptKB): Concept knowledge base.
             img_dir (str): Directory containing images.
     '''
-    for path in list_paths(img_dir, exts=exts):
+    paths = list_paths(img_dir, exts=exts)
+
+    if shuffle_paths:
+        rng = np.random.default_rng(shuffle_seed)
+        rng.shuffle(paths)
+
+    paths = paths[:limit] # [:None] is a nop
+
+    for path in paths:
         concept_kb.global_negatives.append(
             ConceptExample(image_path=path, is_negative=True)
         )

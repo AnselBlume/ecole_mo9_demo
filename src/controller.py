@@ -9,7 +9,7 @@ from image_processing import LocalizerAndSegmenter
 from kb_ops import ConceptKBTrainer, ConceptKBPredictor
 from kb_ops.retrieve import CLIPConceptRetriever
 from kb_ops.train_test_split import split_from_paths
-from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
+from kb_ops.dataset import FeatureDataset, extend_with_global_negatives, split_from_concept_kb
 from utils import ArticleDeterminer
 from typing import Union, Literal
 from llm import LLMClient
@@ -231,16 +231,7 @@ class Controller:
         for concept in self.concepts:
             self.cacher.recache_zs_attr_features(concept)
 
-        all_feature_paths = list(chain.from_iterable([
-            [ex.image_features_path for ex in c.examples]
-            for c in self.concepts
-        ]))
-
-        (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_paths(all_feature_paths, split=split)
-        train_ds = FeatureDataset(trn_p, trn_l)
-        val_ds = FeatureDataset(val_p, val_l)
-
-        extend_with_global_negatives(train_ds, self.concepts.global_negatives)
+        train_ds, val_ds, test_ds = split_from_concept_kb(self, split=split)
 
         self.trainer.train(
             train_ds=train_ds,

@@ -6,8 +6,9 @@ from image_processing.localize_and_segment import LocalizeAndSegmentOutput
 from kb_ops.feature_cache import CachedImageFeatures
 from PIL import Image
 from tqdm import tqdm
-from model.concept import ConceptExample
+from model.concept import ConceptKB, ConceptExample
 from typing import Optional
+from .train_test_split import split_from_paths
 
 def list_collate(batch):
     keys = batch[0].keys()
@@ -49,7 +50,7 @@ class BaseDataset(Dataset):
 
 class ImageDataset(BaseDataset):
     def __init__(self, img_paths: list[str], labels: list[str], concepts_to_train: list[list[str]] = None):
-        super().__init__(img_paths, labels)
+        super().__init__(img_paths, labels, concepts_to_train)
         self.img_paths = self.data
 
     def __getitem__(self, idx):
@@ -74,7 +75,7 @@ class PresegmentedDataset(BaseDataset):
         corresponding to the labels.
     '''
     def __init__(self, segmentation_paths: list[str], labels: list[str], concepts_to_train: list[list[str]] = None):
-        super().__init__(segmentation_paths, labels)
+        super().__init__(segmentation_paths, labels, concepts_to_train)
         self.segmentation_paths = self.data
 
     def __getitem__(self, idx):
@@ -94,7 +95,7 @@ class PresegmentedDataset(BaseDataset):
 
 class FeatureDataset(BaseDataset):
     def __init__(self, feature_paths: list[str], labels: list[str], concepts_to_train: list[list[str]] = None):
-        super().__init__(feature_paths, labels)
+        super().__init__(feature_paths, labels, concepts_to_train)
         self.feature_paths = self.data
 
     def __getitem__(self, idx):
@@ -110,6 +111,45 @@ class FeatureDataset(BaseDataset):
             'label': label,
             'concepts_to_train': concepts_to_train
         }
+
+def split_from_concept_kb(concept_kb: ConceptKB, split: tuple[float,float,float] = (.6, .2, .2)):
+    # Gather all positive and concept-specific (local) negative feature paths
+    pos_feature_paths = []
+    neg_feature_paths = [] # Concept-specific
+    negs_to_train = []
+
+    for concept in concept_kb:
+        for example in concept.examples:
+            feature_path = example.image_features_path
+
+            if not feature_path:
+                raise RuntimeError(
+                    f'Feature path not set for example {example} of concept {concept.name}.'
+                    + '\nMake sure to call ConceptKBFeatureCacher.cache_features() before splitting.'
+                )
+
+            if example.is_negative:
+                neg_feature_paths.append(feature_path)
+                negs_to_train.append([concept.name]) # For concept-specific negatives, only train this concept
+
+            else:
+                pos_feature_paths.append(feature_path)
+
+    # Split the positive examples
+    (trn_ps, trn_ls), (val_ps, val_ls), (tst_ps, tst_ls) = split_from_paths(pos_feature_paths, split=split)
+
+    train_ds = FeatureDataset(trn_ps, trn_ls)
+    val_ds = FeatureDataset(val_ps, val_ls)
+    test_ds = FeatureDataset(tst_ps, tst_ls)
+
+    # Add concept-specific negatives to train_ds
+    neg_labels = [NEGATIVE_LABEL for _ in neg_feature_paths]
+    train_ds.extend(neg_feature_paths, neg_labels, negs_to_train)
+
+    # Add global engatives to train_ds
+    extend_with_global_negatives(train_ds, concept_kb.global_negatives)
+
+    return train_ds, val_ds, test_ds
 
 def extend_with_global_negatives(ds: FeatureDataset, global_negatives: list[ConceptExample]):
     '''
