@@ -9,7 +9,7 @@ from image_processing import LocalizerAndSegmenter
 from kb_ops import ConceptKBTrainer, ConceptKBPredictor
 from kb_ops.retrieve import CLIPConceptRetriever
 from kb_ops.train_test_split import split_from_paths
-from kb_ops.dataset import FeatureDataset
+from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
 from utils import ArticleDeterminer
 from typing import Union, Literal
 from llm import LLMClient
@@ -220,10 +220,13 @@ class Controller:
         '''
             Trains all concepts in the concept knowledge base from each concept's example_imgs.
         '''
-        raise NotImplementedError('Need to add global negatives to training')
 
         self.cacher.cache_segmentations()
         self.cacher.cache_features()
+
+        # Recache all concepts' zero-shot features in case new concepts were added since last training
+        for concept in self.concepts:
+            self.cacher.recache_zs_attr_features(concept)
 
         all_feature_paths = list(chain.from_iterable([
             [ex.image_features_path for ex in c.examples]
@@ -233,6 +236,8 @@ class Controller:
         (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_paths(all_feature_paths)
         train_ds = FeatureDataset(trn_p, trn_l)
         val_ds = FeatureDataset(val_p, val_l)
+
+        extend_with_global_negatives(train_ds, self.concepts.global_negatives)
 
         self.trainer.train(
             train_ds=train_ds,
