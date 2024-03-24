@@ -24,13 +24,13 @@ def set_feature_paths(
     if segmentations_dir is None and features_dir is None:
         raise ValueError('At least one of features_dir or segmentations_dir must be provided')
 
-    if isinstance(concepts_or_examples[0], ConceptExample):
-        examples = concepts_or_examples
-
-    else:
+    if isinstance(concepts_or_examples, ConceptKB) or isinstance(concepts_or_examples[0], Concept):
         examples = chain.from_iterable([
             concept.examples for concept in concepts_or_examples
         ])
+
+    else: # list[ConceptExample]
+        examples = concepts_or_examples
 
     def set_paths_if_exists(examples: list[ConceptExample], attr_name: str, base_dir):
         for example in examples:

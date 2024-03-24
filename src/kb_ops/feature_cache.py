@@ -88,6 +88,7 @@ class ConceptKBFeatureCacher:
         concepts: list[Concept] = None,
         only_uncached_or_dirty: bool = False,
         type: Literal['segmentations', 'features'] = None,
+        include_global_negatives: bool = True
     ):
         '''
             If not only_uncached_or_dirty, returns a list of all ConceptExamples in the specified concepts list
@@ -97,19 +98,32 @@ class ConceptKBFeatureCacher:
             cached segmentations or features. type specifies whether to check dirty and uncached status for
             segmentations or features.
         '''
+        if type not in ['segmentations', 'features']:
+            raise ValueError('type must be one of {"segmentations", "features"}')
+
         dirty_attr_name = 'are_features_dirty' if type == 'features' else 'are_segmentations_dirty'
         path_attr_name = 'image_features_path' if type == 'features' else 'image_segmentations_path'
 
         concepts = concepts if concepts else list(self.concept_kb)
 
+        def include_example_filter(example):
+            return (
+                not only_uncached_or_dirty
+                or getattr(example, path_attr_name) is None
+                or getattr(example, dirty_attr_name)
+            )
+
+        # Each concept's examples
         examples = []
         for concept in concepts:
             for example in concept.examples:
-                if (
-                    not only_uncached_or_dirty
-                    or getattr(example, path_attr_name) is None
-                    or getattr(example, dirty_attr_name)
-                ):
+                if include_example_filter(example):
+                    examples.append(example)
+
+        # Global negative examples
+        if include_global_negatives:
+            for example in self.concept_kb.global_negatives:
+                if include_example_filter(example):
                     examples.append(example)
 
         return examples
@@ -129,7 +143,7 @@ class ConceptKBFeatureCacher:
 
         example.image_segmentations_path = cache_path
 
-    def cache_segmentations(self, concepts: list[Concept] = None, only_uncached_or_dirty=True, **loc_and_seg_kwargs):
+    def cache_segmentations(self, concepts: list[Concept] = None, only_uncached_or_dirty=True, include_global_negatives: bool = True, **loc_and_seg_kwargs):
         '''
             Caches LocalizeAndSegmentOutput pickles to disk for all ConceptExamples in the specified
             concepts list.
@@ -141,7 +155,7 @@ class ConceptKBFeatureCacher:
         os.makedirs(cache_dir, exist_ok=True)
         logger.info(f'Caching segmentations at {cache_dir}')
 
-        examples = self._get_examples(concepts, only_uncached_or_dirty=only_uncached_or_dirty, type='segmentations')
+        examples = self._get_examples(concepts, only_uncached_or_dirty=only_uncached_or_dirty, type='segmentations', include_global_negatives=include_global_negatives)
 
         if not len(examples):
             return
@@ -153,7 +167,7 @@ class ConceptKBFeatureCacher:
         file_name = os.path.splitext(os.path.basename(example.image_path))[0]
         return f'{self.cache_dir}/{self.features_sub_dir}/{file_name}.pkl'
 
-    def cache_features(self, concepts: list[Concept] = None, only_uncached_or_dirty=True):
+    def cache_features(self, concepts: list[Concept] = None, only_uncached_or_dirty=True, include_global_negatives: bool = True):
         '''
             Caches CachedImageFeatures pickles to disk for all ConceptExamples in the specified
             concepts list.
@@ -165,7 +179,7 @@ class ConceptKBFeatureCacher:
         os.makedirs(cache_dir, exist_ok=True)
         logger.info(f'Caching features at {cache_dir}')
 
-        examples = self._get_examples(concepts, only_uncached_or_dirty=only_uncached_or_dirty, type='features')
+        examples = self._get_examples(concepts, only_uncached_or_dirty=only_uncached_or_dirty, type='features', include_global_negatives=include_global_negatives)
 
         if not len(examples):
             return
@@ -207,7 +221,7 @@ class ConceptKBFeatureCacher:
 
             example.image_features_path = cache_path
 
-    def recache_zs_attr_features(self, concept: Concept, examples: list[ConceptExample] = None, only_not_present: bool = False):
+    def recache_zs_attr_features(self, concept: Concept = None, examples: list[ConceptExample] = None, only_not_present: bool = False):
         '''
             Recaches zero-shot attribute features for the specified Concept across all Concepts' examples in the
             ConceptKB.
@@ -218,6 +232,9 @@ class ConceptKBFeatureCacher:
             If only_not_present is True, only recaches features for examples which do not have the specified
             concept's zero-shot attribute features. So this will not overwrite existing zs attribute features.
         '''
+        if bool(concept) + bool(examples) != 1:
+            raise ValueError('Exactly one of concept or examples must be provided.')
+
         examples = examples if examples else self._get_examples([concept])
 
         for example in examples:

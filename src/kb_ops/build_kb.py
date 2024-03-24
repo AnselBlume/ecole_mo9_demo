@@ -58,3 +58,16 @@ def kb_from_img_dir(
         kb.get_concept(label).examples.append(ConceptExample(image_path=path))
 
     return kb
+
+def add_global_negatives(concept_kb: ConceptKB, img_dir: str, exts: list[str] = ['.jpg', '.png']):
+    '''
+        Adds global negatives to a concept knowledge base.
+
+        Arguments:
+            concept_kb (ConceptKB): Concept knowledge base.
+            img_dir (str): Directory containing images.
+    '''
+    for path in list_paths(img_dir, exts=exts):
+        concept_kb.global_negatives.append(
+            ConceptExample(image_path=path, is_negative=True)
+        )

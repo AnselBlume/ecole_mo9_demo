@@ -57,6 +57,11 @@ class ConceptExample:
         metadata={'description': 'String uniquely identifying the feature extractor used to extract the features'}
     )
 
+    is_negative: bool = field(
+        default=False,
+        metadata={'description': 'Whether this example is a negative example for its containing concept'}
+    )
+
 @dataclass
 class Concept:
     name: str = ''
@@ -107,9 +112,9 @@ class ConceptKBConfig:
             raise ValueError('Cannot use both layer norm and probabilities.')
 
 class ConceptKB:
-    def __init__(self, concepts: list[Concept] = [], neg_concept_examples: list[ConceptExample] = []):
+    def __init__(self, concepts: list[Concept] = [], global_negatives: list[ConceptExample] = []):
         self._concepts = {concept.name : concept for concept in concepts}
-        self._neg_concept_examples = neg_concept_examples
+        self.global_negatives = global_negatives
 
     @property
     def leaf_concepts(self) -> list[Concept]:
