@@ -221,7 +221,7 @@ class ConceptKBFeatureCacher:
 
             example.image_features_path = cache_path
 
-    def recache_zs_attr_features(self, concept: Concept = None, examples: list[ConceptExample] = None, only_not_present: bool = False):
+    def recache_zs_attr_features(self, concept: Concept, examples: list[ConceptExample] = None, only_not_present: bool = False):
         '''
             Recaches zero-shot attribute features for the specified Concept across all Concepts' examples in the
             ConceptKB.
@@ -232,9 +232,6 @@ class ConceptKBFeatureCacher:
             If only_not_present is True, only recaches features for examples which do not have the specified
             concept's zero-shot attribute features. So this will not overwrite existing zs attribute features.
         '''
-        if bool(concept) + bool(examples) != 1:
-            raise ValueError('Exactly one of concept or examples must be provided.')
-
         examples = examples if examples else self._get_examples([concept])
 
         for example in examples:
