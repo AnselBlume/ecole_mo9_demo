@@ -7,6 +7,113 @@ from kb_ops.build_kb import label_from_path
 import logging
 logger = logging.getLogger(__name__)
 
+def split_from_directory(
+    img_dir: str,
+    exts: list[str] = ['.jpg', '.png'],
+    label_from_path=label_from_path,
+    **split_kwargs
+):
+    '''
+        Splits images in a directory into train, validation, and test sets.
+
+        Arguments:
+            img_dir (str): Directory containing images.
+            split (tuple[float,float,float]): Proportions for train, validation, and test sets.
+            exts (list[str]): List of file extensions to consider.
+            stratified (bool): Whether to stratify the split by label.
+            label_from_path (Callable): Function to extract label from path.
+            seed (int): Random seed for reproducibility.
+
+        Returns: Tuple of 2-tuples, each containing a list of paths and a list of labels. 2-tuples are returned
+            in the order (train, validation, test).
+    '''
+    paths = [
+        os.path.join(img_dir, f)
+        for f in os.listdir(img_dir)
+        if os.path.splitext(f)[1] in exts
+    ]
+
+    return split_from_paths(
+        paths=paths,
+        label_from_path=label_from_path,
+        **split_kwargs
+    )
+
+def split_from_paths(
+    paths: list[str],
+    label_from_path=label_from_path,
+    **split_kwargs
+) -> tuple[tuple[list,list], tuple[list,list], tuple[list,list]]:
+    '''
+        Splits images in a directory into train, validation, and test sets.
+
+        Arguments:
+            img_dir (str): Directory containing images.
+            split (tuple[float,float,float]): Proportions for train, validation, and test sets.
+            stratified (bool): Whether to stratify the split by label.
+            label_from_path (Callable): Function to extract label from path.
+            seed (int): Random seed for reproducibility.
+
+        Returns: 3-Tuple of 2-tuples, each containing a list of paths and a list of labels. 2-tuples are returned
+            in the order (train, validation, test).
+    '''
+    paths = sorted(paths)
+    labels = [label_from_path(p) for p in paths]
+
+    return split(
+        data=paths,
+        labels=labels,
+        **split_kwargs
+    )
+
+def split(
+    data: list,
+    labels: list,
+    split: tuple[float,float,float] = (0.6,0.2,0.2),
+    stratified = True,
+    seed: int = 42
+):
+    assert len(data) == len(labels)
+
+    if stratified:
+        tr_ps, v_ps, te_ps = [], [], []
+        tr_ls, v_ls, te_ls = [], [], []
+
+        label_to_data = {}
+        for datum, label in zip(data, labels):
+            label_to_data.setdefault(label, []).append(datum)
+
+        for label, label_data in label_to_data.items():
+            tr, v, te = train_val_test_split(label_data, split, seed)
+            tr_ps.extend(tr)
+            v_ps.extend(v)
+            te_ps.extend(te)
+
+            tr_ls.extend([label] * len(tr))
+            v_ls.extend([label] * len(v))
+            te_ls.extend([label] * len(te))
+
+        # Shuffle each split
+        rng = np.random.default_rng(seed)
+
+        tr_perm = rng.permutation(len(tr_ps))
+        tr_ps = [tr_ps[i] for i in tr_perm]
+        tr_ls = [tr_ls[i] for i in tr_perm]
+
+        v_perm = rng.permutation(len(v_ps))
+        v_ps = [v_ps[i] for i in v_perm]
+        v_ls = [v_ls[i] for i in v_perm]
+
+        te_perm = rng.permutation(len(te_ps))
+        te_ps = [te_ps[i] for i in te_perm]
+        te_ls = [te_ls[i] for i in te_perm]
+
+    else:
+        tr_ps, v_ps, te_ps = train_val_test_split(data, split, seed)
+        tr_ls, v_ls, te_ls = train_val_test_split(labels, split, seed)
+
+    return (tr_ps, tr_ls), (v_ps, v_ls), (te_ps, te_ls)
+
 def train_val_test_split(
     iterable: Iterable,
     split: tuple[float,float,float] = (0.6,0.2,0.2),
@@ -42,103 +149,3 @@ def train_val_test_split(
     test = iterable[n_train+n_val:]
 
     return train, val, test
-
-def split_from_directory(
-    img_dir: str,
-    split: tuple[float,float,float] = (0.6,0.2,0.2),
-    exts: list[str] = ['.jpg', '.png'],
-    stratified = True,
-    label_from_path=label_from_path,
-    seed: int = 42
-):
-    '''
-        Splits images in a directory into train, validation, and test sets.
-
-        Arguments:
-            img_dir (str): Directory containing images.
-            split (tuple[float,float,float]): Proportions for train, validation, and test sets.
-            exts (list[str]): List of file extensions to consider.
-            stratified (bool): Whether to stratify the split by label.
-            label_from_path (Callable): Function to extract label from path.
-            seed (int): Random seed for reproducibility.
-
-        Returns: Tuple of 2-tuples, each containing a list of paths and a list of labels. 2-tuples are returned
-            in the order (train, validation, test).
-    '''
-    paths = [
-        os.path.join(img_dir, f)
-        for f in os.listdir(img_dir)
-        if os.path.splitext(f)[1] in exts
-    ]
-
-    return split_from_paths(
-        paths=paths,
-        split=split,
-        stratified=stratified,
-        label_from_path=label_from_path,
-        seed=seed
-    )
-
-def split_from_paths(
-    paths: list[str],
-    split: tuple[float,float,float] = (0.6,0.2,0.2),
-    stratified = True,
-    label_from_path=label_from_path,
-    seed: int = 42
-) -> tuple[tuple[list,list], tuple[list,list], tuple[list,list]]:
-    '''
-        Splits images in a directory into train, validation, and test sets.
-
-        Arguments:
-            img_dir (str): Directory containing images.
-            split (tuple[float,float,float]): Proportions for train, validation, and test sets.
-            stratified (bool): Whether to stratify the split by label.
-            label_from_path (Callable): Function to extract label from path.
-            seed (int): Random seed for reproducibility.
-
-        Returns: 3-Tuple of 2-tuples, each containing a list of paths and a list of labels. 2-tuples are returned
-            in the order (train, validation, test).
-    '''
-    paths = sorted(paths)
-    labels = [label_from_path(p) for p in paths]
-
-    if stratified:
-        tr_p, v_p, te_p = [], [], []
-        tr_l, v_l, te_l = [], [], []
-
-        label_to_paths = {}
-        for path in paths:
-            label = label_from_path(path)
-            label_to_paths.setdefault(label, []).append(path)
-
-        for label, label_paths in label_to_paths.items():
-            tr, v, te = train_val_test_split(label_paths, split, seed)
-            tr_p.extend(tr)
-            v_p.extend(v)
-            te_p.extend(te)
-
-            tr_l.extend([label] * len(tr))
-            v_l.extend([label] * len(v))
-            te_l.extend([label] * len(te))
-
-        # Shuffle each split
-        rng = np.random.default_rng(seed)
-
-        tr_perm = rng.permutation(len(tr_p))
-        tr_p = [tr_p[i] for i in tr_perm]
-        tr_l = [tr_l[i] for i in tr_perm]
-
-        v_perm = rng.permutation(len(v_p))
-        v_p = [v_p[i] for i in v_perm]
-        v_l = [v_l[i] for i in v_perm]
-
-        te_perm = rng.permutation(len(te_p))
-        te_p = [te_p[i] for i in te_perm]
-        te_l = [te_l[i] for i in te_perm]
-
-    else:
-        tr_p, v_p, te_p = train_val_test_split(paths, split, seed)
-        tr_l, v_l, te_l = train_val_test_split(labels, split, seed)
-
-    return (tr_p, tr_l), (v_p, v_l), (te_p, te_l)
-# %%
