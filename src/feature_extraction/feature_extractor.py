@@ -135,7 +135,7 @@ class FeatureExtractor(nn.Module):
         if None in [cached_features.clip_image_features, cached_features.clip_region_features]:
             clip_visual_features = self.clip_feature_extractor(images=[image] + regions)
         else:
-            clip_visual_features = torch.cat([cached_features.clip_image_features, cached_features.clip_region_features], dim=0)
+            clip_visual_features = torch.cat([cached_features.clip_image_features, cached_features.clip_region_features], dim=0).to(clip_device)
 
         # Zero-shot attributes from CLIP features
         if len(zs_attrs):
