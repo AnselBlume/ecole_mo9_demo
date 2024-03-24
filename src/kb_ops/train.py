@@ -83,6 +83,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
         self.sampler = ConceptKBExampleSampler(concept_kb)
         self.run = wandb_run
+        self.rng = np.random.default_rng(42)
 
     def _get_ckpt_path(self, ckpt_dir: str, ckpt_fmt: str, epoch: int):
         return os.path.join(ckpt_dir, ckpt_fmt.format(epoch=epoch))
@@ -184,7 +185,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
     def train_concept(
         self,
         concept: Concept,
-        stopping_condition: Literal['until_correct', 'n_epochs', 'validation'] = 'until_correct',
+        stopping_condition: Literal['until_correct', 'n_epochs', 'validation'] = 'n_epochs',
         until_correct_examples: list[ConceptExample] = [],
         min_prob_margin: float = .1,
         n_epochs_between_predictions: int = 5,
@@ -193,6 +194,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         sample_only_leaf_nodes: bool = True,
         post_sampling_hook: Callable[[list[ConceptExample]], Any] = None,
         n_epochs: int = 10,
+        n_global_negatives: int = 250,
         **train_kwargs
     ) -> dict[str, Any]:
         '''
@@ -207,7 +209,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                     until_correct_example_paths with a probability margin of at least min_prob_margin.
                     If 'n_epochs', training will stop after n_epochs.
 
-                until_correct_example_paths: List of paths to example images that the concept should correctly predict if
+                until_correct_examples: List of examples that the concept should correctly predict if
                     stopping_condition is 'until_correct'.
 
                 min_prob_margin: Margin of probability (computed via softmax) over other concepts that the true concept must have
@@ -250,22 +252,23 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             all_samples = concept.examples + neg_examples
             all_labels = [concept.name] * len(concept.examples) + neg_concept_names
 
-            if post_sampling_hook:
-                post_sampling_hook(all_samples)
-
             # Assume features are already cached and get paths
             all_feature_paths = [sample.image_features_path for sample in all_samples]
             if any(feature_path is None for feature_path in all_feature_paths):
                 raise RuntimeError('All examples must have image_features_path set to train individual Concept')
 
-            until_correct_example_paths = [ex.image_features_path for ex in until_correct_examples]
-
-            # Create dataset
+            # Construct train ds and add global negatives
             train_ds = FeatureDataset(all_feature_paths, all_labels)
-            positive_inds = [i for i, label in enumerate(all_labels) if label == concept.name]
-            val_ds = FeatureDataset(until_correct_example_paths, [concept.name] * len(until_correct_example_paths))
 
-            val_dl = self._get_dataloader(val_ds, is_train=False)
+            global_negatives = self.concept_kb.global_negatives
+            global_negatives = self.rng.choice(global_negatives, min(n_global_negatives, len(global_negatives)), replace=False).tolist()
+
+            if post_sampling_hook:
+                post_sampling_hook(all_samples + global_negatives)
+
+            neg_feature_paths = [ex.image_features_path for ex in global_negatives]
+            neg_labels = [train_ds.NEGATIVE_LABEL for _ in range(len(neg_feature_paths))]
+            train_ds.extend(neg_feature_paths, neg_labels)
 
             # Train for fixed number of epochs
             train_kwargs = train_kwargs.copy()
@@ -279,6 +282,15 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 results = self.train(train_ds, None, n_epochs=n_epochs, **train_kwargs)
 
             else: # stopping_condition == 'until_correct'
+                raise ValueError('until_correct is disabled as images may not be linearly separable, resulting in an infinite loop')
+
+                # Create dataset
+                positive_inds = [i for i, label in enumerate(all_labels) if label == concept.name]
+                until_correct_example_paths = [ex.image_features_path for ex in until_correct_examples]
+                val_ds = FeatureDataset(until_correct_example_paths, [concept.name] * len(until_correct_example_paths))
+
+                val_dl = self._get_dataloader(val_ds, is_train=False)
+
                 predictor = ConceptKBPredictor(self.concept_kb, self.feature_pipeline)
                 curr_epoch = 0
                 target_concept_index = predictor.leaf_name_to_leaf_ind[concept.name]

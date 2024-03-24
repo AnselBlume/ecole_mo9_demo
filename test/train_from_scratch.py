@@ -11,7 +11,7 @@ sys.path.append(os.path.realpath(os.path.join(__file__, '../../src')))
 from model.concept import ConceptKB, ConceptExample, ConceptKBConfig
 from feature_extraction import build_feature_extractor, build_sam, build_desco, build_clip, build_dino
 from image_processing import build_localizer_and_segmenter
-from kb_ops import ConceptKBFeaturePipeline, ConceptKBFeatureCacher
+from kb_ops import ConceptKBFeaturePipeline, ConceptKBFeatureCacher, add_global_negatives
 from feature_extraction.trained_attrs import N_ATTRS_DINO
 from controller import Controller
 from kb_ops import CLIPConceptRetriever
@@ -54,6 +54,13 @@ if __name__ == '__main__':
         n_trained_attrs=N_ATTRS_DINO,
     ))
 
+    # Add global negatives
+    negatives_img_dir = '/shared/nas2/blume5/fa23/ecole/data/imagenet/negatives_rand_1k'
+    negatives_seg_dir = '/shared/nas2/blume5/fa23/ecole/cache/imagenet_rand_1k/segmentations'
+
+    add_global_negatives(concept_kb, negatives_img_dir)
+    set_feature_paths(concept_kb.global_negatives, segmentations_dir=negatives_seg_dir)
+
     # %% Build controller
     controller = Controller(loc_and_seg, concept_kb, feature_extractor, retriever=retriever, cacher=cacher)
 
@@ -65,7 +72,7 @@ if __name__ == '__main__':
     concept_name = 'hoe'
     cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/hoes'
 
-    prepare_concept(img_dir, concept_name, cache_dir, controller)
+    prepare_concept(img_dir, concept_name, cache_dir, controller, set_segmentation_paths=False)
 
     # %% Train first concept
     controller.train_concept(concept_name)
@@ -78,7 +85,7 @@ if __name__ == '__main__':
     concept_name = 'shovel'
     cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/shovels'
 
-    img_paths = prepare_concept(img_dir, concept_name, cache_dir, controller)
+    img_paths = prepare_concept(img_dir, concept_name, cache_dir, controller, set_segmentation_paths=False)
 
     # %% Train second concept
     controller.train_concept(concept_name)

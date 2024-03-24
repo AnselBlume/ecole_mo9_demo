@@ -220,6 +220,8 @@ class Controller:
         '''
             Trains all concepts in the concept knowledge base from each concept's example_imgs.
         '''
+        raise NotImplementedError('Need to add global negatives to training')
+
         self.cacher.cache_segmentations()
         self.cacher.cache_features()
 
@@ -244,9 +246,9 @@ class Controller:
     def train_concept(
         self,
         concept_name: str,
-        stopping_condition: Literal['n_epochs', 'until_correct'] = 'until_correct',
-        until_correct_examples: list[ConceptExample] = [],
-        n_epochs: int = 10,
+        stopping_condition: Literal['n_epochs', 'until_correct'] = 'n_epochs',
+        new_examples: list[ConceptExample] = [],
+        n_epochs: int = 5,
         sample_all_negatives: bool = False,
         min_prob_margin = .2
     ):
@@ -263,17 +265,16 @@ class Controller:
             concept = self.add_concept(concept_name)
 
         if stopping_condition == 'until_correct':
-            if not until_correct_examples:
+            if not new_examples:
                 logger.info('No examples provided; considering all concept examples as stopping condition via correctness')
-                until_correct_examples = concept.examples
+                new_examples = concept.examples
 
-            # If until_correct_examples are not already in the Concept, add them to the examples list
-            else:
-                # Identify concept examples by their image_paths
-                image_paths = {ex.image_path for ex in concept.examples}
-                for example in until_correct_examples:
-                    if example.image_path not in image_paths:
-                        concept.examples.append(example)
+        # If new_examples are not already in the Concept, add them to the examples list
+        # Identify concept examples by their image_paths
+        image_paths = {ex.image_path for ex in concept.examples}
+        for example in new_examples:
+            if example.image_path not in image_paths:
+                concept.examples.append(example)
 
         # Ensure features are prepared, only generating those which don't already exist or are dirty
         self.cacher.cache_segmentations([concept], only_uncached_or_dirty=True)
@@ -292,7 +293,6 @@ class Controller:
                 stopping_condition='n_epochs',
                 n_epochs=n_epochs,
                 post_sampling_hook=cache_hook,
-                min_prob_margin=min_prob_margin,
                 lr=1e-2
             )
 
@@ -300,7 +300,8 @@ class Controller:
             self.trainer.train_concept(
                 concept,
                 stopping_condition='until_correct',
-                until_correct_examples=until_correct_examples,
+                min_prob_margin=min_prob_margin,
+                new_examples=new_examples,
                 sample_all_negatives=sample_all_negatives,
                 post_sampling_hook=cache_hook,
                 n_epochs_between_predictions=1,
@@ -315,7 +316,7 @@ class Controller:
         concept.zs_attributes = zs_attrs
 
         self.cacher.recache_zs_attr_features(concept) # Recompute zero-shot attribute scores
-        self.train_concept(concept.name, until_correct_examples=concept.examples)
+        self.train_concept(concept.name, new_examples=concept.examples)
 
     def retrieve_concept(self, concept_name: str, max_retrieval_distance: float = .5):
         concept_name = concept_name.strip()

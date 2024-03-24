@@ -20,18 +20,18 @@ coloredlogs.install(level='DEBUG')
 # %%
 if __name__ == '__main__':
     #  Prepare concept for training
-    img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/pizza_cutters'
+    img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/single_concepts/pizza_cutters'
     concept_name = 'pizza cutter'
     cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/pizza_cutters'
 
-    # img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/dogs'
+    # img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/single_concepts/dogs'
     # concept_name = 'dog'
     # cache_dir = '/shared/nas2/blume5/fa23/ecole/cache/dogs'
 
     img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
 
     # %% Load ConceptKB
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_06-07:22:08-h5hwa94c-features_hierarchical_v1/concept_kb_epoch_15.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_23-19:34:45-1qycp7yt-v3-dino_pool_negatives/concept_kb_epoch_20.pt'
     concept_kb = ConceptKB.load(ckpt_path)
 
     # %% Build controller components
@@ -57,7 +57,7 @@ if __name__ == '__main__':
     set_feature_paths([concept], segmentations_dir=cacher.segmentations_dir)
 
     # %% Train concept in isolation
-    controller.train_concept(concept_name, until_correct_examples=concept.examples)
+    controller.train_concept(concept_name, new_examples=concept.examples)
     logger.info('Finished training new concept')
 
     # %% Predict examples for verification
