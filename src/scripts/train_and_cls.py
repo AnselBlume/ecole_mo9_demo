@@ -10,7 +10,7 @@ from llm import LLMClient
 from kb_ops import kb_from_img_dir, add_global_negatives
 from model.concept import ConceptKBConfig
 from kb_ops.train_test_split import split_from_directory, split_from_paths
-from kb_ops.dataset import FeatureDataset
+from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
 from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline
 import logging, coloredlogs
 from feature_extraction.trained_attrs import N_ATTRS_DINO
@@ -142,10 +142,8 @@ if __name__ == '__main__':
     train_ds = FeatureDataset(trn_p, trn_l)
     val_ds = FeatureDataset(val_p, val_l)
 
-    # Consider splitting the negatives into train and val sets?
-    neg_feature_paths = [ex.image_features_path for ex in concept_kb.global_negatives]
-    neg_labels = [train_ds.NEGATIVE_LABEL for _ in range(len(neg_feature_paths))]
-    train_ds.extend(neg_feature_paths, neg_labels)
+    # Consider splitting global negatives into train and val sets?
+    extend_with_global_negatives(train_ds, concept_kb.global_negatives)
 
     concept_kb.to('cuda')
 

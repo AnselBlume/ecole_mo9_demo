@@ -6,6 +6,7 @@ from image_processing.localize_and_segment import LocalizeAndSegmentOutput
 from kb_ops.feature_cache import CachedImageFeatures
 from PIL import Image
 from tqdm import tqdm
+from model.concept import ConceptExample
 
 def list_collate(batch):
     keys = batch[0].keys()
@@ -103,6 +104,15 @@ class FeatureDataset(BaseDataset):
             'label': label,
             'concepts_to_train': concepts_to_train
         }
+
+def extend_with_global_negatives(ds: FeatureDataset, global_negatives: list[ConceptExample]):
+    '''
+        Extends a dataset with global negatives.
+    '''
+    paths = [example.image_features_path for example in global_negatives]
+    labels = [NEGATIVE_LABEL for _ in global_negatives]
+
+    ds.extend(paths, labels)
 
 def preprocess_segmentations(img_dir: str, out_dir: str, loc_and_seg: LocalizerAndSegmenter):
     '''
