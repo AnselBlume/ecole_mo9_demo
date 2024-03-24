@@ -10,10 +10,10 @@ DEFAULT_MODEL= 'gpt-4-0125-preview'
 
 class LLMClient:
     def __init__(
-            self,
-            model: str = DEFAULT_MODEL,
-            api_key: str = None
-        ):
+        self,
+        model: str = DEFAULT_MODEL,
+        api_key: str = None
+    ):
         self.model = model
         self.client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY', api_key))
 
