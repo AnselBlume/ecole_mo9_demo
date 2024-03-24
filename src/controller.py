@@ -216,7 +216,10 @@ class Controller:
     ########################
     # Concept Modification #
     ########################
-    def train(self):
+    def train(
+        self,
+        split: tuple[float, float, float] = (.6, .2, .2)
+    ):
         '''
             Trains all concepts in the concept knowledge base from each concept's example_imgs.
         '''
@@ -233,7 +236,7 @@ class Controller:
             for c in self.concepts
         ]))
 
-        (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_paths(all_feature_paths)
+        (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_paths(all_feature_paths, split=split)
         train_ds = FeatureDataset(trn_p, trn_l)
         val_ds = FeatureDataset(val_p, val_l)
 
