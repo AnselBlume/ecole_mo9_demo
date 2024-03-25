@@ -3,7 +3,7 @@ from PIL.Image import Image
 import logging
 from image_processing.segment import Segmenter
 from image_processing.localize import Localizer, bbox_from_mask
-from feature_extraction import Sam, GLIPDemo
+from feature_extraction import Sam
 from utils import ArticleDeterminer
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from torchvision.utils import draw_bounding_boxes
@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-def build_localizer_and_segmenter(sam: Sam, desco: GLIPDemo):
+def build_localizer_and_segmenter(sam: Sam, desco):
     return LocalizerAndSegmenter(Localizer(sam, desco), Segmenter(sam))
 
 @dataclass

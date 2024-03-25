@@ -115,6 +115,7 @@ class ConceptKB:
     def __init__(self, concepts: list[Concept] = [], global_negatives: list[ConceptExample] = []):
         self._concepts = {concept.name : concept for concept in concepts}
         self.global_negatives = global_negatives
+        self.device = None
 
     @property
     def leaf_concepts(self) -> list[Concept]:
@@ -181,6 +182,7 @@ class ConceptKB:
         for concept in self.concepts:
             concept.predictor.to(device)
 
+        self.device = device
     def save(self, path):
         '''
             Saves the ConceptKB to a pickle file.
