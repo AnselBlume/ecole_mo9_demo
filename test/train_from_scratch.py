@@ -21,8 +21,7 @@ from PIL import Image
 import logging, coloredlogs
 logger = logging.getLogger(__file__)
 
-if __name__ == '__main__':
-    coloredlogs.install(level='DEBUG')
+coloredlogs.install(level='DEBUG')
 
 def prepare_concept(img_dir: str, concept_name: str, cache_dir: str, controller: Controller, set_segmentation_paths: bool = True):
     img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
