@@ -1,5 +1,5 @@
 '''
-    Script to train a ConceptKB with a couple of concepts from scratch, one concept after the other.
+    Script to test concept-specific negatives only training their respective concepts.
 '''
 # %%
 import os
@@ -21,8 +21,7 @@ from PIL import Image
 import logging, coloredlogs
 logger = logging.getLogger(__file__)
 
-if __name__ == '__main__':
-    coloredlogs.install(level='DEBUG')
+coloredlogs.install(level='DEBUG')
 
 def prepare_concept(img_dir: str, concept_name: str, cache_dir: str, controller: Controller, set_segmentation_paths: bool = True):
     img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
@@ -59,7 +58,7 @@ if __name__ == '__main__':
     negatives_img_dir = '/shared/nas2/blume5/fa23/ecole/data/imagenet/negatives_rand_1k'
     negatives_seg_dir = '/shared/nas2/blume5/fa23/ecole/cache/imagenet_rand_1k/segmentations'
 
-    add_global_negatives(concept_kb, negatives_img_dir)
+    add_global_negatives(concept_kb, negatives_img_dir, limit=10)
     set_feature_paths(concept_kb.global_negatives, segmentations_dir=negatives_seg_dir)
 
     # %% Build controller
@@ -75,9 +74,6 @@ if __name__ == '__main__':
 
     prepare_concept(img_dir, concept_name, cache_dir, controller, set_segmentation_paths=False)
 
-    # %% Train first concept
-    controller.train_concept(concept_name)
-
     # %% Add second concept
     # img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/single_concepts/dogs'
     # concept_name = 'dog'
@@ -88,14 +84,12 @@ if __name__ == '__main__':
 
     img_paths = prepare_concept(img_dir, concept_name, cache_dir, controller, set_segmentation_paths=False)
 
+    # Add a concept-specific negative
+    concept_specific_negative_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
+    concept_kb[concept_name].examples.append(ConceptExample(image_path=concept_specific_negative_path, is_negative=True))
+
     # %% Train second concept
     controller.train_concept(concept_name)
-
-    # %% Predict examples for verification
-    for img_path in img_paths:
-        img = Image.open(img_path).convert('RGB')
-        output = controller.predict_concept(img) # Displays image in Jupyter
-        logger.info('Predicted label: ' + output['predicted_label'])
 
     # %% Test the controller's train function to train everything
     controller.train()
