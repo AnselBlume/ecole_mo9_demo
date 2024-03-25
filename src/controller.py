@@ -260,7 +260,8 @@ class Controller:
         new_examples: list[ConceptExample] = [],
         n_epochs: int = 5,
         sample_all_negatives: bool = False,
-        min_prob_margin = .2
+        min_prob_margin = .2,
+        max_retrieval_distance=.01
     ):
         '''
             Retrains the concept until it correctly predicts the given example images if until_correct_examples
@@ -268,7 +269,7 @@ class Controller:
         '''
         # Try to retrieve concept
         try:
-            concept = self.retrieve_concept(concept_name, max_retrieval_distance=.01) # Low retrieval distance to force exact match
+            concept = self.retrieve_concept(concept_name, max_retrieval_distance=max_retrieval_distance) # Low retrieval distance to force exact match
             logger.info(f'Retrieved concept with name: "{concept.name}"')
         except:
             logger.info(f'No concept found for "{concept_name}". Creating new concept.')
