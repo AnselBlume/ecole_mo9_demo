@@ -262,7 +262,7 @@ def get_rescaled_features(
         patch_size: The patch size of the Dino model used in the DinoFeatureExtractor.
             Accessible by feature_extractor.model.patch_size.
         crop_height: The height of the cropped image, if cropping is used in the DinoFeatureExtractor.
-        crop_weidth: The width of the cropped image, if cropping is used in the DinoFeatureExtractor.
+        crop_width: The width of the cropped image, if cropping is used in the DinoFeatureExtractor.
         interpolate_on_cpu: If True, interpolates on CPU to avoid CUDA OOM errors.
         fall_back_to_cpu: If True, falls back to CPU if CUDA OOM error is caught.
         return_on_cpu: If True, returns the features on CPU, helping to prevent out of memory errors when storing patch features
