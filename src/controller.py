@@ -268,7 +268,7 @@ class Controller:
         '''
         # Try to retrieve concept
         try:
-            concept = self.retrieve_concept(concept_name, max_retrieval_distance=.3)
+            concept = self.retrieve_concept(concept_name, max_retrieval_distance=.01) # Low retrieval distance to force exact match
             logger.info(f'Retrieved concept with name: "{concept.name}"')
         except:
             logger.info(f'No concept found for "{concept_name}". Creating new concept.')
