@@ -1,5 +1,6 @@
 # %%
 import torch
+import json
 from score import AttributeScorer
 from model.concept import ConceptKB, Concept, ConceptExample
 from PIL.Image import Image
@@ -18,8 +19,8 @@ from feature_extraction import CLIPAttributePredictor
 from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 from kb_ops.feature_cache import ConceptKBFeatureCacher
 from utils import to_device
+from kb_ops.build_kb import CONCEPT_TO_ATTRS_PATH
 from vis_utils import plot_predicted_classes, plot_image_differences, plot_concept_differences, plot_zs_attr_differences
-from itertools import chain
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,8 @@ class Controller:
         feature_extractor: FeatureExtractor,
         retriever: CLIPConceptRetriever = None,
         cacher: ConceptKBFeatureCacher = None,
-        zs_predictor: CLIPAttributePredictor = None
+        zs_predictor: CLIPAttributePredictor = None,
+        concept_to_zs_attrs_json_path: str = CONCEPT_TO_ATTRS_PATH
     ):
         self.concepts = concept_kb
         self.feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
@@ -42,6 +44,14 @@ class Controller:
         self.retriever = retriever
         self.llm_client = LLMClient()
         self.attr_scorer = AttributeScorer(zs_predictor)
+
+        # Load external knowledgebase of concepts to zero-shot attributes
+        if concept_to_zs_attrs_json_path:
+            with open(concept_to_zs_attrs_json_path) as f:
+                self.concept_to_zs_attrs = json.load(f)
+
+        else:
+            self.concept_to_zs_attrs = {}
 
         self.cached_predictions = []
         self.cached_images = []
@@ -174,7 +184,8 @@ class Controller:
         self.concepts.init_zs_attrs(
             concept,
             self.llm_client,
-            encode_class=self.concepts.cfg.encode_class_in_zs_attr
+            encode_class=self.concepts.cfg.encode_class_in_zs_attr,
+            zs_attr_dict=self.concept_to_zs_attrs.get(concept.name, None)
         )
 
         self.concepts.init_predictor(concept)
