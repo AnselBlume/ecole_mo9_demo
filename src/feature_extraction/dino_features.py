@@ -328,7 +328,7 @@ def get_rescaled_features(
                 height, width = _compute_resized_output_size(img.size[::-1], [resize_size], max_size=resize_max_size)
 
                 # Interpolate to padded resized size
-                padded_resize_size = math.ceil(DEFAULT_RESIZE_SIZE / patch_size) * patch_size
+                padded_resize_size = math.ceil(resize_size / patch_size) * patch_size
                 rescale_func = partial(rescale_features, do_resize=True, resize_size=padded_resize_size)
 
             else: # Interpolate to full, padded image size
