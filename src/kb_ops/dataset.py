@@ -9,6 +9,9 @@ from tqdm import tqdm
 from model.concept import ConceptKB, ConceptExample
 from typing import Optional
 from .train_test_split import split_from_paths
+import logging
+
+logger = logging.getLogger(__file__)
 
 def list_collate(batch):
     keys = batch[0].keys()
@@ -20,14 +23,26 @@ NEGATIVE_LABEL = '[NEGATIVE_LABEL]'
 class BaseDataset(Dataset):
     NEGATIVE_LABEL = NEGATIVE_LABEL
 
-    def __init__(self, data: list, labels: list[str], concepts_to_train: list[list[Optional[str]]] = None):
+    def __init__(
+        self,
+        data: list,
+        labels: list[str],
+        concepts_to_train: list[list[Optional[str]]] = None,
+        train_all_concepts_if_unspecified: bool = False
+    ):
         '''
             concepts_to_train: List of length n_examples of lists of concept names to train for each example.
                 None for an example indicates all concepts should be trained for that example.
-                Passing in None as the list of lists will result in all concepts being trained for all examples.
+
+                Passing in None as the list of lists (the concepts_to_train object) will result in all concepts being trained for all examples
+                if train_all_concepts_if_unspecified is True.
+                Otherwise, if concepts_to_train is None and train_all_concepts_if_unspecified is False, only the positive concept will be trained for each example.
+
+            train_all_concepts_if_unspecified: If True, all concepts will be trained for all examples if concepts_to_train is None.
         '''
         if not concepts_to_train:
-            concepts_to_train = [None for _ in range(len(data))]
+            logger.info('concepts_to_train not provided for dataset; constructing')
+            concepts_to_train = self._get_concepts_to_train(data, labels, train_all_concepts_if_unspecified)
 
         assert len(data) == len(labels) == len(concepts_to_train)
 
@@ -35,9 +50,10 @@ class BaseDataset(Dataset):
         self.labels = labels
         self.concepts_to_train = concepts_to_train
 
-    def extend(self, data: list, labels: list[str], concepts_to_train: list[list[str]] = None):
+    def extend(self, data: list, labels: list[str], concepts_to_train: list[list[str]] = None, train_all_concepts_if_unspecified: bool = False):
         if not concepts_to_train:
-            concepts_to_train = [None for _ in range(len(data))]
+            logger.info('concepts_to_train not provided for dataset; constructing')
+            concepts_to_train = self._get_concepts_to_train(data, labels, train_all_concepts_if_unspecified=train_all_concepts_if_unspecified)
 
         assert len(data) == len(labels) == len(concepts_to_train)
 
@@ -48,9 +64,30 @@ class BaseDataset(Dataset):
     def __len__(self):
         return len(self.data)
 
+    @staticmethod
+    def _get_concepts_to_train(data: list, labels: list[str], train_all_concepts_if_unspecified: bool):
+        if train_all_concepts_if_unspecified:
+            logger.info('train_all_concepts_if_unspecified is True; constructing dataset which trains all concepts for all examples.')
+            concepts_to_train = [None for _ in range(len(data))]
+
+        else:
+            logger.info('train_all_concepts_if_unspecified is False; constructing dataset which trains only positive concept for each example.')
+            if any(label == NEGATIVE_LABEL for label in labels):
+                raise RuntimeError('Negative labels found in dataset; cannot construct concepts_to_train automatically.')
+
+            concepts_to_train = [[label] for label in labels]
+
+        return concepts_to_train
+
 class ImageDataset(BaseDataset):
-    def __init__(self, img_paths: list[str], labels: list[str], concepts_to_train: list[list[str]] = None):
-        super().__init__(img_paths, labels, concepts_to_train)
+    def __init__(
+        self,
+        img_paths: list[str],
+        labels: list[str],
+        concepts_to_train: list[list[str]] = None,
+        train_all_concepts_if_unspecified: bool = False
+    ):
+        super().__init__(img_paths, labels, concepts_to_train, train_all_concepts_if_unspecified)
         self.img_paths = self.data
 
     def __getitem__(self, idx):
@@ -74,8 +111,14 @@ class PresegmentedDataset(BaseDataset):
         Dataset for preprocessed images. segmentation_paths should be the paths to the image segmentations
         corresponding to the labels.
     '''
-    def __init__(self, segmentation_paths: list[str], labels: list[str], concepts_to_train: list[list[str]] = None):
-        super().__init__(segmentation_paths, labels, concepts_to_train)
+    def __init__(
+        self,
+        segmentation_paths: list[str],
+        labels: list[str],
+        concepts_to_train: list[list[str]] = None,
+        train_all_concepts_if_unspecified: bool = False
+    ):
+        super().__init__(segmentation_paths, labels, concepts_to_train, train_all_concepts_if_unspecified)
         self.segmentation_paths = self.data
 
     def __getitem__(self, idx):
@@ -94,8 +137,14 @@ class PresegmentedDataset(BaseDataset):
         }
 
 class FeatureDataset(BaseDataset):
-    def __init__(self, feature_paths: list[str], labels: list[str], concepts_to_train: list[list[str]] = None):
-        super().__init__(feature_paths, labels, concepts_to_train)
+    def __init__(
+        self,
+        feature_paths: list[str],
+        labels: list[str],
+        concepts_to_train: list[list[str]] = None,
+        train_all_concepts_if_unspecified: bool = False
+    ):
+        super().__init__(feature_paths, labels, concepts_to_train, train_all_concepts_if_unspecified)
         self.feature_paths = self.data
 
     def __getitem__(self, idx):
@@ -112,7 +161,14 @@ class FeatureDataset(BaseDataset):
             'concepts_to_train': concepts_to_train
         }
 
-def split_from_concept_kb(concept_kb: ConceptKB, split: tuple[float,float,float] = (.6, .2, .2)):
+def split_from_concept_kb(
+    concept_kb: ConceptKB,
+    split: tuple[float,float,float] = (.6, .2, .2),
+    use_concepts_as_negatives: bool = False
+):
+    '''
+        use_concepts_as_negatives: If true, uses each example as a negative for all concepts.
+    '''
     # Gather all positive and concept-specific (local) negative feature paths
     pos_feature_paths = []
     neg_feature_paths = [] # Concept-specific
@@ -138,7 +194,7 @@ def split_from_concept_kb(concept_kb: ConceptKB, split: tuple[float,float,float]
     # Split the positive examples
     (trn_ps, trn_ls), (val_ps, val_ls), (tst_ps, tst_ls) = split_from_paths(pos_feature_paths, split=split)
 
-    train_ds = FeatureDataset(trn_ps, trn_ls)
+    train_ds = FeatureDataset(trn_ps, trn_ls, train_all_concepts_if_unspecified=use_concepts_as_negatives)
     val_ds = FeatureDataset(val_ps, val_ls)
     test_ds = FeatureDataset(tst_ps, tst_ls)
 
@@ -146,7 +202,7 @@ def split_from_concept_kb(concept_kb: ConceptKB, split: tuple[float,float,float]
     neg_labels = [NEGATIVE_LABEL for _ in neg_feature_paths]
     train_ds.extend(neg_feature_paths, neg_labels, negs_to_train)
 
-    # Add global engatives to train_ds
+    # Add global negatives to train_ds
     extend_with_global_negatives(train_ds, concept_kb.global_negatives)
 
     return train_ds, val_ds, test_ds
@@ -158,7 +214,7 @@ def extend_with_global_negatives(ds: FeatureDataset, global_negatives: list[Conc
     paths = [example.image_features_path for example in global_negatives]
     labels = [NEGATIVE_LABEL for _ in global_negatives]
 
-    ds.extend(paths, labels)
+    ds.extend(paths, labels, train_all_concepts_if_unspecified=True)
 
 def preprocess_segmentations(img_dir: str, out_dir: str, loc_and_seg: LocalizerAndSegmenter):
     '''

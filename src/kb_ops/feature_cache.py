@@ -98,8 +98,8 @@ class ConceptKBFeatureCacher:
             cached segmentations or features. type specifies whether to check dirty and uncached status for
             segmentations or features.
         '''
-        if type not in ['segmentations', 'features']:
-            raise ValueError('type must be one of {"segmentations", "features"}')
+        if only_uncached_or_dirty and type not in ['segmentations', 'features']:
+            raise ValueError(f'only_uncached_or_dirty is True; type {type} must be one of {{"segmentations", "features"}}')
 
         dirty_attr_name = 'are_features_dirty' if type == 'features' else 'are_segmentations_dirty'
         path_attr_name = 'image_features_path' if type == 'features' else 'image_segmentations_path'

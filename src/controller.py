@@ -229,7 +229,8 @@ class Controller:
     ########################
     def train(
         self,
-        split: tuple[float, float, float] = (.6, .2, .2)
+        split: tuple[float, float, float] = (.6, .2, .2),
+        use_concepts_as_negatives: bool = False
     ):
         '''
             Trains all concepts in the concept knowledge base from each concept's example_imgs.
@@ -242,7 +243,7 @@ class Controller:
         for concept in self.concepts:
             self.cacher.recache_zs_attr_features(concept)
 
-        train_ds, val_ds, test_ds = split_from_concept_kb(self, split=split)
+        train_ds, val_ds, test_ds = split_from_concept_kb(self.concepts, split=split, use_concepts_as_negatives=use_concepts_as_negatives)
 
         self.trainer.train(
             train_ds=train_ds,
@@ -261,7 +262,8 @@ class Controller:
         n_epochs: int = 5,
         sample_all_negatives: bool = False,
         min_prob_margin = .2,
-        max_retrieval_distance=.01
+        max_retrieval_distance=.01,
+        use_concepts_as_negatives: bool = False
     ):
         '''
             Retrains the concept until it correctly predicts the given example images if until_correct_examples
@@ -304,7 +306,8 @@ class Controller:
                 stopping_condition='n_epochs',
                 n_epochs=n_epochs,
                 post_sampling_hook=cache_hook,
-                lr=1e-2
+                lr=1e-2,
+                use_concepts_as_negatives=use_concepts_as_negatives
             )
 
         elif stopping_condition == 'until_correct':
@@ -316,7 +319,8 @@ class Controller:
                 sample_all_negatives=sample_all_negatives,
                 post_sampling_hook=cache_hook,
                 n_epochs_between_predictions=1,
-                lr=1e-2 # high learning rate so hopefully doesn't take too long to reach margins
+                lr=1e-2,# high learning rate so hopefully doesn't take too long to reach margins
+                use_concepts_as_negatives=use_concepts_as_negatives
             )
 
         else:
@@ -340,7 +344,7 @@ class Controller:
 
         else:
             retrieved_concept = self.retriever.retrieve(concept_name, 1)[0]
-            logger.debug(f'Retrieved concept "{retrieved_concept.concept.name}" with distance: {retrieved_concept.distance}')
+            logger.info(f'Retrieved concept "{retrieved_concept.concept.name}" with distance: {retrieved_concept.distance}')
             if retrieved_concept.distance > max_retrieval_distance:
                 raise RuntimeError(f'No concept found for "{concept_name}".')
 
