@@ -29,7 +29,6 @@ def get_paths(root_dir: str):
 
     return paths
 
-
 # %%
 if __name__ == '__main__':
     root_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test'
