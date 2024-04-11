@@ -164,7 +164,8 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                     logger.warning(f'No concepts to train after intersection with global concepts for example {index}; skipping')
                     continue
                 else:
-                    logger.debug(f'Using concepts {[c.name for c in concepts_to_train]} for example {index}')
+                    # logger.debug(f'Using concepts {[c.name for c in concepts_to_train]} for example {index}')
+                    pass
 
                 # Forward pass
                 outputs = self.forward_pass(
@@ -409,7 +410,8 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 logger.warning(f'No concepts to train after intersection with global concepts for example {index}; skipping')
                 continue
             else:
-                logger.debug(f'Using concepts {concepts_to_train} for example {index}')
+                # logger.debug(f'Using concepts {concepts_to_train} for example {index}')
+                pass
 
             # Forward pass
             outputs = self.forward_pass(image[0], text_label[0], concepts=concepts_to_train, **forward_kwargs)
