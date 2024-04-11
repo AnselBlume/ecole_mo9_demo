@@ -17,22 +17,11 @@ from controller import Controller
 from kb_ops import CLIPConceptRetriever
 from scripts.utils import set_feature_paths
 from kb_ops.build_kb import list_paths
-from PIL import Image
+from train_from_scratch import prepare_concept
 import logging, coloredlogs
 logger = logging.getLogger(__file__)
 
 coloredlogs.install(level='DEBUG')
-
-def prepare_concept(img_dir: str, concept_name: str, cache_dir: str, controller: Controller, set_segmentation_paths: bool = True):
-    img_paths = list_paths(img_dir, exts=['.jpg', '.png'])
-
-    concept = controller.add_concept(concept_name)
-    concept.examples = [ConceptExample(image_path=img_path) for img_path in img_paths]
-
-    if set_segmentation_paths:
-        set_feature_paths([concept], segmentations_dir=cache_dir + '/segmentations')
-
-    return img_paths
 
 # %%
 if __name__ == '__main__':
