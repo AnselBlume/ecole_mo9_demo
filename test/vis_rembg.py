@@ -32,7 +32,7 @@ def get_paths(root_dir: str):
 # %%
 if __name__ == '__main__':
     root_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test'
-    out_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test_rembg_sam'
+    out_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test_rembg'
 
     model_name = 'isnet-general-use'
     close_plots = False
@@ -51,7 +51,7 @@ if __name__ == '__main__':
 
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         plot = plot_fig(image, rem_img)
-        plot.savefig(out_path)
+        plot.savefig(out_path, bbox_inches='tight')
 
         if close_plots:
             plt.close(plot)
