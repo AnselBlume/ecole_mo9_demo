@@ -1,4 +1,5 @@
 maskrcnn_benchmark
+feature_cache
 __pycache__
 assets
 checkpoints
