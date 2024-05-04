@@ -40,3 +40,12 @@ class LLMClient:
 
         return response.choices[0].message.content
 # %%
+if __name__ == '__main__':
+    from .attr_retrieval import retrieve_attributes
+    from pprint import pformat
+
+    client = LLMClient()
+
+    for concept_name in ['x1', 'x2', 'x3']:
+        results = retrieve_attributes(concept_name, client)
+        print(f'Results for {concept_name}: {pformat(results)}')
