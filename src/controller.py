@@ -6,7 +6,7 @@ from model.concept import ConceptKB, Concept, ConceptExample
 from PIL.Image import Image
 import logging, coloredlogs
 from feature_extraction import FeatureExtractor
-from image_processing import LocalizerAndSegmenter
+from image_processing import LocalizerAndSegmenter, LocalizeAndSegmentOutput
 from kb_ops import ConceptKBTrainer, ConceptKBPredictor
 from kb_ops.retrieve import CLIPConceptRetriever
 from kb_ops.train_test_split import split_from_paths
@@ -63,12 +63,13 @@ class Controller:
         self.cached_predictions = []
         self.cached_images = []
 
-    def predict_concept(self, image: Image, unk_threshold: float = .1) -> dict:
+    def predict_concept(self, image: Image = None, loc_and_seg_output: LocalizeAndSegmentOutput = None, unk_threshold: float = .1) -> dict:
         '''
         Predicts the concept of an image and returns the predicted label and a plot of the predicted classes.
 
         Returns: dict with keys 'predicted_label' and 'plot' of types str and PIL.Image, respectively.
         '''
+        # TODO Predict with loc_and_seg_output if provided; for use with modified segmentations/background removals
         self.cached_images.append(image)
 
         prediction = self.predictor.predict(
