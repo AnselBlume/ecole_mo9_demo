@@ -71,7 +71,7 @@ def get_heatmap_differences_figure(
     img_path: str,
     fe: DINOFeatureExtractor,
     figsize=(15,10),
-    intersection_min: int = 0,
+    intersection_min: float = .5,
     **heatmap_vis_kwargs
 ):
     img = Image.open(img_path).convert('RGB')
@@ -90,30 +90,30 @@ def get_heatmap_differences_figure(
     orig_img_ax.set_title('Original Image')
 
     # Concept 1 heatmap
-    concept1_heatmap_vis = get_heatmap_visualization(concept1_heatmap, img, img_mask, **heatmap_vis_kwargs)
+    concept1_heatmap_vis, concept1_heatmap = get_heatmap_visualization(concept1_heatmap, img, img_mask, **heatmap_vis_kwargs)
     concept1_heatmap_ax = fig.add_subplot(grid[0,1])
     concept1_heatmap_ax.imshow(concept1_heatmap_vis)
     concept1_heatmap_ax.axis('off')
     concept1_heatmap_ax.set_title(f'{concept1.name.capitalize()} Heatmap')
 
     # Concept 2 heatmap
-    concept2_heatmap_vis = get_heatmap_visualization(concept2_heatmap, img, img_mask, **heatmap_vis_kwargs)
+    concept2_heatmap_vis, concept2_heatmap = get_heatmap_visualization(concept2_heatmap, img, img_mask, **heatmap_vis_kwargs)
     concept2_heatmap_ax = fig.add_subplot(grid[1,1])
     concept2_heatmap_ax.imshow(concept2_heatmap_vis)
     concept2_heatmap_ax.axis('off')
     concept2_heatmap_ax.set_title(f'{concept2.name.capitalize()} Heatmap')
 
     # Concept1 - Concept2 heatmap
-    diff_heatmap = concept1_heatmap - concept2_heatmap
-    diff_heatmap_vis = get_heatmap_visualization(diff_heatmap, img, img_mask, **heatmap_vis_kwargs)
+    diff_heatmap = np.clip(concept1_heatmap - concept2_heatmap, a_min=0, a_max=1)
+    diff_heatmap_vis, _ = get_heatmap_visualization(diff_heatmap, img, img_mask, **heatmap_vis_kwargs, is_heatmap_processed=True)
     diff_heatmap_ax = fig.add_subplot(grid[0,2])
     diff_heatmap_ax.imshow(diff_heatmap_vis)
     diff_heatmap_ax.axis('off')
     diff_heatmap_ax.set_title(f'{concept1.name.capitalize()} - {concept2.name.capitalize()} Heatmap')
 
     # Concept2 - Concept1 heatmap
-    diff_heatmap = concept2_heatmap - concept1_heatmap
-    diff_heatmap_vis = get_heatmap_visualization(diff_heatmap, img, img_mask, **heatmap_vis_kwargs)
+    diff_heatmap = np.clip(concept2_heatmap - concept1_heatmap, a_min=0, a_max=1)
+    diff_heatmap_vis, _ = get_heatmap_visualization(diff_heatmap, img, img_mask, **heatmap_vis_kwargs, is_heatmap_processed=True)
     diff_heatmap_ax = fig.add_subplot(grid[1,2])
     diff_heatmap_ax.imshow(diff_heatmap_vis)
     diff_heatmap_ax.axis('off')
@@ -122,7 +122,7 @@ def get_heatmap_differences_figure(
     # Concept1 and Concept2 heatmap
     intersection_mask = (concept1_heatmap > intersection_min) & (concept2_heatmap > intersection_min)
     intersection_heatmap = intersection_mask.float() * (concept1_heatmap + concept2_heatmap) / 2 # Average of heatmaps
-    intersection_heatmap_vis = get_heatmap_visualization(intersection_heatmap, img, img_mask, **heatmap_vis_kwargs)
+    intersection_heatmap_vis, _ = get_heatmap_visualization(intersection_heatmap, img, img_mask, **heatmap_vis_kwargs, is_heatmap_processed=True)
     intersection_heatmap_ax = fig.add_subplot(grid[:,3])
     intersection_heatmap_ax.imshow(intersection_heatmap_vis)
     intersection_heatmap_ax.axis('off')
@@ -138,55 +138,66 @@ def get_heatmap_visualization(
     img: Image.Image,
     img_mask: np.ndarray,
     strategy: Literal['normalize', 'clamp', 'hsv'] = 'clamp',
-    opacity: float = .75
+    opacity: float = .75,
+    is_heatmap_processed: bool = False
 ):
 
     logger.debug(f'Heatmap (min, max): {heatmap.min().item():.2f}, {heatmap.max().item():.2f}')
+    logger.debug(f'is_heatmap_processed: {is_heatmap_processed}')
 
     # Mask image background
     img = np.array(img) * img_mask[..., None] # (h, w, 3)
 
     if strategy == 'normalize':
-        fg_vals = heatmap[img_mask] # Foreground values
-        min_val = fg_vals.min()
-        max_val = fg_vals.max()
+        if not is_heatmap_processed:
+            fg_vals = heatmap[img_mask] # Foreground values
+            min_val = fg_vals.min()
+            max_val = fg_vals.max()
 
-        heatmap = (heatmap - min_val) / (max_val - min_val) # Normalize
+            heatmap = (heatmap - min_val) / (max_val - min_val) # Normalize
 
-        heatmap = colormaps['rainbow'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
-        heatmap = opacity * heatmap + (1 - opacity) * img / 255 # Blend with original image
+        heatmap_vis = colormaps['rainbow'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
+        heatmap_vis = opacity * heatmap_vis + (1 - opacity) * img / 255 # Blend with original image
 
     elif strategy == 'clamp':
-        radius = 5
-        center = 0
+        if not is_heatmap_processed:
+            clamp_radius = 5
+            center = 0
+            discretize_radius = .1 # After normalizing
 
-        heatmap = heatmap - center # Center at zero
-        heatmap = heatmap.clamp(-radius, radius) # Restrict to [-radius, radius]
-        heatmap = (heatmap + radius) / (2 * radius) # Normalize to [0, 1] with zero at .5
+            heatmap = heatmap - center # Center at zero
+            heatmap = heatmap.clamp(-clamp_radius, clamp_radius) # Restrict to [-radius, radius]
+            heatmap = (heatmap + clamp_radius) / (2 * clamp_radius) # Normalize to [0, 1] with zero at .5
 
-        heatmap = colormaps['bwr'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
-        heatmap = opacity * heatmap + (1 - opacity) * img / 255 # Blend with original image
+            heatmap[np.abs(heatmap - .5) < discretize_radius] = .5 # Discretize around .5
+            heatmap[heatmap < .5 - discretize_radius] = 0
+            heatmap[heatmap > .5 + discretize_radius] = 1
+
+        heatmap_vis = colormaps['viridis'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
+        # heatmap_vis = colormaps['bwr'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
+        heatmap_vis = opacity * heatmap_vis + (1 - opacity) * img / 255 # Blend with original image
 
     else:
         assert strategy == 'hsv'
 
-        maxval  = 5
-        pos = heatmap > 0
-        neg = heatmap < 0
-        hue = ((pos*0) + (neg*2/3))*179
-        sat = (np.minimum(np.abs(heatmap/maxval),1)*255)
-        hsv = cv2.cvtColor(np.uint8(img), cv2.COLOR_RGB2HSV)
-        val = hsv[:, :, 2]*1.0
-        hsv2 = np.dstack((hue, sat, val))
+        if not is_heatmap_processed:
+            maxval  = 5
+            pos = heatmap > 0
+            neg = heatmap < 0
+            hue = ((pos*0) + (neg*2/3))*179
+            sat = (np.minimum(np.abs(heatmap/maxval),1)*255)
+            hsv = cv2.cvtColor(np.uint8(img), cv2.COLOR_RGB2HSV)
+            val = hsv[:, :, 2]*1.0
+            hsv2 = np.dstack((hue, sat, val))
 
-        heatmap = cv2.cvtColor(np.uint8(hsv2), cv2.COLOR_HSV2RGB)
-        # This already handles blending with original image
+        heatmap_vis = cv2.cvtColor(np.uint8(hsv2), cv2.COLOR_HSV2RGB) # This already handles blending with original image
 
-    heatmap = heatmap * img_mask[..., None] # (h, w, 3); mask background
 
-    return heatmap
+    heatmap_vis = heatmap_vis * img_mask[..., None] # (h, w, 3); mask background
 
-def vis_checkpoint(max_to_vis_per_concept: int = 3, **vis_kwargs):
+    return heatmap_vis, heatmap
+
+def vis_checkpoint(concepts_to_vis: tuple[str,str], max_to_vis_per_concept: int = 3, **vis_kwargs):
     '''
         Visualize the heatmaps of existing checkpointed concept predictors on each other's test images.
     '''
@@ -200,8 +211,7 @@ def vis_checkpoint(max_to_vis_per_concept: int = 3, **vis_kwargs):
     controller = Controller(loc_and_seg, concept_kb, feature_extractor, retriever=retriever, cacher=cacher)
 
     # Concepts to evaluate
-    concept1_name = 'mug'
-    concept2_name = 'bowl'
+    concept1_name, concept2_name = concepts_to_vis
 
     concept1 = controller.retrieve_concept(concept1_name)
     concept2 = controller.retrieve_concept(concept2_name)
@@ -235,6 +245,9 @@ def parse_args(cl_args = None):
 
     parser.add_argument('--strategy', default='clamp')
     parser.add_argument('--output_dir', default='.')
+    parser.add_argument('--max_to_vis_per_concept', default=3, type=int)
+
+    parser.add_argument('--concepts_to_compare', nargs=2, default=['mug', 'bowl'])
 
     args = parser.parse_args(cl_args)
 
@@ -242,7 +255,10 @@ def parse_args(cl_args = None):
 
 # %%
 if __name__ == '__main__':
-    pass
+    args = parse_args([
+        '--max_to_vis_per_concept', '10',
+        '--concepts_to_compare', 'fork', 'spoon'
+    ])
 
     # %% Build controller components
     loc_and_seg = build_localizer_and_segmenter(build_sam(), None) # Save time by not loading DesCo
@@ -250,12 +266,10 @@ if __name__ == '__main__':
     feature_extractor = build_feature_extractor(dino_model=build_dino(), clip_model=clip[0], clip_processor=clip[1])
     dino_fe = feature_extractor.dino_feature_extractor
 
-    args = parse_args()
-
     # Change working directory to generate outputs there
     output_dir = os.path.realpath(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
     os.chdir(output_dir)
 
     # Create visualizations
-    vis_checkpoint(strategy=args.strategy)
+    vis_checkpoint(args.concepts_to_compare, max_to_vis_per_concept=args.max_to_vis_per_concept, strategy=args.strategy)
