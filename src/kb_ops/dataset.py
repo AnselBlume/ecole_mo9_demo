@@ -39,6 +39,7 @@ class BaseDataset(Dataset):
                 Otherwise, if concepts_to_train is None and train_all_concepts_if_unspecified is False, only the positive concept will be trained for each example.
 
             train_all_concepts_if_unspecified: If True, all concepts will be trained for all examples if concepts_to_train is None.
+                Otherwise, only the positive concept will be trained for each example if concepts_to_train is None.
         '''
         if not concepts_to_train:
             logger.info('concepts_to_train not provided for dataset; constructing')
