@@ -16,6 +16,7 @@ def label_from_directory(path):
 def list_paths(
     root_dir: str,
     exts: list[str] = None,
+    follow_links: bool = True
 ):
     '''
         Lists all files in a directory with a given extension.
@@ -28,7 +29,7 @@ def list_paths(
     '''
     exts = set(exts) if exts else None
     paths = []
-    for dirpath, dirnames, filenames in os.walk(root_dir):
+    for dirpath, dirnames, filenames in os.walk(root_dir, followlinks=follow_links):
         for filename in filenames:
             path = os.path.join(dirpath, filename)
 
@@ -42,7 +43,8 @@ def list_paths(
 def kb_from_img_dir(
     img_dir: str,
     label_from_path_fn: Callable[[str],str] = label_from_path,
-    exts: list[str] = ['.jpg', '.png']
+    exts: list[str] = ['.jpg', '.png'],
+    follow_links: bool = True
 ) -> ConceptKB:
     '''
         Constructs a concept knowledge base from images in a directory.
@@ -54,7 +56,7 @@ def kb_from_img_dir(
     '''
     kb = ConceptKB()
 
-    for path in list_paths(img_dir, exts=exts):
+    for path in list_paths(img_dir, exts=exts, follow_links=follow_links):
         label = label_from_path_fn(path)
 
         if label not in kb:
