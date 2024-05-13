@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def split_from_directory(
     img_dir: str,
     exts: list[str] = ['.jpg', '.png'],
-    label_from_path=label_from_path,
+    label_from_path_fn=label_from_path,
     **split_kwargs
 ):
     '''
@@ -21,7 +21,7 @@ def split_from_directory(
             split (tuple[float,float,float]): Proportions for train, validation, and test sets.
             exts (list[str]): List of file extensions to consider.
             stratified (bool): Whether to stratify the split by label.
-            label_from_path (Callable): Function to extract label from path.
+            label_from_path_fn (Callable): Function to extract label from path.
             seed (int): Random seed for reproducibility.
 
         Returns: Tuple of 2-tuples, each containing a list of paths and a list of labels. 2-tuples are returned
@@ -35,13 +35,13 @@ def split_from_directory(
 
     return split_from_paths(
         paths=paths,
-        label_from_path=label_from_path,
+        label_from_path_fn=label_from_path_fn,
         **split_kwargs
     )
 
 def split_from_paths(
     paths: list[str],
-    label_from_path=label_from_path,
+    label_from_path_fn=label_from_path,
     **split_kwargs
 ) -> tuple[tuple[list,list], tuple[list,list], tuple[list,list]]:
     '''
@@ -51,14 +51,14 @@ def split_from_paths(
             img_dir (str): Directory containing images.
             split (tuple[float,float,float]): Proportions for train, validation, and test sets.
             stratified (bool): Whether to stratify the split by label.
-            label_from_path (Callable): Function to extract label from path.
+            label_from_path_fn (Callable): Function to extract label from path.
             seed (int): Random seed for reproducibility.
 
         Returns: 3-Tuple of 2-tuples, each containing a list of paths and a list of labels. 2-tuples are returned
             in the order (train, validation, test).
     '''
     paths = sorted(paths)
-    labels = [label_from_path(p) for p in paths]
+    labels = [label_from_path_fn(p) for p in paths]
 
     return split(
         data=paths,
