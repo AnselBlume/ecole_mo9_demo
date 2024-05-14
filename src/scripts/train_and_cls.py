@@ -1,6 +1,6 @@
 # %%
 import os # Change DesCo CUDA device here
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 # Prepend to path so starts searching at src first
 import sys
@@ -8,8 +8,9 @@ sys.path = [os.path.join(os.path.dirname(__file__), '..')] + sys.path
 
 from llm import LLMClient
 from kb_ops import kb_from_img_dir, add_global_negatives
+from kb_ops.build_kb import label_from_path, label_from_directory
 from model.concept import ConceptKBConfig
-from kb_ops.train_test_split import split_from_directory, split_from_paths
+from kb_ops.train_test_split import split
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
 from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline
 import logging, coloredlogs
@@ -23,7 +24,7 @@ from scripts.utils import set_feature_paths, get_timestr
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
 
-def get_parser():
+def parse_args(cl_args: list[str] = None, config_str: str = None):
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--config', action=argparse.ActionConfigFile)
@@ -31,6 +32,9 @@ def get_parser():
     parser.add_argument('--img_dir', type=str,
                         default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/xiaomeng_augmented_data_v3',
                         help='Path to directory of images or preprocessed segmentations')
+
+    parser.add_argument('--extract_label_from', choices=['path', 'directory'], default='path',
+                        help='Whether to extract concept labels from image paths or containing directories')
 
     parser.add_argument('--negatives_img_dir', type=str, default='/shared/nas2/blume5/fa23/ecole/data/imagenet/negatives_rand_1k',
                         help='Path to directory of negative example images')
@@ -62,24 +66,29 @@ def get_parser():
     parser.add_argument('--train.ckpt_every_n_epochs', type=int, default=1, help='Number of epochs between checkpoints')
     parser.add_argument('--train.ckpt_dir', type=str, default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb', help='Directory to save model checkpoints')
 
-    parser.add_argument('--train.use_negatives', type=bool, default=True, help='Whether to use global negative examples during training')
+    parser.add_argument('--train.use_concepts_as_negatives', type=bool, default=False, help='Whether to use other concepts as negatives')
+    parser.add_argument('--train.use_global_negatives', type=bool, default=True, help='Whether to use global negative examples during training')
 
-    return parser
+    if config_str:
+        args = parser.parse_string(config_str)
+    else:
+        args = parser.parse_args(cl_args)
+
+    return args, parser
 
 # %%
 if __name__ == '__main__':
-    parser = get_parser()
-    args = parser.parse_args()
-    # args = parser.parse_args([]) # For debugging or jupyter notebook
+    args, parser = parse_args()
 
     # %%
     run = wandb.init(project='ecole_mo9_demo', config=args.as_flat(), dir=args.wandb_dir, reinit=True)
     # run = None # Comment me to use wandb
 
     # %% Initialize concept KB
-    concept_kb = kb_from_img_dir(args.img_dir)
+    label_extractor = label_from_path if args.extract_label_from == 'path' else label_from_directory
+    concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor)
 
-    if args.train.use_negatives:
+    if args.train.use_global_negatives:
         add_global_negatives(concept_kb, args.negatives_img_dir)
 
     # Import here so DesCo sees the CUDA device change
@@ -117,9 +126,11 @@ if __name__ == '__main__':
     segmentations_dir = os.path.join(args.cache.root, args.cache.segmentations)
     set_feature_paths(concept_kb, segmentations_dir=segmentations_dir)
 
-    if args.train.use_negatives:
+    if args.train.use_global_negatives:
         neg_segmentations_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.segmentations)
         set_feature_paths(concept_kb.global_negatives, segmentations_dir=neg_segmentations_dir)
+
+        # concept_kb.global_negatives = concept_kb.global_negatives[:10] # Comment me when not debugging
 
     # Pre-cache features
     cacher = ConceptKBFeatureCacher(
@@ -137,10 +148,15 @@ if __name__ == '__main__':
         [ex.image_features_path for ex in c.examples]
         for c in concept_kb
     ]))
+    all_feature_labels = list(chain.from_iterable([
+        [c.name for ex in c.examples] # No way currently to indicate concept-specific negatives from files
+        for c in concept_kb
+    ]))
 
-    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split_from_paths(all_feature_paths)
-    train_ds = FeatureDataset(trn_p, trn_l)
-    val_ds = FeatureDataset(val_p, val_l)
+    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split(all_feature_paths, all_feature_labels)
+
+    train_ds = FeatureDataset(trn_p, trn_l, train_all_concepts_if_unspecified=args.train.use_concepts_as_negatives)
+    val_ds = FeatureDataset(val_p, val_l, train_all_concepts_if_unspecified=args.train.use_concepts_as_negatives)
 
     # Consider splitting global negatives into train and val sets?
     extend_with_global_negatives(train_ds, concept_kb.global_negatives)
