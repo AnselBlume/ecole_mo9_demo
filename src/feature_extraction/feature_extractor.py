@@ -55,7 +55,41 @@ class FeatureExtractor(nn.Module):
         cached_features = ImageFeatures() if cached_features is None else cached_features # Prevent None checking of object
 
         # DINO image features
-        dino_device = self.dino_feature_extractor.device
+        image_features, region_features = self._get_image_and_region_features(image, regions, object_mask, region_masks, cached_features)
+        visual_features = torch.cat([image_features, region_features], dim=0) # (1 + n_regions, d_img)
+
+        # CLIP image features
+        clip_visual_features = self._get_clip_visual_features(image, regions, cached_features)
+
+        # Zero-shot attributes from CLIP features
+        zs_scores = self._get_zero_shot_scores(clip_visual_features, zs_attrs)
+
+        # Trained attribute scores from DINO features
+        trained_attr_scores = self._get_trained_attr_scores(visual_features, cached_features)
+
+        # While empty regions output a zero feature-vect, the ConceptPredictor's affine predictor still adds a bias, so they still contribute
+        region_weights = torch.ones(len(regions), device=self.clip_feature_extractor.device) / len(regions) # Uniform weights
+
+        return ImageFeatures(
+            image_features=image_features, # (1, d_img)
+            clip_image_features=clip_visual_features[:1], # (1, d_img)
+            region_features=region_features, # (n_regions, d_img)
+            clip_region_features=clip_visual_features[1:], # (n_regions, d_img)
+            region_weights=region_weights,
+            trained_attr_img_scores=trained_attr_scores[:1],
+            trained_attr_region_scores=trained_attr_scores[1:],
+            zs_attr_img_scores=zs_scores[:1],
+            zs_attr_region_scores=zs_scores[1:],
+        )
+
+    def _get_image_and_region_features(
+        self,
+        image: Image,
+        regions: list[Image],
+        object_mask: torch.BoolTensor,
+        region_masks: torch.BoolTensor,
+        cached_features: ImageFeatures
+    ):
 
         if None in [cached_features.image_features, cached_features.region_features]:
             # Generate DINO features
@@ -120,51 +154,41 @@ class FeatureExtractor(nn.Module):
                 image_features, region_features = all_features[:1], all_features[1:]
 
                 if is_on_cpu:
-                    image_features = image_features.to(dino_device)
-                    region_features = region_features.to(dino_device)
+                    image_features = image_features.to(self.dino_feature_extractor.device)
+                    region_features = region_features.to(self.dino_feature_extractor.device)
 
         else:
             image_features = cached_features.image_features
             region_features = cached_features.region_features
 
-        visual_features = torch.cat([image_features, region_features], dim=0) # (1 + n_regions, d_img)
+        return image_features, region_features
 
-        # CLIP image features
-        clip_device = self.clip_feature_extractor.device
-
+    def _get_clip_visual_features(self, image: Image, regions: list[Image], cached_features: ImageFeatures):
         if None in [cached_features.clip_image_features, cached_features.clip_region_features]:
             clip_visual_features = self.clip_feature_extractor(images=[image] + regions)
         else:
-            clip_visual_features = torch.cat([cached_features.clip_image_features, cached_features.clip_region_features], dim=0).to(clip_device)
+            clip_visual_features = torch.cat([cached_features.clip_image_features, cached_features.clip_region_features], dim=0)
+            clip_visual_features = clip_visual_features.to(self.clip_feature_extractor.device)
 
-        # Zero-shot attributes from CLIP features
+        return clip_visual_features
+
+    def _get_zero_shot_scores(self, clip_visual_features: torch.Tensor, zs_attrs: list[str]):
         if len(zs_attrs):
             zs_features = self.clip_feature_extractor(texts=zs_attrs)
             zs_scores = self.zs_attr_predictor.feature_score(clip_visual_features, zs_features) # (1 + n_regions, n_zs_attrs)
         else:
-            zs_scores = torch.tensor([[]], device=clip_device) # This will be a nop in the indexing below
+            zs_scores = torch.tensor([[]], device=self.clip_feature_extractor.device) # This will be a nop in the indexing below
 
-        # Trained attribute scores from DINO features
+        return zs_scores
+
+    def _get_trained_attr_scores(self, visual_features: torch.Tensor, cached_features: ImageFeatures):
         if None in [cached_features.trained_attr_img_scores, cached_features.trained_attr_region_scores]:
             if len(self.trained_attr_predictor.attr_names):
                 # NOTE We take the sigmoid for DINO as the feature, but not for CLIP since CLIP wasn't trained with BCELoss
                 trained_attr_scores = self.trained_attr_predictor.predict_from_features(visual_features).sigmoid() # (1 + n_regions, n_learned_attrs)
             else:
-                trained_attr_scores = torch.tensor([[]], device=dino_device) # (1, 0); nop in the indexing below
+                trained_attr_scores = torch.tensor([[]], device=self.dino_feature_extractor.device) # (1, 0); nop in the indexing below
         else:
             trained_attr_scores = torch.cat([cached_features.trained_attr_img_scores, cached_features.trained_attr_region_scores], dim=0)
 
-        # While empty regions output a zero feature-vect, the ConceptPredictor's affine predictor still adds a bias, so they still contribute
-        region_weights = torch.ones(len(regions), device=clip_device) / len(regions) # Uniform weights
-
-        return ImageFeatures(
-            image_features=image_features, # (1, d_img)
-            clip_image_features=clip_visual_features[:1], # (1, d_img)
-            region_features=region_features, # (n_regions, d_img)
-            clip_region_features=clip_visual_features[1:], # (n_regions, d_img)
-            region_weights=region_weights,
-            trained_attr_img_scores=trained_attr_scores[:1],
-            trained_attr_region_scores=trained_attr_scores[1:],
-            zs_attr_img_scores=zs_scores[:1],
-            zs_attr_region_scores=zs_scores[1:],
-        )
+        return trained_attr_scores
