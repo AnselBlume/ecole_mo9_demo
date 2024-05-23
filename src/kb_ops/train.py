@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from model.concept import ConceptKB, Concept, ConceptExample
 from wandb.sdk.wandb_run import Run
-from .predict import ConceptKBPredictor
+from dataclasses import dataclass, field
 from .dataset import ImageDataset, PresegmentedDataset, FeatureDataset, extend_with_global_negatives
 from .feature_pipeline import ConceptKBFeaturePipeline
 from typing import Union, Optional, Any, Literal, Callable
@@ -12,7 +12,7 @@ from torchmetrics import Accuracy
 import numpy as np
 from tqdm import tqdm
 import logging
-from .forward import ConceptKBForwardBase
+from .forward import ConceptKBForwardBase, ForwardOutput, DictDataClass
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +98,22 @@ class ConceptKBExampleSampler:
 
         return sampled_examples, sampled_concept_names
 
+@dataclass
+class TrainOutput(DictDataClass):
+    best_ckpt_eopch: int = None
+    best_ckpt_path: str = None
+    train_outputs: list[ForwardOutput] = None
+    val_outputs: Optional[list[ForwardOutput]] = field(
+        default=None,
+        metadata={'description': 'List of outputs from validation dataloader if val_dl is provided'}
+    )
+
+@dataclass
+class ValidationOutput(DictDataClass):
+    val_loss: float
+    val_acc: float
+    predicted_concept_outputs: list[ForwardOutput]
+
 class ConceptKBTrainer(ConceptKBForwardBase):
     def __init__(self, concept_kb: ConceptKB, feature_pipeline: ConceptKBFeaturePipeline = None, wandb_run: Run = None):
         '''
@@ -146,7 +162,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         ckpt_dir: str = 'checkpoints',
         ckpt_fmt: str = 'concept_kb_epoch_{epoch}.pt',
         set_score_to_zero_at_indices: list[int] = []
-    ) -> dict[str, Any]:
+    ) -> TrainOutput:
 
         if ckpt_dir:
             os.makedirs(ckpt_dir, exist_ok=True)
@@ -229,14 +245,14 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         best_ckpt_epoch = np.argmin(val_losses) if val_losses else None
         best_ckpt_path = self._get_ckpt_path(ckpt_dir, ckpt_fmt, best_ckpt_epoch) if val_losses else None
 
-        ret_dict = {
-            'best_ckpt_epoch': best_ckpt_epoch,
-            'best_ckpt_path': best_ckpt_path,
-            'train_outputs': train_outputs,
-            'val_outputs': val_outputs
-        }
+        train_output = TrainOutput(
+            best_ckpt_epoch=best_ckpt_epoch,
+            best_ckpt_path=best_ckpt_path,
+            train_outputs=train_outputs,
+            val_outputs=val_outputs
+        )
 
-        return ret_dict
+        return train_output
 
     def train_concept(
         self,
@@ -253,7 +269,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         post_sampling_hook: Callable[[list[ConceptExample]], Any] = None,
         n_global_negatives: int = 250,
         **train_kwargs
-    ) -> dict[str, Any]:
+    ) -> TrainOutput:
         '''
             Trains the given concept for n_epochs if provided, else until it correctly predicts the
             examples in until_correct_example_paths.
@@ -413,11 +429,13 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         total_loss = total_loss / len(val_dl)
         val_acc = acc.compute().item()
 
-        return {
-            'val_loss': total_loss,
-            'val_acc': val_acc,
-            'predicted_concept_outputs': predicted_concept_outputs
-        }
+        val_output = ValidationOutput(
+            val_loss=total_loss,
+            val_acc=val_acc,
+            predicted_concept_outputs=predicted_concept_outputs
+        )
+
+        return val_output
 
     def log(self, *args, **kwargs):
         if self.run is not None:

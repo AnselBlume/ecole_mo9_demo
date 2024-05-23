@@ -7,8 +7,35 @@ from model.concept_predictor import ConceptPredictorOutput
 from .feature_cache import CachedImageFeatures
 from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset, FeatureDataset
 from .feature_pipeline import ConceptKBFeaturePipeline
-from typing import Union
+from typing import Union, Optional
+from dataclasses import dataclass, field
 from PIL.Image import Image
+
+class DictDataClass:
+    '''
+        Class used for backward compatibility with code that expected dictionary outputs.
+    '''
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+@dataclass
+class ForwardOutput(DictDataClass):
+    loss: Optional[float] = None
+
+    predictors_outputs: list = field(
+        default=None,
+        metadata={'help': 'List of ConceptPredictorOutput objects for each Concept specified in the forward pass\' concepts parameter'}
+    )
+
+    concept_names: list[str] = field(
+        default=None,
+        metadata={'help': 'Names of the concepts for which outputs were computed; corresponds to the order of predictors_outputs'}
+    )
+
+    segmentations: LocalizeAndSegmentOutput = field(
+        default=None,
+        metadata={'help': 'Segmentation output if return_segmentations was set to True in the forward pass'}
+    )
 
 class ConceptKBForwardBase:
     UNK_LABEL = '[UNK]'
@@ -83,7 +110,7 @@ class ConceptKBForwardBase:
         return_segmentations: bool = False,
         seg_kwargs: dict = {},
         set_score_to_zero: bool = False
-    ):
+    ) -> ForwardOutput:
 
         # Check __name__ instead of isinstance to avoid pickle versioning issues
         if image_data.__class__.__name__ == 'CachedImageFeatures':
@@ -151,14 +178,14 @@ class ConceptKBForwardBase:
             curr_loss.backward()
 
         # Return results
-        ret_dict = {
-            'loss': total_loss if text_label is not None else None,
-            'predictors_outputs': outputs,
-            'concept_names': [concept.name for concept in concepts]
-        }
+        forward_output = ForwardOutput(
+            loss=total_loss if text_label is not None else None,
+            predictors_outputs=outputs,
+            concept_names=[concept.name for concept in concepts]
+        )
 
         if return_segmentations:
             assert not features_were_provided, 'Cannot return segmentations if features were provided as input'
-            ret_dict['segmentations'] = segmentations
+            forward_output.segmentations = segmentations
 
-        return ret_dict
+        return forward_output
