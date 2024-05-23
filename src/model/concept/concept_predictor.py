@@ -1,10 +1,17 @@
 import torch
 import torch.nn as nn
-from .features import ImageFeatures
+from model.features import ImageFeatures
 from dataclasses import dataclass
 
 class BatchedPredictor:
     pass
+
+@dataclass
+class ConceptPredictorFeatures(ImageFeatures):
+    zs_attr_img_scores: torch.Tensor = None # (1, n_zs_attrs)
+    zs_attr_region_scores: torch.Tensor = None # (n_regions, n_zs_attrs)
+
+    component_concept_scores: torch.Tensor = None # (n_component_concepts,)
 
 @dataclass
 class ConceptPredictorOutput:
@@ -75,6 +82,7 @@ class ConceptPredictor(nn.Module):
         region_feature_dim: int,
         n_trained_attrs: int,
         n_zs_attrs: int,
+        n_component_concepts: int = 0,
         use_bias=True,
         use_ln=True,
         use_probabilities=False,
@@ -99,6 +107,7 @@ class ConceptPredictor(nn.Module):
             use_full_img + use_regions
             + (use_full_img + use_regions) * n_trained_attrs
             + (use_full_img + use_regions) * n_zs_attrs
+            + n_component_concepts
         )
 
         if use_ln and use_probabilities:
@@ -118,6 +127,9 @@ class ConceptPredictor(nn.Module):
 
         self.img_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if n_zs_attrs else nn.Identity()
         self.regions_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if n_zs_attrs else nn.Identity()
+
+        # We will try to detect component concepts solely from the full image, not from regions
+        self.component_concept_weights = Hadamard(n_component_concepts, bias=use_bias) if n_component_concepts else nn.Identity()
 
         self.feature_groups = nn.ModuleDict()
 
@@ -170,6 +182,9 @@ class ConceptPredictor(nn.Module):
             else:
                 zs_attr_region_scores = torch.tensor([[]], device=region_weights.device) # (1, 0)
                 zs_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
+
+            # Component concepts
+
 
             # Concatenate all scores for layer norm
             all_scores = torch.cat([
