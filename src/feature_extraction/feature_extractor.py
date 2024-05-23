@@ -11,6 +11,7 @@ from feature_extraction import (
 from PIL.Image import Image
 from model.features import ImageFeatures
 from feature_extraction.dino_features import get_rescaled_features, region_pool, interpolate_masks
+from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
 import logging
 logger = logging.getLogger(__file__)
 
@@ -21,7 +22,8 @@ class FeatureExtractor(nn.Module):
         dino: nn.Module,
         clip: CLIPModel,
         processor: CLIPProcessor,
-        use_cls_features: bool = False
+        desco: GLIPDemo = None,
+        use_cls_features: bool = False,
     ):
         '''
             use_cls_features: Use DINO's CLS features for image and regions instead of pooled features over regions.
@@ -31,6 +33,7 @@ class FeatureExtractor(nn.Module):
         self.dino = dino
         self.clip = clip
         self.processor = processor
+        self.desco = desco
         self.use_cls_features = use_cls_features
 
         # Can't resize DINO images as region masks won't correspond to image size, unless we resize the masks as well
@@ -43,7 +46,6 @@ class FeatureExtractor(nn.Module):
         self,
         image: Image,
         regions: list[Image],
-        zs_attrs: list[str],
         object_mask: torch.BoolTensor,
         region_masks: torch.BoolTensor,
         cached_features: ImageFeatures = None
@@ -61,9 +63,6 @@ class FeatureExtractor(nn.Module):
         # CLIP image features
         clip_visual_features = self._get_clip_visual_features(image, regions, cached_features)
 
-        # Zero-shot attributes from CLIP features
-        zs_scores = self._get_zero_shot_scores(clip_visual_features, zs_attrs)
-
         # Trained attribute scores from DINO features
         trained_attr_scores = self._get_trained_attr_scores(visual_features, cached_features)
 
@@ -77,10 +76,25 @@ class FeatureExtractor(nn.Module):
             clip_region_features=clip_visual_features[1:], # (n_regions, d_img)
             region_weights=region_weights,
             trained_attr_img_scores=trained_attr_scores[:1],
-            trained_attr_region_scores=trained_attr_scores[1:],
-            zs_attr_img_scores=zs_scores[:1],
-            zs_attr_region_scores=zs_scores[1:],
+            trained_attr_region_scores=trained_attr_scores[1:]
         )
+
+    def get_zero_shot_attr_scores(self, clip_visual_features: torch.Tensor, zs_attrs: list[str]):
+        if len(zs_attrs):
+            zs_features = self.clip_feature_extractor(texts=zs_attrs)
+            zs_scores = self.zs_attr_predictor.feature_score(clip_visual_features, zs_features) # (1 + n_regions, n_zs_attrs)
+        else:
+            zs_scores = torch.tensor([[]], device=self.clip_feature_extractor.device) # This will be a nop in the indexing below
+
+        return zs_scores
+
+    def get_component_scores(self, image: Image, component_names: list[str], caption='') -> torch.Tensor:
+        '''
+            Returns a tensor of shape (n_components,) for the score of each component being present in the given image.
+
+            TODO Use Desco to ground each component_name and return a score for each, with 0 meaning no detection.
+        '''
+        pass
 
     def _get_image_and_region_features(
         self,
@@ -171,15 +185,6 @@ class FeatureExtractor(nn.Module):
             clip_visual_features = clip_visual_features.to(self.clip_feature_extractor.device)
 
         return clip_visual_features
-
-    def _get_zero_shot_scores(self, clip_visual_features: torch.Tensor, zs_attrs: list[str]):
-        if len(zs_attrs):
-            zs_features = self.clip_feature_extractor(texts=zs_attrs)
-            zs_scores = self.zs_attr_predictor.feature_score(clip_visual_features, zs_features) # (1 + n_regions, n_zs_attrs)
-        else:
-            zs_scores = torch.tensor([[]], device=self.clip_feature_extractor.device) # This will be a nop in the indexing below
-
-        return zs_scores
 
     def _get_trained_attr_scores(self, visual_features: torch.Tensor, cached_features: ImageFeatures):
         if None in [cached_features.trained_attr_img_scores, cached_features.trained_attr_region_scores]:
