@@ -94,7 +94,8 @@ class FeatureExtractor(nn.Module):
 
             TODO Use Desco to ground each component_name and return a score for each, with 0 meaning no detection.
         '''
-        pass
+        if not component_names:
+            return torch.tensor([])
 
     def _get_image_and_region_features(
         self,
