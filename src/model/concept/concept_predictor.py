@@ -129,7 +129,7 @@ class ConceptPredictor(nn.Module):
         self.regions_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if n_zs_attrs else nn.Identity()
 
         # We will try to detect component concepts solely from the full image, not from regions
-        self.component_concept_weights = Hadamard(n_component_concepts, bias=use_bias) if n_component_concepts else nn.Identity()
+        self.component_concept_weights = self.set_num_component_concepts(n_component_concepts)
 
         self.feature_groups = nn.ModuleDict()
 
@@ -265,3 +265,5 @@ class ConceptPredictor(nn.Module):
         self.n_zs_attrs -= 1
         self.zs_attr_predictor = nn.Linear(self.n_zs_attrs, self.n_zs_attrs, bias=self.use_bias)
 
+    def set_num_component_concepts(self, n_component_concepts: int):
+        self.component_concept_predictor = Hadamard(n_component_concepts, bias=self.use_bias) if n_component_concepts else nn.Identity()
