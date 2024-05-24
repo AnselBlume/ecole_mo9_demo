@@ -2,8 +2,7 @@ import torch
 import torch.nn.functional as F
 from image_processing import LocalizeAndSegmentOutput
 from torch.utils.data import DataLoader, Dataset
-from model.concept import ConceptKB, Concept
-from model.concept_predictor import ConceptPredictorOutput
+from model.concept import ConceptKB, Concept, ConceptPredictorOutput
 from .feature_cache import CachedImageFeatures
 from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset, FeatureDataset
 from .feature_pipeline import ConceptKBFeaturePipeline
@@ -128,25 +127,35 @@ class ConceptKBForwardBase:
         # Cache to avoid recomputation for each image
         cached_features = None
 
+        # TODO store the component concept scores
+        is_computing_component_concept_scores_from_concept_predictors = not self.feature_pipeline.compute_component_concept_scores
+
         concepts = concepts if concepts else self.concept_kb
         for i, concept in enumerate(concepts, start=1):
             if features_were_provided:
                 device = concept.predictor.img_features_predictor.weight.device
-                features = image_data.get_image_features(concept.name).to(device)
+                features = image_data.get_concept_predictor_features(concept.name).to(device)
 
             else: # Features not provided; compute from segmentations
-                zs_attrs = [attr.query for attr in concept.zs_attributes]
-
-                features = self.feature_pipeline.get_features(
+                features = self.feature_pipeline.get_concept_predictor_features(
                     image,
                     segmentations,
-                    zs_attrs,
+                    concept,
                     cached_features=cached_features
                 )
 
                 # Cache visual features and trained attribute scores
                 if cached_features is None:
-                    cached_features = features
+                    cached_features = CachedImageFeatures.from_image_features(features)
+                    cached_features.update_concept_predictor_features( # Store zero-shot attributes and potentially component concept scores
+                        concept,
+                        features,
+                        store_component_concept_scores=not is_computing_component_concept_scores_from_concept_predictors
+                    )
+
+            if is_computing_component_concept_scores_from_concept_predictors:
+                # TODO set from stored value
+                pass
 
             # Compute concept predictor outputs
             output: ConceptPredictorOutput = concept.predictor(features)

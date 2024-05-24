@@ -1,10 +1,8 @@
 import os
-import torch
 from tqdm import tqdm
-from model.concept import ConceptKB, Concept
+from model.concept import ConceptKB, Concept, ConceptPredictorFeatures
 from .feature_pipeline import ConceptKBFeaturePipeline
-from image_processing import LocalizeAndSegmentOutput
-from model.features import ImageFeatures
+from model.features import CachedImageFeatures
 from dataclasses import dataclass, field
 from typing import Literal
 from model.concept import ConceptExample
@@ -14,42 +12,6 @@ import pickle
 import logging
 
 logger = logging.getLogger(__name__)
-
-@dataclass
-class CachedImageFeatures(ImageFeatures):
-
-    concept_to_zs_attr_img_scores: dict[str, torch.Tensor] = field(default_factory=dict) # (1, n_zs_attrs)
-    concept_to_zs_attr_region_scores: dict[str, torch.Tensor] = field(default_factory=dict) # (n_regions, n_zs_attrs)
-
-    def get_image_features(self, concept_name: str):
-        return ImageFeatures(
-            image_features=self.image_features,
-            clip_image_features=self.clip_image_features,
-            region_features=self.region_features,
-            clip_region_features=self.clip_region_features,
-            region_weights=self.region_weights,
-            trained_attr_img_scores=self.trained_attr_img_scores,
-            trained_attr_region_scores=self.trained_attr_region_scores,
-            zs_attr_img_scores=self.concept_to_zs_attr_img_scores[concept_name],
-            zs_attr_region_scores=self.concept_to_zs_attr_region_scores[concept_name]
-        )
-
-    def __getitem__(self, concept_name: str):
-        return self.get_image_features(concept_name)
-
-    @staticmethod
-    def from_image_features(image_features: ImageFeatures):
-        cached_features = CachedImageFeatures()
-
-        cached_features.image_features = image_features.image_features
-        cached_features.clip_image_features = image_features.clip_image_features
-        cached_features.region_features = image_features.region_features
-        cached_features.clip_region_features = image_features.clip_region_features
-        cached_features.region_weights = image_features.region_weights
-        cached_features.trained_attr_img_scores = image_features.trained_attr_img_scores
-        cached_features.trained_attr_region_scores = image_features.trained_attr_region_scores
-
-        return cached_features
 
 class ConceptKBFeatureCacher:
     '''
@@ -198,19 +160,13 @@ class ConceptKBFeatureCacher:
             image = self._image_from_example(example)
             for concept in self.concept_kb:
                 # TODO batched feature computation
-                feats = self.feature_pipeline.get_features(
-                    image,
-                    segmentations,
-                    [attr.query for attr in concept.zs_attributes],
-                    cached_features=cached_features # CachedImageFeatures has same cacheable elements as ImageFeatures
-                )
+                feats = self.feature_pipeline.get_concept_predictor_features(image, segmentations, concept, cached_features=cached_features)
 
                 if cached_features is None:
                     cached_features = CachedImageFeatures.from_image_features(feats)
 
-                # Store zero-shot features
-                cached_features.concept_to_zs_attr_img_scores[concept.name] = feats.zs_attr_img_scores.cpu()
-                cached_features.concept_to_zs_attr_region_scores[concept.name] = feats.zs_attr_region_scores.cpu()
+                # Store concept-specific features
+                cached_features.update_concept_predictor_features(concept, feats, store_component_concept_scores=self.feature_pipeline.compute_component_concept_scores)
 
             cached_features.cpu()
 
@@ -241,30 +197,63 @@ class ConceptKBFeatureCacher:
             with open(example.image_features_path, 'rb') as f:
                 cached_features: CachedImageFeatures = pickle.load(f)
 
-            cached_features.cuda() # For zero-shot attribute feature computation
-
             if (
                 not only_not_present
                 or concept.name not in cached_features.concept_to_zs_attr_img_scores
                 or concept.name not in cached_features.concept_to_zs_attr_region_scores
             ):
-                # Generate zero-shot attribute scores for the new concept
-                with open(example.image_segmentations_path, 'rb') as f:
-                    segmentations: LocalizeAndSegmentOutput = pickle.load(f)
+                cached_features.cuda()
 
-                feats = self.feature_pipeline.get_features(
-                    None, # Don't need to pass raw image since passing cached features
-                    segmentations,
-                    [attr.query for attr in concept.zs_attributes],
-                    cached_features=cached_features
-                )
+                zs_attr_img_scores, zs_attr_region_scores = self.feature_pipeline._get_zero_shot_attr_scores(concept, cached_features)
 
-                cached_features.concept_to_zs_attr_img_scores[concept.name] = feats.zs_attr_img_scores.cpu()
-                cached_features.concept_to_zs_attr_region_scores[concept.name] = feats.zs_attr_region_scores.cpu()
+                cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
+                cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
+
                 cached_features.cpu() # Back to CPU for saving
 
                 # Update cached features
                 with open(example.image_features_path, 'wb') as f:
                     pickle.dump(cached_features, f)
 
-                logger.debug(f'Added concept {concept.name} to cached features for example {example.image_path}')
+                logger.debug(f'Added concept {concept.name} zero-shot attributes to cached features for example {example.image_path}')
+
+    def recache_component_concept_scores(self, concept: Concept, examples: list[ConceptExample] = None):
+        '''
+            Recaches component concept scores for the specified Concept across all Concepts' examples in the
+            ConceptKB.
+
+            NOTE Should be called ONLY if the component concept scores are fixed for a given concept-image pair
+            (e.g. when using a fixed model, like DesCo, to compute the scores).
+
+            If examples are provided, only recaches features for the specified examples (to save time instead of
+            recaching for all in the concept_kb).
+        '''
+        if not self.feature_pipeline.compute_component_concept_scores:
+            raise RuntimeError('Component concept scores are not being computed by the feature pipeline.')
+
+        examples = examples if examples else self._get_examples([concept])
+
+        for example in examples:
+            if example.image_features_path is None:
+                continue
+
+            with open(example.image_features_path, 'rb') as f:
+                cached_features: CachedImageFeatures = pickle.load(f)
+
+            # Need to update the cache if the score for any component concept of this concept is missing from the cache
+            if any(cached_features.component_concept_scores.get(name, None) is None for name in concept.component_concepts):
+                # While this looks like it is recomputing all component concept scores for the concept, the _get_component_concept_scores
+                # method actually only computes the scores for those which don't already exist
+                cached_features.cuda()
+                component_scores = self.feature_pipeline._get_component_concept_scores(concept, cached_features).cpu()
+
+                for component_concept, component_score in zip(concept.component_concepts, component_scores):
+                    cached_features.component_concept_scores[component_concept] = component_score
+
+                cached_features.cpu() # Back to CPU for saving
+
+                # Update cached features
+                with open(example.image_features_path, 'wb') as f:
+                    pickle.dump(cached_features, f)
+
+                logger.debug(f'Added concept {concept.name}\'s component concept scores to cached features for example {example.image_path}')

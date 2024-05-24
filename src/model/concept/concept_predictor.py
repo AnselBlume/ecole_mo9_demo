@@ -1,17 +1,10 @@
 import torch
 import torch.nn as nn
-from model.features import ImageFeatures
+from model.features import ConceptPredictorFeatures
 from dataclasses import dataclass
 
 class BatchedPredictor:
     pass
-
-@dataclass
-class ConceptPredictorFeatures(ImageFeatures):
-    zs_attr_img_scores: torch.Tensor = None # (1, n_zs_attrs)
-    zs_attr_region_scores: torch.Tensor = None # (n_regions, n_zs_attrs)
-
-    component_concept_scores: torch.Tensor = None # (n_component_concepts,)
 
 @dataclass
 class ConceptPredictorOutput:
@@ -137,7 +130,7 @@ class ConceptPredictor(nn.Module):
     def device(self):
         return next(self.parameters()).device
 
-    def forward(self, img_feats: ImageFeatures) -> ConceptPredictorOutput:
+    def forward(self, img_feats: ConceptPredictorFeatures) -> ConceptPredictorOutput:
         if img_feats.all_scores is None: # If scores are not provided for feature_group-weighting, calculate them
             region_weights = img_feats.region_weights.unsqueeze(-1) # (n_regions, 1)
 
@@ -183,7 +176,7 @@ class ConceptPredictor(nn.Module):
                 zs_attr_region_scores = torch.tensor([[]], device=region_weights.device) # (1, 0)
                 zs_attr_region_score = torch.tensor([[]], device=region_weights.device) # (1, 0)
 
-            # Component concepts
+            # TODO Component concepts
 
 
             # Concatenate all scores for layer norm
