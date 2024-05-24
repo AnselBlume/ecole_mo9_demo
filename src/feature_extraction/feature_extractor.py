@@ -74,9 +74,9 @@ class FeatureExtractor(nn.Module):
             clip_image_features=clip_visual_features[:1], # (1, d_img)
             region_features=region_features, # (n_regions, d_img)
             clip_region_features=clip_visual_features[1:], # (n_regions, d_img)
-            region_weights=region_weights,
-            trained_attr_img_scores=trained_attr_scores[:1],
-            trained_attr_region_scores=trained_attr_scores[1:]
+            region_weights=region_weights, # (n_regions,)
+            trained_attr_img_scores=trained_attr_scores[:1], # (1, n_learned_attrs)
+            trained_attr_region_scores=trained_attr_scores[1:] # (n_regions, n_learned_attrs)
         )
 
     def get_zero_shot_attr_scores(self, clip_visual_features: torch.Tensor, zs_attrs: list[str]):
