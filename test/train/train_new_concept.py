@@ -2,7 +2,7 @@
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import sys
-sys.path.append(os.path.realpath(os.path.join(__file__, '../../src')))
+sys.path.append(os.path.realpath(os.path.join(__file__, '../../../src')))
 from model.concept import ConceptKB, ConceptExample
 from feature_extraction import build_feature_extractor, build_sam, build_desco, build_clip, build_dino
 from image_processing import build_localizer_and_segmenter

@@ -8,7 +8,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 # Prepend to path so starts searching at src first
 import sys
-sys.path = [os.path.join(os.path.dirname(__file__), '..')] + sys.path
+sys.path = [os.path.join(os.path.dirname(__file__), '../../../src')] + sys.path
 
 from llm import LLMClient, retrieve_parts
 from kb_ops import kb_from_img_dir
