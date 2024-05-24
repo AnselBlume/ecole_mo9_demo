@@ -13,6 +13,7 @@ from kb_ops.train_test_split import split_from_paths
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives, split_from_concept_kb
 from utils import ArticleDeterminer
 from typing import Union, Literal
+from dataclasses import dataclass
 from llm import LLMClient
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
@@ -24,6 +25,11 @@ from vis_utils import plot_predicted_classes, plot_image_differences, plot_conce
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class ControllerConfig:
+    concept_to_zs_attrs_json_path: str = CONCEPT_TO_ATTRS_PATH
+    use_concept_predictors_for_concept_components: bool = False
+
 class Controller:
     def __init__(
         self,
@@ -33,21 +39,28 @@ class Controller:
         retriever: CLIPConceptRetriever = None,
         cacher: ConceptKBFeatureCacher = None,
         zs_predictor: CLIPAttributePredictor = None,
-        concept_to_zs_attrs_json_path: str = CONCEPT_TO_ATTRS_PATH
+        config: ControllerConfig = ControllerConfig()
     ):
+
         self.concepts = concept_kb
-        self.feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
+        self.feature_pipeline = ConceptKBFeaturePipeline(
+            concept_kb,
+            loc_and_seg,
+            feature_extractor,
+            compute_component_concept_scores=not config.use_concept_predictors_for_concept_components
+        )
         self.trainer = ConceptKBTrainer(concept_kb, self.feature_pipeline)
         self.predictor = ConceptKBPredictor(concept_kb, self.feature_pipeline)
         self.cacher = cacher if cacher else ConceptKBFeatureCacher(concept_kb, self.feature_pipeline, cache_dir='feature_cache')
+        self.config = config
 
         self.retriever = retriever
         self.llm_client = LLMClient()
         self.attr_scorer = AttributeScorer(zs_predictor)
 
         # Load external knowledgebase of concepts to zero-shot attributes
-        if concept_to_zs_attrs_json_path:
-            with open(concept_to_zs_attrs_json_path) as f:
+        if config.concept_to_zs_attrs_json_path:
+            with open(config.concept_to_zs_attrs_json_path) as f:
                 self.concept_to_zs_attrs = json.load(f)
 
         else:
