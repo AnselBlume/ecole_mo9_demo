@@ -80,6 +80,9 @@ class FeatureExtractor(nn.Module):
         )
 
     def get_zero_shot_attr_scores(self, clip_visual_features: torch.Tensor, zs_attrs: list[str]):
+        '''
+            Returns a tensor of shape (1 + n_regions, n_zs_attrs) for the zero-shot attribute scores for each region.
+        '''
         if len(zs_attrs):
             zs_features = self.clip_feature_extractor(texts=zs_attrs)
             zs_scores = self.zs_attr_predictor.feature_score(clip_visual_features, zs_features) # (1 + n_regions, n_zs_attrs)

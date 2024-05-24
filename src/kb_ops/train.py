@@ -100,7 +100,7 @@ class ConceptKBExampleSampler:
 
 @dataclass
 class TrainOutput(DictDataClass):
-    best_ckpt_eopch: int = None
+    best_ckpt_epoch: int = None
     best_ckpt_path: str = None
     train_outputs: list[ForwardOutput] = None
     val_outputs: Optional[list[ForwardOutput]] = field(
