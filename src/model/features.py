@@ -76,7 +76,7 @@ class ConceptPredictorFeatures(ImageFeatures):
     zs_attr_img_scores: torch.Tensor = None # (1, n_zs_attrs)
     zs_attr_region_scores: torch.Tensor = None # (n_regions, n_zs_attrs)
 
-    component_concept_scores: torch.Tensor = None # (n_component_concepts,)
+    component_concept_scores: torch.Tensor = None # (1, n_component_concepts,)
 
 @dataclass
 class CachedImageFeatures(ImageFeatures):

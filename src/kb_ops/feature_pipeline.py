@@ -154,6 +154,9 @@ class ConceptKBFeaturePipeline:
                 image (Image): The image to compute the scores for. Used only if image features are not present in cached_features.
                 recompute_existing (bool): Whether to recompute the scores for concepts that are already present in the cache. Takes longer
                     as needs to compute scores for all component concepts, instead of just the ones without scores.
+
+            Returns:
+                Tensor of shape (1, n_component_concepts) containing the scores for each component concept.
         '''
 
         if not len(concept.component_concepts):
@@ -174,6 +177,6 @@ class ConceptKBFeaturePipeline:
 
         # Extract scores
         scores = [concept_to_scores[component_concept_name] for component_concept_name in concept.component_concepts]
-        scores = torch.cat(scores)
+        scores = torch.stack(scores) # (1, n_component_concepts)
 
         return scores
