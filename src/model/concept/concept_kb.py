@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from torch.nn import Parameter
+from model.attribute import Attribute
 from itertools import chain
 from .concept_predictor import ConceptPredictor
 import pickle
@@ -153,6 +154,7 @@ class ConceptKB:
             region_feature_dim=self.cfg.img_feature_dim,
             n_trained_attrs=self.cfg.n_trained_attrs,
             n_zs_attrs=len(concept.zs_attributes),
+            n_component_concepts=len(concept.component_concepts),
             use_ln=self.cfg.use_ln,
             use_probabilities=self.cfg.use_probabilities,
             use_full_img=self.cfg.use_full_img,
@@ -220,8 +222,44 @@ class ConceptKB:
     def get_concept(self, name: str) -> Concept:
         return self._concepts[name]
 
-    def get_concepts(self) -> list[Concept]:
+    def get_concepts(self, in_component_order: bool = False) -> list[Concept]:
+        if in_component_order:
+            return self.in_component_order()
+
         return sorted(list(self._concepts.values()), key=lambda x: x.name)
+
+    def in_component_order(self) -> list[Concept]:
+        '''
+            Returns the concepts in the order of their component dependencies.
+            I.e. if A has B as a component, B will come before A in the list.
+        '''
+        # Extract component concept dependencies for which the component concepts are in the actual ConceptKB
+        # Build reversed adjacency list: if A has B as a component, B --> A
+        adj_list = {concept.name : [] for concept in self.concepts}
+        for concept in self.concepts:
+            for component_name in concept.component_concepts:
+                adj_list[component_name].append(concept.name)
+
+        # Topological sort
+        visited_set = set()
+        visited_order = []
+        def dfs(concept_name: str):
+            if concept_name in visited_set:
+                return
+
+            visited_set.add(concept_name)
+
+            for child_name in adj_list[concept_name]:
+                dfs(child_name)
+
+            visited_order.append(concept_name)
+
+        for concept in self.concepts:
+            dfs(concept.name)
+
+        topological_order = list(reversed(visited_order))
+
+        return topological_order
 
     def __iter__(self):
         return iter(self.get_concepts())
