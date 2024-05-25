@@ -257,9 +257,10 @@ class ConceptKB:
         for concept in self.concepts:
             dfs(concept.name)
 
-        topological_order = list(reversed(visited_order))
+        topological_names = list(reversed(visited_order))
+        topological_concepts = [self.get_concept(concept_name) for concept_name in topological_names]
 
-        return topological_order
+        return topological_concepts
 
     def __iter__(self):
         return iter(self.get_concepts())

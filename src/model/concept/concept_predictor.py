@@ -1,10 +1,17 @@
 import torch
 import torch.nn as nn
-from model.features import ConceptPredictorFeatures
+from model.features import ImageFeatures
 from dataclasses import dataclass
 
 class BatchedPredictor:
     pass
+
+@dataclass
+class ConceptPredictorFeatures(ImageFeatures):
+    zs_attr_img_scores: torch.Tensor = None # (1, n_zs_attrs)
+    zs_attr_region_scores: torch.Tensor = None # (n_regions, n_zs_attrs)
+
+    component_concept_scores: torch.Tensor = None # (1, n_component_concepts,)
 
 @dataclass
 class ConceptPredictorOutput:
