@@ -228,11 +228,19 @@ class ConceptKB:
 
         return sorted(list(self._concepts.values()), key=lambda x: x.name)
 
-    def in_component_order(self) -> list[Concept]:
+    def in_component_order(self, concepts: list[Concept] = None) -> list[Concept]:
         '''
             Returns the concepts in the order of their component dependencies.
             I.e. if A has B as a component, B will come before A in the list.
+
+            Note that if concepts are specified, this function only orders them in terms of their topological order
+            based on component dependencies; it does not compute the complete set of concepts in the component subgraph.
         '''
+        if concepts is not None:
+            all_ordered_concepts = self.in_component_order()
+            concept_names = {concept.name for concept in concepts}
+            return [concept for concept in all_ordered_concepts if concept.name in concept_names]
+
         # Extract component concept dependencies for which the component concepts are in the actual ConceptKB
         # Build reversed adjacency list: if A has B as a component, B --> A
         adj_list = {concept.name : [] for concept in self.concepts}
@@ -261,6 +269,26 @@ class ConceptKB:
         topological_concepts = [self.get_concept(concept_name) for concept_name in topological_names]
 
         return topological_concepts
+
+    def get_component_concept_subgraph(self, concepts: list[Concept]) -> list[Concept]:
+        '''
+            Returns the smallest set of concepts containing the provided concepts and all concepts reachable
+            from them via component relations.
+        '''
+        visited = {}
+        def dfs(concept: Concept):
+            if concept.name in visited:
+                return
+
+            visited[concept.name] = concept
+
+            for child in concept.component_concepts.values():
+                dfs(child)
+
+        for concept in concepts:
+            dfs(concept)
+
+        return list(visited.values())
 
     def __iter__(self):
         return iter(self.get_concepts())
