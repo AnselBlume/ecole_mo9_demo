@@ -2,7 +2,7 @@ import torch
 from image_processing import LocalizeAndSegmentOutput
 from torch.utils.data import DataLoader
 from model.concept import ConceptKB, Concept
-from .feature_cache import CachedImageFeatures
+from .caching import CachedImageFeatures
 from .feature_pipeline import ConceptKBFeaturePipeline
 from typing import Union
 from tqdm import tqdm

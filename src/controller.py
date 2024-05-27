@@ -18,7 +18,7 @@ from llm import LLMClient
 from score import AttributeScorer
 from feature_extraction import CLIPAttributePredictor
 from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
-from kb_ops.feature_cache import ConceptKBFeatureCacher
+from kb_ops.caching import ConceptKBFeatureCacher
 from utils import to_device
 from kb_ops.build_kb import CONCEPT_TO_ATTRS_PATH
 from vis_utils import plot_predicted_classes, plot_image_differences, plot_concept_differences, plot_zs_attr_differences
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ControllerConfig:
     concept_to_zs_attrs_json_path: str = CONCEPT_TO_ATTRS_PATH
-    use_concept_predictors_for_concept_components: bool = False
+    use_concept_predictors_for_concept_components: bool = True
 
 class Controller:
     def __init__(
@@ -177,9 +177,17 @@ class Controller:
     ################################
     # Concept Addition and Removal #
     ################################
-    def add_concept(self, concept_name: str = None, concept: Concept = None, use_singular_name: bool = True):
-        if concept_name is None and concept is None:
-            raise ValueError('Either concept_name or concept must be provided.')
+    def add_concept(
+        self,
+        concept_name: str = None,
+        concept: Concept = None,
+        parent_concept_names: list[str] = [],
+        child_concept_names: list[str] = [],
+        component_concept_names: list[str] = [],
+        use_singular_name: bool = True
+    ):
+        if not (bool(concept_name is None) ^ bool(concept is None)):
+            raise ValueError('Exactly one of concept_name or concept must be provided.')
 
         if concept_name is not None: # Normalize the name
             concept_name = concept_name.lower()
@@ -190,9 +198,22 @@ class Controller:
 
             concept = Concept(concept_name)
 
-        # Otherwise, Concept obj provided; don't modify name
+        if concept.name in self.concepts:
+            raise ValueError(f'Concept with name "{concept.name}" already exists in the ConceptKB.')
 
-        # TODO add error check to make sure that the concept doesn't already exist in the ConceptKB
+        # Add relations if concept_name was provided instead of Concept object
+        if concept_name is not None:
+            for parent_name in parent_concept_names:
+                parent_concept = self.retrieve_concept(parent_name)
+                concept.parent_concepts[parent_name] = parent_concept
+
+            for child_name in child_concept_names:
+                child_concept = self.retrieve_concept(child_name)
+                concept.child_concepts[child_name] = child_concept
+
+            for component_name in component_concept_names:
+                component_concept = self.retrieve_concept(component_name)
+                concept.component_concepts[component_name] = component_concept
 
         # Get zero shot attributes (query LLM)
         self.concepts.init_zs_attrs(
@@ -257,6 +278,9 @@ class Controller:
         for concept in self.concepts:
             self.cacher.recache_zs_attr_features(concept)
 
+            if not self.config.use_concept_predictors_for_concept_components: # Using fixed scores for concept-image pairs
+                self.cacher.recache_component_concept_scores(concept)
+
         train_ds, val_ds, test_ds = split_from_concept_kb(self.concepts, split=split, use_concepts_as_negatives=use_concepts_as_negatives)
 
         self.trainer.train(
@@ -280,8 +304,13 @@ class Controller:
         use_concepts_as_negatives: bool = False
     ):
         '''
-            Retrains the concept until it correctly predicts the given example images if until_correct_examples
-            are provided, else for n_epochs epochs.
+            Trains the specified concept with name concept_name for the specified number of epochs.
+
+            Args:
+                concept_name: The concept to train. If it does not exist, it will be created.
+                stopping_condition: The condition to stop training. Must be 'n_epochs' as 'until_correct' is disabled.
+                new_examples: If provided, these examples will be added to the concept's examples list.
+                sample_all_negatives: Unused parameter as stopping_condition=='until_correct' is disabled.
         '''
         # Try to retrieve concept
         try:
@@ -309,7 +338,11 @@ class Controller:
 
         # Hook to recache zs_attr_features after negative examples have been sampled
         # This is faster than calling recache_zs_attr_features on all examples in the concept_kb
-        cache_hook = lambda exs: self.cacher.recache_zs_attr_features(concept, examples=exs)
+        def cache_hook(examples):
+            self.cacher.recache_zs_attr_features(concept, examples=examples)
+
+            if not self.config.use_concept_predictors_for_concept_components: # Using fixed scores for concept-image pairs
+                self.cacher.recache_component_concept_scores(concept, examples=examples)
 
         if stopping_condition == 'n_epochs' or len(self.concepts) <= 1:
             if len(self.concepts) == 1:

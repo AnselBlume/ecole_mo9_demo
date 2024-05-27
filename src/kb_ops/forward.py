@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from image_processing import LocalizeAndSegmentOutput
 from torch.utils.data import DataLoader, Dataset
 from model.concept import ConceptKB, Concept, ConceptPredictorOutput
-from .feature_cache import CachedImageFeatures
+from .caching import CachedImageFeatures
 from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset, FeatureDataset
 from .feature_pipeline import ConceptKBFeaturePipeline
 from typing import Union, Optional
@@ -48,30 +48,9 @@ class ConceptKBForwardBase:
         self.recompute_labels()
         self.feature_pipeline = feature_pipeline
 
-    def _get_dataloader(self, dataset: Dataset, is_train: bool, **dl_kwargs):
-        kwargs = {
-            'batch_size': 1,
-            'shuffle': is_train,
-            'collate_fn': list_collate,
-            'num_workers': 0,
-            'pin_memory': True,
-            # 'persistent_workers': True
-        }
-
-        kwargs.update(dl_kwargs)
-
-        return DataLoader(dataset, **kwargs)
-
-    def _determine_data_key(self, dataset: Union[ImageDataset, PresegmentedDataset, FeatureDataset]):
-        if isinstance(dataset, FeatureDataset):
-            return 'features'
-
-        elif isinstance(dataset, PresegmentedDataset):
-            return 'segmentations'
-
-        else:
-            assert isinstance(dataset, ImageDataset)
-            return 'image'
+    @property
+    def compute_component_concept_scores_from_concept_predictors(self):
+        return not self.feature_pipeline.compute_component_concept_scores
 
     def recompute_labels(self):
         '''
@@ -124,14 +103,15 @@ class ConceptKBForwardBase:
         curr_loss = 0
         outputs = []
 
-        # Cache to avoid recomputation for each image
-        cached_features = None
+        cached_features = None # Cache to avoid recomputation for each image
 
-        # TODO store the component concept scores
-        is_computing_component_concept_scores_from_concept_predictors = not self.feature_pipeline.compute_component_concept_scores
+        concepts = list(self.concept_kb) if concepts is None else concepts
+        concept_scores = {}
+        concepts_for_forward = self._get_concepts_for_forward_pass(concepts)
+        concepts_for_loss = set(concepts)
 
-        concepts = concepts if concepts else self.concept_kb
-        for i, concept in enumerate(concepts, start=1):
+        n_concepts_for_loss_processed = 0 # How many concepts intended for loss computation have been processed
+        for concept in concepts_for_forward:
             if features_were_provided:
                 device = concept.predictor.img_features_predictor.weight.device
                 features = image_data.get_concept_predictor_features(concept.name).to(device)
@@ -150,38 +130,50 @@ class ConceptKBForwardBase:
                     cached_features.update_concept_predictor_features( # Store zero-shot attributes and potentially component concept scores
                         concept,
                         features,
-                        store_component_concept_scores=not is_computing_component_concept_scores_from_concept_predictors
+                        store_component_concept_scores=self.compute_component_concept_scores_from_concept_predictors
                     )
 
-            if is_computing_component_concept_scores_from_concept_predictors:
-                # TODO set from stored value
-                pass
+            # If computing component concept scores from concept predictors, retrieve from stored values
+            if self.compute_component_concept_scores_from_concept_predictors:
+                if concept.component_concepts:
+                    component_concept_scores = torch.stack([concept_scores[component_name] for component_name in concept.component_concepts])[None,:] # (1, n_components)
+                else:
+                    component_concept_scores = torch.tensor([[]], device=features.image_features.device)
+
+                features.component_concept_scores = component_concept_scores
 
             # Compute concept predictor outputs
-            output: ConceptPredictorOutput = concept.predictor(features)
+            is_concept_for_loss = concept in concepts_for_loss
+            with torch.set_grad_enabled(torch.is_grad_enabled() and is_concept_for_loss):
+                output: ConceptPredictorOutput = concept.predictor(features)
+
             score = output.cum_score
+            concept_scores[concept.name] = score.detach()
 
             # Compute loss and potentially perform backward pass
-            if text_label is not None:
+            if text_label is not None and is_concept_for_loss:
                 binary_label = torch.tensor(int(text_label in self.concept_labels[concept.name]), dtype=score.dtype, device=score.device)
-                concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(self.concept_kb)
+                concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(concepts_for_loss)
 
                 # To prevent loss saturation due to sigmoid
                 if set_score_to_zero:
                     score = output.cum_score - output.cum_score.detach()
-                    concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(self.concept_kb)
+                    concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(concepts_for_loss)
 
                 curr_loss += concept_loss
                 total_loss += concept_loss.item()
 
-            outputs.append(output.to('cpu'))
+            outputs.append(output.cpu())
 
-            if (
-                do_backward and backward_every_n_concepts is not None
-                and (i % backward_every_n_concepts == 0 or i == len(concepts))
-            ):
-                curr_loss.backward()
-                curr_loss = 0
+            if is_concept_for_loss:
+                n_concepts_for_loss_processed += 1
+
+                if (
+                    do_backward and backward_every_n_concepts is not None
+                    and (n_concepts_for_loss_processed % backward_every_n_concepts == 0 or n_concepts_for_loss_processed == len(concepts_for_loss))
+                ):
+                    curr_loss.backward()
+                    curr_loss = 0
 
         if do_backward and backward_every_n_concepts is None: # Backward if we weren't doing it every K concepts
             curr_loss.backward()
@@ -198,3 +190,35 @@ class ConceptKBForwardBase:
             forward_output.segmentations = segmentations
 
         return forward_output
+
+    def _get_concepts_for_forward_pass(self, concepts: list[Concept]) -> list[Concept]:
+        if self.compute_component_concept_scores_from_concept_predictors:
+            concepts = self.concept_kb.get_component_concept_subgraph(concepts)
+            concepts = self.concept_kb.in_component_order(concepts)
+
+        return concepts
+
+    def _get_dataloader(self, dataset: Dataset, is_train: bool, **dl_kwargs):
+        kwargs = {
+            'batch_size': 1,
+            'shuffle': is_train,
+            'collate_fn': list_collate,
+            'num_workers': 0,
+            'pin_memory': True,
+            # 'persistent_workers': True
+        }
+
+        kwargs.update(dl_kwargs)
+
+        return DataLoader(dataset, **kwargs)
+
+    def _determine_data_key(self, dataset: Union[ImageDataset, PresegmentedDataset, FeatureDataset]):
+        if isinstance(dataset, FeatureDataset):
+            return 'features'
+
+        elif isinstance(dataset, PresegmentedDataset):
+            return 'segmentations'
+
+        else:
+            assert isinstance(dataset, ImageDataset)
+            return 'image'

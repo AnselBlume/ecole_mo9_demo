@@ -219,7 +219,8 @@ class ConceptKBFeatureCacher:
     def recache_component_concept_scores(self, concept: Concept, examples: list[ConceptExample] = None):
         '''
             Recaches component concept scores for the specified Concept across all Concepts' examples in the
-            ConceptKB.
+            ConceptKB. Automatically computes scores only for concepts which are not already cached (handled in
+            call to ConceptKBFeaturePipeline._get_component_concept_scores).
 
             NOTE Should be called ONLY if the component concept scores are fixed for a given concept-image pair
             (e.g. when using a fixed model, like DesCo, to compute the scores).

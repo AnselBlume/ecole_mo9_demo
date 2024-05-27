@@ -11,7 +11,7 @@ class ConceptPredictorFeatures(ImageFeatures):
     zs_attr_img_scores: torch.Tensor = None # (1, n_zs_attrs)
     zs_attr_region_scores: torch.Tensor = None # (n_regions, n_zs_attrs)
 
-    component_concept_scores: torch.Tensor = None # (1, n_component_concepts,)
+    component_concept_scores: torch.Tensor = None # (1, n_component_concepts)
 
 @dataclass
 class ConceptPredictorOutput:
@@ -131,8 +131,8 @@ class ConceptPredictor(nn.Module):
         self.img_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if n_zs_attrs else nn.Identity()
         self.regions_zs_attr_weights = Hadamard(n_zs_attrs, bias=use_bias) if n_zs_attrs else nn.Identity()
 
-        # We will try to detect component concepts solely from the full image, not from regions
-        self.component_concept_weights = self.set_num_component_concepts(n_component_concepts)
+        # Detect component concepts solely from the full image, not from regions
+        self.set_num_component_concepts(n_component_concepts)
 
         self.feature_groups = nn.ModuleDict()
 
@@ -280,4 +280,4 @@ class ConceptPredictor(nn.Module):
 
     def set_num_component_concepts(self, n_component_concepts: int):
         self.n_component_concepts = n_component_concepts
-        self.component_concept_predictor = Hadamard(n_component_concepts, bias=self.use_bias) if n_component_concepts else nn.Identity()
+        self.component_concept_weights = Hadamard(n_component_concepts, bias=self.use_bias) if n_component_concepts else nn.Identity()

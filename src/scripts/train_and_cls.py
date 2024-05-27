@@ -13,6 +13,7 @@ from model.concept import ConceptKBConfig
 from kb_ops.train_test_split import split
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
 from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline
+from model.concept import ConceptKB
 import logging, coloredlogs
 from feature_extraction.trained_attrs import N_ATTRS_DINO
 from kb_ops.train import ConceptKBTrainer
@@ -77,14 +78,14 @@ def parse_args(cl_args: list[str] = None, config_str: str = None):
 
     return args, parser
 
-def main(args: argparse.Namespace, parser: argparse.ArgumentParser):
+def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: ConceptKB = None):
     # %%
     run = wandb.init(project='ecole_mo9_demo', config=args.as_flat(), dir=args.wandb_dir, reinit=True)
     # run = None # Comment me to use wandb
 
     # %% Initialize concept KB
     label_extractor = label_from_path if args.extract_label_from == 'path' else label_from_directory
-    concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor)
+    concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor) if concept_kb is None else concept_kb
 
     if args.train.use_global_negatives:
         add_global_negatives(concept_kb, args.negatives_img_dir, limit=args.train.limit_global_negatives)
