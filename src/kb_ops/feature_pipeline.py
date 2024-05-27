@@ -2,7 +2,7 @@ import torch
 from image_processing import LocalizerAndSegmenter, LocalizeAndSegmentOutput
 from model.concept import ConceptKB, Concept, ConceptPredictorFeatures
 from model.features import ImageFeatures
-from kb_ops.feature_cache import CachedImageFeatures
+from kb_ops.caching import CachedImageFeatures
 from feature_extraction import FeatureExtractor
 from typing import Union
 from PIL.Image import Image

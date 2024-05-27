@@ -14,7 +14,7 @@ from feature_extraction import build_feature_extractor, build_sam, build_desco, 
 from image_processing import build_localizer_and_segmenter
 from kb_ops import ConceptKBFeaturePipeline, ConceptKBFeatureCacher, add_global_negatives
 from feature_extraction.trained_attrs import N_ATTRS_DINO
-from kb_ops.feature_cache import CachedImageFeatures
+from kb_ops.caching import CachedImageFeatures
 from controller import Controller
 from model.attribute import Attribute
 from kb_ops import CLIPConceptRetriever
