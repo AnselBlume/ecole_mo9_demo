@@ -68,6 +68,7 @@ def parse_args(cl_args: list[str] = None, config_str: str = None):
 
     parser.add_argument('--train.use_concepts_as_negatives', type=bool, default=False, help='Whether to use other concepts as negatives')
     parser.add_argument('--train.use_global_negatives', type=bool, default=True, help='Whether to use global negative examples during training')
+    parser.add_argument('--train.limit_global_negatives', type=int, help='The number of global negative examples to use during training. If None, uses all')
 
     if config_str:
         args = parser.parse_string(config_str)
@@ -76,10 +77,7 @@ def parse_args(cl_args: list[str] = None, config_str: str = None):
 
     return args, parser
 
-# %%
-if __name__ == '__main__':
-    args, parser = parse_args()
-
+def main(args: argparse.Namespace, parser: argparse.ArgumentParser):
     # %%
     run = wandb.init(project='ecole_mo9_demo', config=args.as_flat(), dir=args.wandb_dir, reinit=True)
     # run = None # Comment me to use wandb
@@ -89,7 +87,7 @@ if __name__ == '__main__':
     concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor)
 
     if args.train.use_global_negatives:
-        add_global_negatives(concept_kb, args.negatives_img_dir)
+        add_global_negatives(concept_kb, args.negatives_img_dir, limit=args.train.limit_global_negatives)
 
     # Import here so DesCo sees the CUDA device change
     from feature_extraction import (
@@ -184,3 +182,8 @@ if __name__ == '__main__':
     )
 
 # %%
+
+# %%
+if __name__ == '__main__':
+    args, parser = parse_args()
+    main(args, parser)
