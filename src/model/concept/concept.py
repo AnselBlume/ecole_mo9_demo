@@ -84,3 +84,6 @@ class Concept:
     )
 
     examples: list[ConceptExample] = field(default_factory=list, metadata={'help': 'Stored example data'})
+
+    def __hash__(self) -> int:
+        return hash(self.name)
