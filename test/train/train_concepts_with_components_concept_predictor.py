@@ -23,7 +23,7 @@ def train_in_tandem():
 
     cache_root = 'temp_cache_delete_me'
     args, parser = parse_args(config_str=f'''
-        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test
+        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/march_demo_test
         extract_label_from: directory
 
         cache:
@@ -55,7 +55,7 @@ def train_in_tandem():
     main(args, parser, concept_kb=concept_kb)
 
 def train_sequential():
-    img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test'
+    img_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/march_demo_test'
     negatives_img_dir = '/shared/nas2/blume5/fa23/ecole/data/imagenet/negatives_rand_1k'
 
     # Remove possible previously cached features so as not to interfere with test

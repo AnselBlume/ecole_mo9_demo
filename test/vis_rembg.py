@@ -31,8 +31,8 @@ def get_paths(root_dir: str):
 
 # %%
 if __name__ == '__main__':
-    root_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test'
-    out_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test_rembg'
+    root_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/march_demo_test'
+    out_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/march_demo_test_rembg'
 
     model_name = 'isnet-general-use'
     close_plots = False

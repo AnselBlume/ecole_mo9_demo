@@ -58,10 +58,10 @@ if __name__ == '__main__':
     controller = Controller(loc_and_seg, concept_kb, feature_extractor, retriever=retriever, cacher=cacher)
 
     # %% Set target image for visualization that will not be trained on
-    target_img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test/tank/m1_abrams.jpg'
+    target_img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/march_demo_test/tank/m1_abrams.jpg'
 
     # %% Prepare tank
-    img_dir1 = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test/tank'
+    img_dir1 = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/march_demo_test/tank'
     concept1_name = 'tank'
     cache_dir1 = '/shared/nas2/blume5/fa23/ecole/cache/tank'
 
@@ -73,7 +73,7 @@ if __name__ == '__main__':
     controller.train_concept(concept1_name, n_epochs=20)
 
     # %% Prepare track
-    img_dir2 = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/demo_test/track'
+    img_dir2 = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/march_demo_test/track'
     concept2_name = 'track'
     cache_dir2 = '/shared/nas2/blume5/fa23/ecole/cache/track'
 
