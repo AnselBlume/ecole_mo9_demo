@@ -105,7 +105,7 @@ class ConceptKBForwardBase:
 
         cached_features = None # Cache to avoid recomputation for each image
 
-        concepts = list(self.concept_kb) if concepts is None else concepts
+        concepts = list(self.concept_kb) if not concepts else concepts
         concept_scores = {}
         concepts_for_forward = self._get_concepts_for_forward_pass(concepts)
         concepts_for_loss = set(concepts)

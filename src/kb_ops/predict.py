@@ -24,7 +24,12 @@ class ConceptKBPredictor(ConceptKBForwardBase):
         root_concepts: list[Concept] = None,
         unk_threshold: float = 0.,
         **forward_kwargs
-    ):
+    ) -> Union[list[dict], list[list[dict]]]:
+        '''
+            If image_data is not None, returns a list of prediction dicts delineating the prediction path down through the tree.
+            If predict_dl is not None, returns a list of lists of prediction dicts, where each list corresponds to the prediction
+                path for each example in the DataLoader.
+        '''
         if image_data:
             prediction_path = []
             pool = root_concepts if root_concepts else self.concept_kb.root_concepts
@@ -83,6 +88,7 @@ class ConceptKBPredictor(ConceptKBForwardBase):
         predictions = []
 
         if leaf_nodes_only:
+            assert 'concepts' not in forward_kwargs, 'Cannot specify concepts with leaf_nodes_only=True'
             forward_kwargs['concepts'] = self.concept_kb.leaf_concepts
 
         def process_outputs(outputs: dict):

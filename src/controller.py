@@ -76,7 +76,14 @@ class Controller:
         self.cached_predictions = []
         self.cached_images = []
 
-    def predict_concept(self, image: Image = None, loc_and_seg_output: LocalizeAndSegmentOutput = None, unk_threshold: float = .1) -> dict:
+    def predict_concept(
+        self,
+        image: Image = None,
+        loc_and_seg_output: LocalizeAndSegmentOutput = None,
+        unk_threshold: float = .1,
+        leaf_nodes_only: bool = True,
+        restrict_to_concepts: list[str] = []
+    ) -> dict:
         '''
         Predicts the concept of an image and returns the predicted label and a plot of the predicted classes.
 
@@ -85,10 +92,18 @@ class Controller:
         # TODO Predict with loc_and_seg_output if provided; for use with modified segmentations/background removals
         self.cached_images.append(image)
 
+        if restrict_to_concepts:
+            assert not leaf_nodes_only, 'Specifying concepts to restrict prediction to is only supported when leaf_nodes_only=False.'
+            concepts = [self.retrieve_concept(concept_name) for concept_name in restrict_to_concepts]
+        else:
+            concepts = None
+
         prediction = self.predictor.predict(
             image_data=image,
             unk_threshold=unk_threshold,
-            return_segmentations=True
+            return_segmentations=True,
+            leaf_nodes_only=leaf_nodes_only,
+            concepts=concepts
         )
 
         self.cached_predictions.append(prediction)
@@ -100,6 +115,20 @@ class Controller:
             'predicted_label': predicted_label,
             'plot': img
         }
+
+    def predict_hierarchical(self, image: Image, unk_threshold: float = .1) -> list[dict]:
+        return self.predictor.hierarchical_predict(image_data=image, unk_threshold=unk_threshold)
+
+    def predict_from_subtree(self, image: Image, root_concept_name: str, unk_threshold: float = .1) -> list[dict]:
+        root_concept = self.retrieve_concept(root_concept_name)
+        return self.predictor.hierarchical_predict(image_data=image, root_concepts=[root_concept], unk_threshold=unk_threshold)
+
+    def predict_root_concept(self, image: Image, unk_threshold: float = .1) -> dict:
+        results = self.predictor.hierarchical_predict(image_data=image, root_concepts=[self.concepts.root_concept], unk_threshold=unk_threshold) # list[dict]
+        return results[0] # The root concept is the first
+
+    def is_concept_in_image(self, image: Image, concept_name: str, unk_threshold: float = .1) -> bool:
+        return self.predict_concept(image, unk_threshold=unk_threshold, leaf_nodes_only=False, restrict_to_concepts=[concept_name])
 
     def localize_and_segment(
         self,
@@ -229,8 +258,6 @@ class Controller:
             concept.predictor.to(next(self.concepts.parameters()).device) # Assumes all concepts are on the same device
         else: # Assume there aren't any other initialized concept predictors
             concept.predictor.cuda()
-
-        # TODO Determine if it has any obvious parent or child concepts
 
         self.concepts.add_concept(concept)
         self.retriever.add_concept(concept)
@@ -396,6 +423,34 @@ class Controller:
                 raise RuntimeError(f'No concept found for "{concept_name}".')
 
             return retrieved_concept.concept
+
+    def add_hyponym(self, child_name: str, parent_name: str, child_max_retrieval_distance: float = 0.):
+        parent = self.retrieve_concept(parent_name)
+
+        try:
+            child = self.retrieve_concept(child_name, max_retrieval_distance=child_max_retrieval_distance)
+        except RuntimeError:
+            child = self.add_concept(child_name, parent_concept_names=[parent_name])
+
+        parent.child_concepts[child.name] = child
+        child.parent_concepts[parent.name] = parent
+
+    def add_component_concept(self, component_concept_name: str, concept_name: str, component_max_retrieval_distance: float = 0.):
+        concept = self.retrieve_concept(concept_name)
+
+        try:
+            component = self.retrieve_concept(component_concept_name, max_retrieval_distance=component_max_retrieval_distance)
+        except RuntimeError:
+            component = self.add_concept(component_concept_name)
+
+        concept.component_concepts[component.name] = component
+        concept.predictor.set_num_component_concepts(len(concept.component_concepts))
+
+    def add_concept_negatives(self, concept_name: str, negatives: list[ConceptExample]):
+        assert all(negative.is_negative for negative in negatives), 'All ConceptExamples must have is_negative=True.'
+
+        concept = self.retrieve_concept(concept_name)
+        concept.examples.extend(negatives)
 
     def add_zs_attribute(self, concept_name: str, zs_attr_name: str, weight: float):
         pass
