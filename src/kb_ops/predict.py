@@ -23,26 +23,41 @@ class ConceptKBPredictor(ConceptKBForwardBase):
         image_data: Union[Image, LocalizeAndSegmentOutput, CachedImageFeatures] = None,
         root_concepts: list[Concept] = None,
         unk_threshold: float = 0.,
+        include_component_concepts: bool = False,
         **forward_kwargs
     ) -> Union[list[dict], list[list[dict]]]:
         '''
             If image_data is not None, returns a list of prediction dicts delineating the prediction path down through the tree.
             If predict_dl is not None, returns a list of lists of prediction dicts, where each list corresponds to the prediction
                 path for each example in the DataLoader.
+
+            The final prediction dictionary in a prediction path may be below the unk_threshold, in which case the prediction
+            is "unknown" if the prediction path has length 1, or the prediction is the dictionary at index -2.
+
+            If the final prediction dictionary is above the unk_threshold, the dictionary represents the prediction.
         '''
         if image_data:
-            prediction_path = []
-            pool = root_concepts if root_concepts else self.concept_kb.root_concepts
+            component_concepts = set(self.concept_kb.component_concepts)
+            def filter_component_concepts(pool: list[Concept]):
+                return [concept for concept in pool if concept not in component_concepts]
 
-            while True:
+            prediction_path = []
+
+            pool = root_concepts if root_concepts else self.concept_kb.root_concepts
+            if not include_component_concepts:
+                pool = filter_component_concepts(pool)
+
+            while pool: # While we can go deeper down the hierarchy
                 prediction = self.predict(image_data=image_data, unk_threshold=unk_threshold, concepts=pool, **forward_kwargs)
                 prediction_path.append(prediction)
 
                 maximizing_concept = self.concept_kb[prediction['predicted_label']]
-                if prediction['is_below_unk_threshold'] or not maximizing_concept.child_concepts:
+                if prediction['is_below_unk_threshold']: # If predicted unknown, stop here
                     break
 
                 pool = maximizing_concept.child_concepts.values()
+                if not include_component_concepts:
+                    pool = filter_component_concepts(pool)
 
             return prediction_path
 
@@ -73,6 +88,7 @@ class ConceptKBPredictor(ConceptKBForwardBase):
         image_data: Union[Image, LocalizeAndSegmentOutput, CachedImageFeatures] = None,
         unk_threshold: float = 0.,
         leaf_nodes_only: bool = True,
+        include_component_concepts: bool = False,
         **forward_kwargs
     ) -> Union[list[dict], dict]:
         '''
@@ -90,6 +106,12 @@ class ConceptKBPredictor(ConceptKBForwardBase):
         if leaf_nodes_only:
             assert 'concepts' not in forward_kwargs, 'Cannot specify concepts with leaf_nodes_only=True'
             forward_kwargs['concepts'] = self.concept_kb.leaf_concepts
+
+        if not include_component_concepts:
+            concepts = forward_kwargs.pop('concepts', self.concept_kb)
+            component_concepts = set(self.concept_kb.component_concepts)
+            concepts_minus_component_concepts = [concept for concept in concepts if concept not in component_concepts]
+            forward_kwargs['concepts'] = concepts_minus_component_concepts
 
         def process_outputs(outputs: dict):
             # Compute predictions
