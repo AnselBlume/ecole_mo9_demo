@@ -39,8 +39,7 @@ def add_parent(parent_name: Concept, child_names: list[str], concept_kb: Concept
 
     for child_name in child_names:
         child = concept_kb[child_name]
-        parent.child_concepts[child_name] = child
-        child.parent_concepts[parent_name] = parent
+        parent.add_child_concept(child) # This set's the child's parent pointer as well
 
     return parent
 

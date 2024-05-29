@@ -95,18 +95,18 @@ class Concept:
     def __hash__(self) -> int:
         return hash(self.name)
 
-    def set_parent_concept(self, parent: Concept):
+    def add_parent_concept(self, parent: Concept):
         self.parent_concepts[parent.name] = parent
         parent.child_concepts[self.name] = self
 
-    def set_child_concept(self, child: Concept):
+    def add_child_concept(self, child: Concept):
         self.child_concepts[child.name] = child
         child.parent_concepts[self.name] = self
 
-    def set_containing_concept(self, containing: Concept):
+    def add_containing_concept(self, containing: Concept):
         self.containing_concepts[containing.name] = containing
         containing.component_concepts[self.name] = self
 
-    def set_component_concept(self, component: Concept):
+    def add_component_concept(self, component: Concept):
         self.component_concepts[component.name] = component
         component.containing_concepts[self.name] = self
