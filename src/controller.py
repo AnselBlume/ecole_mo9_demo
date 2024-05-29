@@ -212,6 +212,7 @@ class Controller:
         concept: Concept = None,
         parent_concept_names: list[str] = [],
         child_concept_names: list[str] = [],
+        containing_concept_names: list[str] = [],
         component_concept_names: list[str] = [],
         use_singular_name: bool = True
     ):
@@ -232,17 +233,22 @@ class Controller:
 
         # Add relations if concept_name was provided instead of Concept object
         if concept_name is not None:
+            # These setters set the parent and child / component and containing concepts simultaneously
             for parent_name in parent_concept_names:
                 parent_concept = self.retrieve_concept(parent_name)
-                concept.parent_concepts[parent_name] = parent_concept
+                concept.set_parent_concept(parent_concept)
 
             for child_name in child_concept_names:
                 child_concept = self.retrieve_concept(child_name)
-                concept.child_concepts[child_name] = child_concept
+                concept.set_child_concept(child_concept)
+
+            for containing_name in containing_concept_names:
+                containing_concept = self.retrieve_concept(containing_name)
+                concept.set_containing_concept(containing_concept)
 
             for component_name in component_concept_names:
                 component_concept = self.retrieve_concept(component_name)
-                concept.component_concepts[component_name] = component_concept
+                concept.set_component_concept(component_concept)
 
         # Get zero shot attributes (query LLM)
         self.concepts.init_zs_attrs(
@@ -432,8 +438,7 @@ class Controller:
         except RuntimeError:
             child = self.add_concept(child_name, parent_concept_names=[parent_name])
 
-        parent.child_concepts[child.name] = child
-        child.parent_concepts[parent.name] = parent
+        child.set_parent_concept(parent) # This sets the parent's child pointer as well
 
     def add_component_concept(self, component_concept_name: str, concept_name: str, component_max_retrieval_distance: float = 0.):
         concept = self.retrieve_concept(concept_name)
@@ -443,7 +448,7 @@ class Controller:
         except RuntimeError:
             component = self.add_concept(component_concept_name)
 
-        concept.component_concepts[component.name] = component
+        concept.set_component_concept(component)
         concept.predictor.set_num_component_concepts(len(concept.component_concepts))
 
     def add_concept_negatives(self, concept_name: str, negatives: list[ConceptExample]):

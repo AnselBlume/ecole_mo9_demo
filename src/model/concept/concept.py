@@ -60,6 +60,7 @@ class Concept:
     name: str = ''
 
     # str --> Concept instead of list[Concept] to allow different namings of the same concept
+    # Instance relations
     parent_concepts: dict[str,Concept] = field(
         default_factory=dict,
         metadata={'help': 'Dictionary of parent concepts. Keys are parent names (as described by this Concept), values are parent concepts.'}
@@ -67,6 +68,12 @@ class Concept:
     child_concepts: dict[str,Concept] = field(
         default_factory=dict,
         metadata={'help': 'Dictionary of child concepts. Keys are child names (as described by this Concept), values are child concepts.'}
+    )
+
+    # Component relations
+    containing_concepts: dict[str,Concept] = field(
+        default_factory=dict,
+        metadata={'help': 'Dictionary of containing concepts. Keys are containing concept names (as described by this Concept), values are containing concepts.'}
     )
     component_concepts: dict[str,Concept] = field(
         default_factory=dict,
@@ -87,3 +94,19 @@ class Concept:
 
     def __hash__(self) -> int:
         return hash(self.name)
+
+    def set_parent_concept(self, parent: Concept):
+        self.parent_concepts[parent.name] = parent
+        parent.child_concepts[self.name] = self
+
+    def set_child_concept(self, child: Concept):
+        self.child_concepts[child.name] = child
+        child.parent_concepts[self.name] = self
+
+    def set_containing_concept(self, containing: Concept):
+        self.containing_concepts[containing.name] = containing
+        containing.component_concepts[self.name] = self
+
+    def set_component_concept(self, component: Concept):
+        self.component_concepts[component.name] = component
+        component.containing_concepts[self.name] = self
