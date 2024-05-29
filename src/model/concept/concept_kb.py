@@ -55,33 +55,21 @@ class ConceptKB:
     @property
     def component_concepts(self) -> list[Concept]:
         '''
-            Gets concepts which are components of another Concept (component relation), or which are connected to
-            a component concept via parent/child relations.
+            Gets concepts which are components of another Concept (component relation), or which are
+            descendants of a component concept via child relations.
         '''
         # Get all component concepts
         components = {} # Maintain order with dictionary
         for concept in self.concepts:
             components.update(dict.fromkeys(concept.component_concepts.values()))
 
-        # Get all concepts connected to component concepts via parent/child relations
-        def get_reachable_concepts(concept: Concept) -> list[Concept]:
-            visited = {}
-            queue = [concept]
-            while queue:
-                curr = queue.pop()
-                if curr.name not in visited:
-                    visited[curr.name] = curr
-                    queue.extend(curr.child_concepts.values())
-                    queue.extend(curr.parent_concepts.values())
-
-            return list(visited.values())
-
-        concepts_connected_to_components = {}
+        # Get all descendants of a component concept
+        descendants_of_components = {}
         for component_concept in components:
-            reachable_concepts = get_reachable_concepts(component_concept)
-            concepts_connected_to_components.update(dict.fromkeys(reachable_concepts))
+            descendants = self.rooted_subtree(component_concept)
+            descendants_of_components.update(dict.fromkeys(descendants))
 
-        return list(concepts_connected_to_components.keys())
+        return list(descendants_of_components.keys())
 
     @property
     def concepts(self) -> list[Concept]:

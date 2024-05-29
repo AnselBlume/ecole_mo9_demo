@@ -16,9 +16,11 @@ def test_component_concepts_property():
         Instance Relations:
             A --> A3
             A3 --> A4
+            A4 --> A5
             B --> B1, B2
             C -> C1
     '''
+    A5 = Concept('A5')
     A4 = Concept('A4')
     A3 = Concept('A3')
     A2 = Concept('A2')
@@ -31,6 +33,7 @@ def test_component_concepts_property():
 
     A.add_child_concept(A3)
     A3.add_child_concept(A4)
+    A4.add_child_concept(A5)
 
     B2 = Concept('B2')
     B1 = Concept('B1')
@@ -49,7 +52,7 @@ def test_component_concepts_property():
     D1 = Concept('D1')
     D.add_component_concept(D1)
 
-    concepts = [A4, A3, A2, A1, A, B1, B2, B, C, D, D1]
+    concepts = [A5, A4, A3, A2, A1, A, B1, B2, B, C, C1, D, D1]
     concept_kb = ConceptKB(concepts=concepts)
 
-    assert set(concept_kb.component_concepts) == {A, A1, A2, A3, A4, B, B1, B2, D1}
+    assert set(concept_kb.component_concepts) == {A1, A2, A3, A4, A5, B1, D1}
