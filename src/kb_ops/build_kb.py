@@ -62,7 +62,7 @@ def kb_from_img_dir(
         if label not in kb:
             kb.add_concept(Concept(label))
 
-        kb.get_concept(label).examples.append(ConceptExample(image_path=path))
+        kb.get_concept(label).examples.append(ConceptExample(concept_name=label, image_path=path))
 
     return kb
 
