@@ -1,6 +1,7 @@
 # %%
 import os # Change DesCo CUDA device here
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+if __name__ == '__main__':
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 # Prepend to path so starts searching at src first
 import sys
@@ -23,7 +24,6 @@ from itertools import chain
 from scripts.utils import set_feature_paths, get_timestr
 
 logger = logging.getLogger(__name__)
-coloredlogs.install(level=logging.INFO)
 
 def parse_args(parser: argparse.ArgumentParser, cl_args: list[str] = None, config_str: str = None) -> argparse.Namespace:
     if config_str:
@@ -206,6 +206,7 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
 
 # %%
 if __name__ == '__main__':
+    coloredlogs.install(level=logging.INFO)
     parser = get_parser()
     args = parse_args(parser)
     main(args, parser)

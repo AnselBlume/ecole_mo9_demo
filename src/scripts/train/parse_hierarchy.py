@@ -2,6 +2,7 @@ import yaml
 from dataclasses import dataclass
 from model.concept import ConceptKB, Concept
 import logging
+import json
 
 logger = logging.getLogger(__file__)
 
@@ -21,12 +22,12 @@ class ConceptGraph:
 
         for concept_name in graph_concepts: # Ensure all concepts in the graph are in the KB
             if concept_name not in concept_kb:
-                logger.info(f'Adding concept {concept_name} to KB')
+                logger.debug(f'Adding concept {concept_name} to KB')
                 concept_kb.add_concept(Concept(concept_name))
 
         for concept in concept_kb: # Remove concepts not in the graph
             if concept.name not in graph_concepts:
-                logger.info(f'Removing concept {concept.name} from KB')
+                logger.debug(f'Removing concept {concept.name} from KB')
                 concept_kb.remove_concept(concept)
 
     def apply_instance_graph(self, concept_kb: ConceptKB):
@@ -34,10 +35,19 @@ class ConceptGraph:
             concept.child_concepts.clear()
             concept.parent_concepts.clear()
 
+        concept_set = set(self.concepts)
         for concept_name, children in self.instance_graph.items():
+            if concept_name not in concept_set:
+                logger.debug(f'Parent concept {concept_name} not in concept set but is in instance graph; skipping')
+                continue
+
             concept = concept_kb[concept_name]
 
             for child_name in children:
+                if child_name not in concept_set:
+                    logger.debug(f'Child concept {child_name} not in concept set but is in instance graph; skipping')
+                    continue
+
                 child = concept_kb[child_name]
                 concept.add_child_concept(child)
 
@@ -46,10 +56,19 @@ class ConceptGraph:
             concept.component_concepts.clear()
             concept.containing_concepts.clear()
 
+        concept_set = set(self.concepts)
         for concept_name, components in self.component_graph.items():
+            if concept_name not in concept_set:
+                logger.debug(f'Containing concept {concept_name} not in concept set but is in component graph; skipping')
+                continue
+
             concept = concept_kb[concept_name]
 
             for component_name in components:
+                if component_name not in concept_set:
+                    logger.debug(f'Component concept {component_name} not in concept set but is in component graph; skipping')
+                    continue
+
                 component = concept_kb[component_name]
                 concept.add_component_concept(component)
 
@@ -63,10 +82,15 @@ class ConceptGraphParser:
 
         if path:
             with open(path, 'r') as f:
-                hierarchy_dict = yaml.safe_load(f)
+                try:
+                    hierarchy_dict = yaml.safe_load(f)
+                except:
+                    hierarchy_dict = json.load(f)
         elif string:
-            hierarchy_dict: dict = yaml.safe_load(string)
-
+            try:
+                hierarchy_dict = yaml.safe_load(string)
+            except:
+                hierarchy_dict = json.load(string)
         else:
             hierarchy_dict = config
 

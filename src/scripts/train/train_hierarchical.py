@@ -13,7 +13,6 @@ from scripts.train.train_and_cls import main, parse_args, get_parser as get_base
 from scripts.train.parse_hierarchy import ConceptGraphParser
 
 logger = logging.getLogger(__name__)
-coloredlogs.install(level=logging.INFO)
 
 def get_parser():
     parser = get_base_parser()
@@ -23,41 +22,48 @@ def get_parser():
     return parser
 
 if __name__ == '__main__':
+    coloredlogs.install(level=logging.DEBUG)
+
     parser = get_parser()
     args = parse_args(parser, config_str='''
-        # img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1
-        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1_tiny
+        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1
+
+        # img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1_tiny
+        train:
+            # limit_global_negatives: 5
+            split: [.7, .2, .1]
+            n_epochs: 50
+
         extract_label_from: directory
         cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v1/initial_run
         wandb_project: ecole_june_demo_2024
 
-        train:
-            limit_global_negatives: 5
 
         hierarchy_config:
             concepts:
                 - airplane
                 - commercial aircraft
-                - cargo jet
+                # - cargo jet
                 - passenger jet
-                - biplane
+                # - biplane
                 - fighter jet
 
                 # Component concepts
                 - propulsion component
                 - wings
                 - wing-mounted engine
-                - bulky fuselage
+                # - bulky fuselage
+                # - openable nose
                 - row of windows
-                - double wings
-                - fixed landing gear
-                - propeller
+                # - double wings
+                # - fixed landing gear
+                # - propeller
                 - afterburner
-                - openable nose
 
             instance_graph:
                 airplane: ['commercial aircraft', 'biplane', 'fighter jet']
                 commercial aircraft: ['cargo jet', 'passenger jet']
+
                 propulsion component: ['wing-mounted engine', 'afterburner', 'propeller']
                 wings: ['double wings']
 
