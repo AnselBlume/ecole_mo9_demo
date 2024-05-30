@@ -1,6 +1,5 @@
 import os
 import torch
-import torch.nn.functional as F
 from model.concept import ConceptKB, Concept, ConceptExample
 from wandb.sdk.wandb_run import Run
 from dataclasses import dataclass, field
@@ -13,90 +12,9 @@ import numpy as np
 from tqdm import tqdm
 import logging
 from .forward import ConceptKBForwardBase, ForwardOutput, DictDataClass
+from.example_sampler import ConceptKBExampleSampler
 
 logger = logging.getLogger(__name__)
-
-class ConceptKBExampleSampler:
-    def __init__(
-        self,
-        concept_kb: ConceptKB,
-        random_seed: int = 42
-    ):
-        self.concept_kb = concept_kb
-        self.rng = np.random.default_rng(random_seed)
-
-    def get_all_examples(self, concepts: list[Concept]) -> tuple[list[ConceptExample], list[str]]:
-        all_examples = []
-        all_labels = []
-        for concept in concepts:
-            n_examples = len(concept.examples)
-            all_examples.extend(concept.examples)
-            all_labels.extend([concept.name] * n_examples)
-
-        return all_examples, all_labels
-
-    def sample_examples(
-        self,
-        concepts: list[Concept],
-        n_examples_per_concept: int
-    ):
-        '''
-            Samples n_examples_per_concept examples from each concept in concepts.
-        '''
-        sampled_examples = []
-        sampled_labels = []
-        for concept in concepts:
-            try:
-                examples = self.rng.choice(concept.examples, n_examples_per_concept, replace=False)
-            except ValueError:
-                logger.debug(f'Not enough examples to sample from for concept {concept.name}; using all examples')
-                examples = concept.examples
-
-            sampled_examples.extend(examples)
-
-            # Add labels
-            sampled_labels.extend([concept.name] * len(examples))
-
-        return sampled_examples, sampled_labels
-
-    def sample_negative_examples(
-        self,
-        n_pos_examples: int,
-        neg_concepts: list[Concept],
-        min_neg_ratio_per_concept: float = 1.0
-    ) -> tuple[list[ConceptExample], list[str]]:
-        '''
-            Samples negative examples from the given negative concepts, trying to match the given ratio.
-
-            Arguments:
-                n_pos_examples: Number of positive examples
-                neg_concepts: List of negative concepts to sample at least one example of each from
-                min_neg_ratio: Minimum ratio of negative examples to positive examples
-                rng: Random number generator used for sampling from negative concepts
-
-            Returns: Tuple of (sampled_examples, sampled_concept_names)
-        '''
-        # TODO Sample descendants of each negative concept if the concept is not a leaf node
-
-        # Decide how many negatives to sample per concept
-        n_neg_per_concept = max(int(min_neg_ratio_per_concept * n_pos_examples), 1)
-
-        logger.info(f'Attempting to sample {n_neg_per_concept} negative examples per concept')
-
-        sampled_examples = []
-        sampled_concept_names = []
-        for neg_concept in neg_concepts:
-            try:
-                neg_examples = self.rng.choice(neg_concept.examples, n_neg_per_concept, replace=False)
-
-            except ValueError: # Not enough negative examples
-                logger.debug(f'Not enough examples to sample from for concept {neg_concept.name}; using all examples')
-                neg_examples = neg_concept.examples
-
-            sampled_examples.extend(neg_examples)
-            sampled_concept_names.extend([neg_concept.name] * len(neg_examples))
-
-        return sampled_examples, sampled_concept_names
 
 @dataclass
 class TrainOutput(DictDataClass):
