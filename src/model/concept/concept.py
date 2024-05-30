@@ -104,14 +104,30 @@ class Concept:
         self.parent_concepts[parent.name] = parent
         parent.child_concepts[self.name] = self
 
+    def remove_parent_concept(self, parent: Concept):
+        del self.parent_concepts[parent.name]
+        del parent.child_concepts[self.name]
+
     def add_child_concept(self, child: Concept):
         self.child_concepts[child.name] = child
         child.parent_concepts[self.name] = self
+
+    def remove_child_concept(self, child: Concept):
+        del self.child_concepts[child.name]
+        del child.parent_concepts[self.name]
 
     def add_containing_concept(self, containing: Concept):
         self.containing_concepts[containing.name] = containing
         containing.component_concepts[self.name] = self
 
+    def remove_containing_concept(self, containing: Concept):
+        del self.containing_concepts[containing.name]
+        del containing.component_concepts[self.name]
+
     def add_component_concept(self, component: Concept):
         self.component_concepts[component.name] = component
         component.containing_concepts[self.name] = self
+
+    def remove_component_concept(self, component: Concept):
+        del self.component_concepts[component.name]
+        del component.containing_concepts[self.name]
