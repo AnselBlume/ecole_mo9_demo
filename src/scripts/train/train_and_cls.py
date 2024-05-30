@@ -12,7 +12,7 @@ from kb_ops.build_kb import label_from_path, label_from_directory
 from model.concept import ConceptKBConfig
 from kb_ops.train_test_split import split
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
-from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline
+from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline, ConceptKBExampleSampler
 from model.concept import ConceptKB
 import logging, coloredlogs
 from feature_extraction.trained_attrs import N_ATTRS_DINO
@@ -25,7 +25,15 @@ from scripts.utils import set_feature_paths, get_timestr
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
 
-def parse_args(cl_args: list[str] = None, config_str: str = None):
+def parse_args(parser: argparse.ArgumentParser, cl_args: list[str] = None, config_str: str = None) -> argparse.Namespace:
+    if config_str:
+        args = parser.parse_string(config_str)
+    else:
+        args = parser.parse_args(cl_args)
+
+    return args
+
+def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--config', action=argparse.ActionConfigFile)
@@ -71,16 +79,17 @@ def parse_args(cl_args: list[str] = None, config_str: str = None):
     parser.add_argument('--train.use_global_negatives', type=bool, default=True, help='Whether to use global negative examples during training')
     parser.add_argument('--train.limit_global_negatives', type=int, help='The number of global negative examples to use during training. If None, uses all')
 
-    if config_str:
-        args = parser.parse_string(config_str)
-    else:
-        args = parser.parse_args(cl_args)
+    parser.add_argument('--train.split', type=tuple[float,float,float], default=(.6, .2, .2), help='Train, val, test split ratios')
 
-    return args, parser
+    parser.add_argument('--train.use_descandants_as_positives', type=bool, default=True, help='Whether to train more general concepts (hypernyms) with its more specific instances (hyponyms)')
+    parser.add_argument('--train.negatives_strategy', choices=['use_all_concepts_as_negatives', 'use_siblings_as_negatives', 'only_positives'],
+                        default='use_siblings_as_negatives')
+
+    return parser
 
 def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: ConceptKB = None):
     # %%
-    run = wandb.init(project='ecole_mo9_demo', config=args.as_flat(), dir=args.wandb_dir, reinit=True)
+    run = wandb.init(project=args.wandb_project, config=args.as_flat(), dir=args.wandb_dir, reinit=True)
     # run = None # Comment me to use wandb
 
     # %% Initialize concept KB
@@ -131,6 +140,25 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
 
         # concept_kb.global_negatives = concept_kb.global_negatives[:10] # Comment me when not debugging
 
+    # Prepare examples
+    sampler = ConceptKBExampleSampler(concept_kb)
+
+    all_examples = list(chain.from_iterable(c.examples for c in concept_kb))
+    all_labels = list(chain.from_iterable([[c.name for _ in c.examples] for c in concept_kb])) # No way currently to indicate concept-specific negatives from files
+
+    (train_exs, train_labels), (val_exs, val_labels), (test_exs, test_labels) = split(all_examples, all_labels, split=args.train.split)
+    train_concepts_to_train_per_example = sampler.get_concepts_to_train_per_example(
+        train_exs,
+        use_descendants_as_positives=args.train.use_descandants_as_positives,
+        negatives_strategy=args.train.negatives_strategy
+    )
+
+    val_concepts_to_train_per_example = sampler.get_concepts_to_train_per_example(
+        val_exs,
+        use_descendants_as_positives=args.train.use_descandants_as_positives,
+        negatives_strategy=args.train.negatives_strategy
+    )
+
     # Pre-cache features
     cacher = ConceptKBFeatureCacher(
         concept_kb=concept_kb,
@@ -142,20 +170,12 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     cacher.cache_segmentations()
     cacher.cache_features()
 
-    # Collect all feature paths we just added
-    all_feature_paths = list(chain.from_iterable([
-        [ex.image_features_path for ex in c.examples]
-        for c in concept_kb
-    ]))
-    all_feature_labels = list(chain.from_iterable([
-        [c.name for ex in c.examples] # No way currently to indicate concept-specific negatives from files
-        for c in concept_kb
-    ]))
+    # Create datasets
+    train_paths = [ex.image_features_path for ex in train_exs]
+    val_paths = [ex.image_features_path for ex in val_exs]
 
-    (trn_p, trn_l), (val_p, val_l), (tst_p, tst_l) = split(all_feature_paths, all_feature_labels)
-
-    train_ds = FeatureDataset(trn_p, trn_l, train_all_concepts_if_unspecified=args.train.use_concepts_as_negatives)
-    val_ds = FeatureDataset(val_p, val_l, train_all_concepts_if_unspecified=args.train.use_concepts_as_negatives)
+    train_ds = FeatureDataset(train_paths, train_labels, concepts_to_train_per_example=train_concepts_to_train_per_example)
+    val_ds = FeatureDataset(val_paths, val_labels, concepts_to_train_per_example=val_concepts_to_train_per_example)
 
     # Consider splitting global negatives into train and val sets?
     extend_with_global_negatives(train_ds, concept_kb.global_negatives)
@@ -186,5 +206,6 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
 
 # %%
 if __name__ == '__main__':
-    args, parser = parse_args()
+    parser = get_parser()
+    args = parse_args(parser)
     main(args, parser)
