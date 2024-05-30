@@ -362,6 +362,9 @@ class Controller:
         # Identify concept examples by their image_paths
         image_paths = {ex.image_path for ex in concept.examples}
         for example in new_examples:
+            if not example.concept_name: # Ensure this is set
+                example.concept_name = concept.name
+
             if example.image_path not in image_paths:
                 concept.examples.append(example)
 
