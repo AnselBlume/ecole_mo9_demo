@@ -11,6 +11,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ConceptExample:
+    concept_name: str = field(
+        default=None,
+        metadata={'description': 'Name of the concept that this example belongs to'}
+    )
+
     image: Image = field(
         default=None,
         metadata={'description': 'Example\'s image'}
