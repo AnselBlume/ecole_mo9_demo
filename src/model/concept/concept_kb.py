@@ -86,9 +86,11 @@ class ConceptKB:
 
         return list(children.values())
 
-    def rooted_subtree(self, concept: Concept) -> list[Concept]:
+    def rooted_subtree(self, concept: Concept, reverse_edges: bool = False) -> list[Concept]:
         '''
-            Returns the rooted subtree of a concept.
+            Returns the rooted subtree of a concept. This is the concept itself and all its descendants.
+
+            If reversed_edges is True, the rooted subtree is the concept itself and all its ancestors.
         '''
         subtree = {}
         queue = [concept]
@@ -97,7 +99,10 @@ class ConceptKB:
             curr = queue.pop()
             if curr.name not in subtree:
                 subtree[curr.name] = curr
-                queue.extend(curr.child_concepts.values())
+                if reverse_edges:
+                    queue.extend(curr.parent_concepts.values())
+                else:
+                    queue.extend(curr.child_concepts.values())
 
         return list(subtree.values())
 
