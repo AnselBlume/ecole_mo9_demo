@@ -19,7 +19,7 @@ logger = logging.getLogger(__file__)
 coloredlogs.install(level='DEBUG')
 
 def train_in_tandem():
-    from scripts.train_and_cls import parse_args, main
+    from scripts.train.train_and_cls import parse_args, main
 
     cache_root = 'temp_cache_delete_me'
     args, parser = parse_args(config_str=f'''
