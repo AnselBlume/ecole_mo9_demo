@@ -43,7 +43,7 @@ class BaseDataset(Dataset):
         '''
         if not concepts_to_train:
             logger.info('concepts_to_train not provided for dataset; constructing')
-            concepts_to_train = self._get_concepts_to_train(data, labels, train_all_concepts_if_unspecified)
+            concepts_to_train = self.get_concepts_to_train(data, labels, train_all_concepts_if_unspecified)
 
         assert len(data) == len(labels) == len(concepts_to_train)
 
@@ -54,7 +54,7 @@ class BaseDataset(Dataset):
     def extend(self, data: list, labels: list[str], concepts_to_train: list[list[str]] = None, train_all_concepts_if_unspecified: bool = False):
         if not concepts_to_train:
             logger.info('concepts_to_train not provided for dataset; constructing')
-            concepts_to_train = self._get_concepts_to_train(data, labels, train_all_concepts_if_unspecified=train_all_concepts_if_unspecified)
+            concepts_to_train = self.get_concepts_to_train(data, labels, train_all_concepts=train_all_concepts_if_unspecified)
 
         assert len(data) == len(labels) == len(concepts_to_train)
 
@@ -66,13 +66,13 @@ class BaseDataset(Dataset):
         return len(self.data)
 
     @staticmethod
-    def _get_concepts_to_train(data: list, labels: list[str], train_all_concepts_if_unspecified: bool):
-        if train_all_concepts_if_unspecified:
-            logger.info('train_all_concepts_if_unspecified is True; constructing dataset which trains all concepts for all examples.')
+    def get_concepts_to_train(data: list, labels: list[str], train_all_concepts: bool):
+        if train_all_concepts:
+            logger.info('train_all_concepts is True; constructing dataset which trains all concepts for all examples.')
             concepts_to_train = [None for _ in range(len(data))]
 
         else:
-            logger.info('train_all_concepts_if_unspecified is False; constructing dataset which trains only positive concept for each example.')
+            logger.info('train_all_concepts is False; constructing dataset which trains only positive concept for each example.')
             if any(label == NEGATIVE_LABEL for label in labels):
                 raise RuntimeError('Negative labels found in dataset; cannot construct concepts_to_train automatically.')
 
