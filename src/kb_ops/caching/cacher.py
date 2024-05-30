@@ -1,4 +1,5 @@
 import os
+import sys
 from tqdm import tqdm
 from model.concept import ConceptKB, Concept
 from ..feature_pipeline import ConceptKBFeaturePipeline
@@ -89,9 +90,14 @@ class ConceptKBFeatureCacher:
 
         return examples
 
-    def _get_segmentation_cache_path(self, example: ConceptExample):
-        file_name = os.path.splitext(os.path.basename(example.image_path))[0]
-        return f'{self.cache_dir}/{self.segmentations_sub_dir}/{file_name}.pkl'
+    def _hash_str(self, s: str):
+        h = hash(s)
+        h = h % 2**sys.hash_info.width # Map to positive: https://stackoverflow.com/a/78232540/6248951
+
+        return hex(h)[2:] # Get rid of 0x
+
+    def _get_segmentation_cache_path(self, example: ConceptExample, prefix: str = None):
+        return f'{self.cache_dir}/{self.segmentations_sub_dir}/{self._hash_str(example.image_path)}.pkl'
 
     def _cache_segmentation(self, example: ConceptExample, **loc_and_seg_kwargs):
         image = self._image_from_example(example)
@@ -125,8 +131,7 @@ class ConceptKBFeatureCacher:
             self._cache_segmentation(example, **loc_and_seg_kwargs)
 
     def _get_features_cache_path(self, example: ConceptExample):
-        file_name = os.path.splitext(os.path.basename(example.image_path))[0]
-        return f'{self.cache_dir}/{self.features_sub_dir}/{file_name}.pkl'
+        return f'{self.cache_dir}/{self.features_sub_dir}/{self._hash_str(example.image_path)}.pkl'
 
     def cache_features(self, concepts: list[Concept] = None, only_uncached_or_dirty=True, include_global_negatives: bool = True):
         '''
