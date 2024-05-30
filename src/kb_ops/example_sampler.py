@@ -104,16 +104,21 @@ class ConceptKBExampleSampler:
 
         elif negatives_strategy == 'use_siblings_as_negatives':
             def get_siblings_names(concept: Concept) -> list[Concept]:
-                # Include the current concept in the returned sibling list. The current concept will always be first
-                # since setting the value of a key which already exists does not change the order of the dictionary
-                siblings = {} # Prevent duplicates
+                # Include the current concept in the returned sibling list. The current concept IS NOT
+                # guaranteed to be first in the list
+                siblings = {concept.name} # Prevent duplicates
                 for parent in concept.parent_concepts.values():
                     siblings.update(dict.fromkeys(parent.child_concepts.keys())) # Store the sibling names
 
                 return list(siblings)
 
+            concept_to_siblings = {
+                concept_name : get_siblings_names(self.concept_kb[concept_name])
+                for concept_name in dict.fromkeys([example.concept_name for example in concept_examples])
+            }
+
             concepts_to_train_per_example = [
-                get_siblings_names(self.concept_kb[example.concept_name])
+                concept_to_siblings[example.concept_name]
                 for example in concept_examples
             ]
 
