@@ -222,14 +222,18 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             # Potentially sample negative concepts
             if use_concepts_as_negatives:
                 if sample_only_siblings_for_negatives:
-                    neg_concepts = [
-                        child
-                        for parent in concept.parent_concepts.values()
-                        for child in parent.child_concepts.values()
-                        if child != concept
-                    ]
+                    siblings = {} # Not including self
+                    for parent in concept.parent_concepts.values():
+                        for child in parent.child_concepts.values():
+                            if child.name not in siblings and child.name != concept.name:
+                                siblings[child.name] = child
+
+                    neg_concepts = list(siblings.values())
+
                 elif sample_only_leaf_nodes_for_negatives:
-                    neg_concepts = [c for c in self.concept_kb.leaf_concepts if c != concept]
+                    # Leaf nodes which aren't components
+                    component_concepts = set(self.concept_kb.component_concepts)
+                    neg_concepts = [c for c in self.concept_kb.leaf_concepts if c not in component_concepts and c != concept]
                 else:
                     neg_concepts = [c for c in self.concept_kb if c != concept]
 
