@@ -112,7 +112,13 @@ class Segmenter:
         if remove_background or not segment_before_crop:
             cropped_image = self.crop(image, bbox, remove_background)
 
-        masks: list[dict] = self.sam_amg.generate(np.array(image if segment_before_crop else cropped_image))
+        try:
+            masks: list[dict] = self.sam_amg.generate(np.array(image if segment_before_crop else cropped_image))
+        except:
+            logger.warning('Failed to segment image. Returning full mask.')
+            shape = image.size[::-1] if segment_before_crop else cropped_image.size[::-1]
+            return torch.full((1, *shape), True, dtype=torch.bool)
+
         masks = sorted(masks, key=lambda mask_d: mask_d['area'], reverse=True) # Sort by area
         masks = torch.stack([torch.from_numpy(mask_d['segmentation']) for mask_d in masks]).bool() # (n_masks, h_crop, w_crop) or (n_masks, h, w)
 
