@@ -50,7 +50,7 @@ class ConceptKBForwardBase:
 
     @property
     def compute_component_concept_scores_from_concept_predictors(self):
-        return not self.feature_pipeline.compute_component_concept_scores
+        return not self.feature_pipeline.config.compute_component_concept_scores
 
     def recompute_labels(self):
         '''

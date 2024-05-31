@@ -90,7 +90,7 @@ if __name__ == '__main__':
     # Modify zero-shot attributes
     # NOTE this does NOT test modifying the weights of the ConceptPredictor
     new_attr = Attribute(name='another zero-shot attribute')
-    controller.concepts[concept_name].zs_attributes.append(new_attr)
+    controller.concept_kb[concept_name].zs_attributes.append(new_attr)
     controller.cacher.recache_zs_attr_features(concept, examples=[first_example])
 
     # Compute the number of zs attributes in the file

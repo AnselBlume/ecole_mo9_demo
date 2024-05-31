@@ -6,6 +6,15 @@ from kb_ops.caching import CachedImageFeatures
 from feature_extraction import FeatureExtractor
 from typing import Union
 from PIL.Image import Image
+from dataclasses import dataclass
+
+@dataclass
+class ConceptKBFeaturePipelienConfig:
+    compute_component_concept_scores: bool = False
+
+    remove_background: bool = True
+    return_crops: bool = True
+    use_bbox_for_crops: bool = False
 
 class ConceptKBFeaturePipeline:
     def __init__(
@@ -13,22 +22,29 @@ class ConceptKBFeaturePipeline:
         concept_kb: ConceptKB,
         loc_and_seg: LocalizerAndSegmenter,
         feature_extractor: FeatureExtractor,
-        compute_component_concept_scores: bool = False
+        config: ConceptKBFeaturePipelienConfig = ConceptKBFeaturePipelienConfig()
     ):
         self.concept_kb = concept_kb
         self.loc_and_seg = loc_and_seg
         self.feature_extractor = feature_extractor
-        self.compute_component_concept_scores = compute_component_concept_scores
+        self.config = config
 
     def get_segmentations(
         self,
         image: Image,
         concept_name: str = '',
         concept_parts: list[str] = [],
-        remove_background: bool = True,
-        return_crops: bool = True,
-        use_bbox_for_crops: bool = False
+        remove_background: bool = None,
+        return_crops: bool = None,
+        use_bbox_for_crops: bool = None
     ) -> LocalizeAndSegmentOutput:
+
+        if remove_background is None:
+            remove_background = self.config.remove_background
+        if return_crops is None:
+            return_crops = self.config.return_crops
+        if use_bbox_for_crops is None:
+            use_bbox_for_crops = self.config.use_bbox_for_crops
 
         return self.loc_and_seg.localize_and_segment(
             image=image,
@@ -94,7 +110,7 @@ class ConceptKBFeaturePipeline:
         '''
             Args:
                 update_cached_features (bool): If true, updates the CachedImageFeatures with computed zero-shot attributes and component concept scores.
-                    Component concept scores are computed and updated only if self.compute_component_concept_scores is True.
+                    Component concept scores are computed and updated only if self.config.compute_component_concept_scores is True.
         '''
 
         if cached_features is None:
@@ -106,14 +122,14 @@ class ConceptKBFeaturePipeline:
         zs_attr_img_scores, zs_attr_region_scores = self._get_zero_shot_attr_scores(concept, cached_features)
 
         # Component concept scores
-        if self.compute_component_concept_scores:
+        if self.config.compute_component_concept_scores:
             component_concept_scores = self._get_component_concept_scores(concept, cached_features)
 
         # Construct output
         concept_predictor_features = ConceptPredictorFeatures.from_image_features(cached_features)
         concept_predictor_features.zs_attr_img_scores = zs_attr_img_scores
         concept_predictor_features.zs_attr_region_scores = zs_attr_region_scores
-        concept_predictor_features.component_concept_scores = component_concept_scores if self.compute_component_concept_scores else None
+        concept_predictor_features.component_concept_scores = component_concept_scores if self.config.compute_component_concept_scores else None
 
         return concept_predictor_features
 

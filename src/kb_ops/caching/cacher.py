@@ -170,7 +170,7 @@ class ConceptKBFeatureCacher:
                     cached_features = CachedImageFeatures.from_image_features(feats)
 
                 # Store concept-specific features
-                cached_features.update_concept_predictor_features(concept, feats, store_component_concept_scores=self.feature_pipeline.compute_component_concept_scores)
+                cached_features.update_concept_predictor_features(concept, feats, store_component_concept_scores=self.feature_pipeline.config.compute_component_concept_scores)
 
             cached_features.cpu()
 
@@ -233,7 +233,7 @@ class ConceptKBFeatureCacher:
             If examples are provided, only recaches features for the specified examples (to save time instead of
             recaching for all in the concept_kb).
         '''
-        if not self.feature_pipeline.compute_component_concept_scores:
+        if not self.feature_pipeline.config.compute_component_concept_scores:
             raise RuntimeError('Component concept scores are not being computed by the feature pipeline.')
 
         examples = examples if examples else self._get_examples([concept])
