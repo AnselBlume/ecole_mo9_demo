@@ -103,7 +103,7 @@ class Concept:
     def __repr__(self) -> str:
         return str(self)
 
-    def __equal__(self, other: Concept) -> bool:
+    def __eq__(self, other: Concept) -> bool:
         return self.name == other.name
 
     def __hash__(self) -> int:
