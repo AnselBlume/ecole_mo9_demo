@@ -33,25 +33,18 @@ class ControllerConfig:
 class Controller:
     def __init__(
         self,
-        loc_and_seg: LocalizerAndSegmenter,
-        concept_kb: ConceptKB,
-        feature_extractor: FeatureExtractor,
+        feature_pipeline: ConceptKBFeaturePipeline,
         retriever: CLIPConceptRetriever = None,
         cacher: ConceptKBFeatureCacher = None,
         zs_predictor: CLIPAttributePredictor = None,
         config: ControllerConfig = ControllerConfig()
     ):
 
-        self.concepts = concept_kb
-        self.feature_pipeline = ConceptKBFeaturePipeline(
-            concept_kb,
-            loc_and_seg,
-            feature_extractor,
-            compute_component_concept_scores=not config.use_concept_predictors_for_concept_components
-        )
-        self.trainer = ConceptKBTrainer(concept_kb, self.feature_pipeline)
-        self.predictor = ConceptKBPredictor(concept_kb, self.feature_pipeline)
-        self.cacher = cacher if cacher else ConceptKBFeatureCacher(concept_kb, self.feature_pipeline, cache_dir='feature_cache')
+        self.concept_kb = feature_pipeline.concept_kb
+        self.feature_pipeline = feature_pipeline
+        self.trainer = ConceptKBTrainer(self.concept_kb, self.feature_pipeline)
+        self.predictor = ConceptKBPredictor(self.concept_kb, self.feature_pipeline)
+        self.cacher = cacher if cacher else ConceptKBFeatureCacher(self.concept_kb, self.feature_pipeline, cache_dir='feature_cache')
         self.config = config
 
         self.retriever = retriever
@@ -143,7 +136,7 @@ class Controller:
         return self.predictor.hierarchical_predict(image_data=image, root_concepts=[root_concept], unk_threshold=unk_threshold)
 
     def predict_root_concept(self, image: Image, unk_threshold: float = .1) -> dict:
-        results = self.predictor.hierarchical_predict(image_data=image, root_concepts=[self.concepts.root_concept], unk_threshold=unk_threshold) # list[dict]
+        results = self.predictor.hierarchical_predict(image_data=image, root_concepts=[self.concept_kb.root_concept], unk_threshold=unk_threshold) # list[dict]
         return results[0] # The root concept is the first
 
     def is_concept_in_image(self, image: Image, concept_name: str, unk_threshold: float = .1) -> bool:
@@ -247,7 +240,7 @@ class Controller:
 
             concept = Concept(concept_name)
 
-        if concept.name in self.concepts:
+        if concept.name in self.concept_kb:
             raise ValueError(f'Concept with name "{concept.name}" already exists in the ConceptKB.')
 
         # Add relations if concept_name was provided instead of Concept object
@@ -270,21 +263,21 @@ class Controller:
                 concept.add_component_concept(component_concept)
 
         # Get zero shot attributes (query LLM)
-        self.concepts.init_zs_attrs(
+        self.concept_kb.init_zs_attrs(
             concept,
             self.llm_client,
-            encode_class=self.concepts.cfg.encode_class_in_zs_attr,
+            encode_class=self.concept_kb.cfg.encode_class_in_zs_attr,
             zs_attr_dict=self.concept_to_zs_attrs.get(concept.name, None)
         )
 
-        self.concepts.init_predictor(concept)
+        self.concept_kb.init_predictor(concept)
 
-        if len(self.concepts) and next(iter(self.concepts)).predictor is not None:
-            concept.predictor.to(next(self.concepts.parameters()).device) # Assumes all concepts are on the same device
+        if len(self.concept_kb) and next(iter(self.concept_kb)).predictor is not None:
+            concept.predictor.to(next(self.concept_kb.parameters()).device) # Assumes all concepts are on the same device
         else: # Assume there aren't any other initialized concept predictors
             concept.predictor.cuda()
 
-        self.concepts.add_concept(concept)
+        self.concept_kb.add_concept(concept)
         self.retriever.add_concept(concept)
         self.trainer.recompute_labels()
         self.predictor.recompute_labels()
@@ -292,8 +285,8 @@ class Controller:
         return concept
 
     def clear_concepts(self):
-        for concept in self.concepts:
-            self.concepts.remove_concept(concept.name)
+        for concept in self.concept_kb:
+            self.concept_kb.remove_concept(concept.name)
             self.retriever.remove_concept(concept.name)
 
         self.trainer.recompute_labels()
@@ -306,7 +299,7 @@ class Controller:
             logger.info(f'No exact match for concept with name "{concept_name}". Not removing concept to be safe.')
             raise(e)
 
-        self.concepts.remove_concept(concept.name)
+        self.concept_kb.remove_concept(concept.name)
         self.retriever.remove_concept(concept.name)
         self.trainer.recompute_labels()
         self.predictor.recompute_labels()
@@ -327,13 +320,13 @@ class Controller:
         self.cacher.cache_features()
 
         # Recache all concepts' zero-shot features in case new concepts were added since last training
-        for concept in self.concepts:
+        for concept in self.concept_kb:
             self.cacher.recache_zs_attr_features(concept)
 
             if not self.config.use_concept_predictors_for_concept_components: # Using fixed scores for concept-image pairs
                 self.cacher.recache_component_concept_scores(concept)
 
-        train_ds, val_ds, test_ds = split_from_concept_kb(self.concepts, split=split, use_concepts_as_negatives=use_concepts_as_negatives)
+        train_ds, val_ds, test_ds = split_from_concept_kb(self.concept_kb, split=split, use_concepts_as_negatives=use_concepts_as_negatives)
 
         self.trainer.train(
             train_ds=train_ds,
@@ -399,8 +392,8 @@ class Controller:
             if not self.config.use_concept_predictors_for_concept_components: # Using fixed scores for concept-image pairs
                 self.cacher.recache_component_concept_scores(concept, examples=examples)
 
-        if stopping_condition == 'n_epochs' or len(self.concepts) <= 1:
-            if len(self.concepts) == 1:
+        if stopping_condition == 'n_epochs' or len(self.concept_kb) <= 1:
+            if len(self.concept_kb) == 1:
                 logger.info(f'No other concepts in the ConceptKB; training concept in isolation for {n_epochs} epochs.')
 
             self.trainer.train_concept(
@@ -438,11 +431,11 @@ class Controller:
     def retrieve_concept(self, concept_name: str, max_retrieval_distance: float = .5):
         concept_name = concept_name.strip()
 
-        if concept_name in self.concepts:
-            return self.concepts[concept_name]
+        if concept_name in self.concept_kb:
+            return self.concept_kb[concept_name]
 
-        elif concept_name.lower() in self.concepts:
-            return self.concepts[concept_name]
+        elif concept_name.lower() in self.concept_kb:
+            return self.concept_kb[concept_name]
 
         else:
             retrieved_concept = self.retriever.retrieve(concept_name, 1)[0]
@@ -504,7 +497,7 @@ class Controller:
             (concept1, concept2),
             attr_names,
             weight_by_magnitudes=weight_by_magnitudes,
-            take_abs_of_weights=self.concepts.cfg.use_ln,
+            take_abs_of_weights=self.concept_kb.cfg.use_ln,
             return_img=True
         )
 
@@ -576,7 +569,7 @@ class Controller:
             region_mask2 = None
 
         # Convert to probabilities if not already
-        if not self.concepts.cfg.use_probabilities:
+        if not self.concept_kb.cfg.use_probabilities:
             trained_attr_scores1 = trained_attr_scores1.sigmoid()
             trained_attr_scores2 = trained_attr_scores2.sigmoid()
 
@@ -588,8 +581,8 @@ class Controller:
             predicted_concept1 = predictions1['concept_names'][predictions1['predicted_index']]
             predicted_concept2 = predictions2['concept_names'][predictions2['predicted_index']]
 
-            predictor1 = self.concepts[predicted_concept1].predictor
-            predictor2 = self.concepts[predicted_concept2].predictor
+            predictor1 = self.concept_kb[predicted_concept1].predictor
+            predictor2 = self.concept_kb[predicted_concept2].predictor
             predictors = (predictor1, predictor2)
         else:
             predictors = ()
@@ -676,7 +669,7 @@ class Controller:
 
         else:
             assert attr_type == 'zs'
-            attr_names = [a.name for a in self.concepts[prediction['predicted_label']].zs_attributes]
+            attr_names = [a.name for a in self.concept_kb[prediction['predicted_label']].zs_attributes]
             attr_scores = prediction['predicted_concept_outputs'].zs_attr_region_scores
 
         attr_index = attr_names.index(attr_name)
@@ -721,12 +714,13 @@ if __name__ == '__main__':
     kb = ConceptKB.load(ckpt_path)
     loc_and_seg = build_localizer_and_segmenter(build_sam(), None)
     fe = build_feature_extractor()
+    feature_pipeline = ConceptKBFeaturePipeline(kb, loc_and_seg, fe)
 
     retriever = CLIPConceptRetriever(kb.concepts, fe.clip, fe.processor)
-    controller = Controller(loc_and_seg, kb, fe, retriever)
+    controller = Controller(feature_pipeline, retriever)
 
     # %% Run the first prediction
-    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1/row of windows/000005.jpg'
+    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1/passenger jet/000001.jpg'
 
     img = PIL.Image.open(img_path).convert('RGB')
     result = controller.predict_concept(img, unk_threshold=.1)
@@ -748,9 +742,10 @@ if __name__ == '__main__':
     kb = ConceptKB.load(ckpt_path)
     loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
     fe = build_feature_extractor()
+    feature_pipeline = ConceptKBFeaturePipeline(kb, loc_and_seg, fe)
 
     retriever = CLIPConceptRetriever(kb.concepts, fe.clip, fe.processor)
-    controller = Controller(loc_and_seg, kb, fe, retriever)
+    controller = Controller(feature_pipeline, retriever)
 
     # %% Run the first prediction
     img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
