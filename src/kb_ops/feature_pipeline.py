@@ -1,6 +1,6 @@
 import torch
 from image_processing import LocalizerAndSegmenter, LocalizeAndSegmentOutput
-from model.concept import ConceptKB, Concept, ConceptPredictorFeatures
+from model.concept import Concept, ConceptPredictorFeatures
 from model.features import ImageFeatures
 from kb_ops.caching import CachedImageFeatures
 from feature_extraction import FeatureExtractor
@@ -19,12 +19,10 @@ class ConceptKBFeaturePipelienConfig:
 class ConceptKBFeaturePipeline:
     def __init__(
         self,
-        concept_kb: ConceptKB,
         loc_and_seg: LocalizerAndSegmenter,
         feature_extractor: FeatureExtractor,
         config: ConceptKBFeaturePipelienConfig = ConceptKBFeaturePipelienConfig()
     ):
-        self.concept_kb = concept_kb
         self.loc_and_seg = loc_and_seg
         self.feature_extractor = feature_extractor
         self.config = config
