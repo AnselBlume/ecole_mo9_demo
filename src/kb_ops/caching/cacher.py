@@ -96,7 +96,7 @@ class ConceptKBFeatureCacher:
 
         return hex(h)[2:] # Get rid of 0x
 
-    def _get_segmentation_cache_path(self, example: ConceptExample, prefix: str = None):
+    def _get_segmentation_cache_path(self, example: ConceptExample):
         return f'{self.cache_dir}/{self.segmentations_sub_dir}/{self._hash_str(example.image_path)}.pkl'
 
     def _cache_segmentation(self, example: ConceptExample, **loc_and_seg_kwargs):
