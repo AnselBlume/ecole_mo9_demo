@@ -7,7 +7,10 @@ from .feature_pipeline import ConceptKBFeaturePipeline
 from typing import Union
 from tqdm import tqdm
 from PIL.Image import Image
-from .forward import ConceptKBForwardBase
+from .forward import ConceptKBForwardBase, ForwardOutput
+import logging
+
+logger = logging.getLogger(__file__)
 
 class ConceptKBPredictor(ConceptKBForwardBase):
     def __init__(self, concept_kb: ConceptKB, feature_pipeline: ConceptKBFeaturePipeline = None):
@@ -47,9 +50,20 @@ class ConceptKBPredictor(ConceptKBForwardBase):
             if not include_component_concepts:
                 pool = filter_component_concepts(pool)
 
+            # Cache features to avoid resegmentation and recomputation of image features
+            forward_kwargs['return_segmentations'] = True
+            segmentations = None
+
             while pool: # While we can go deeper down the hierarchy
+                logger.info(f'Considering concept pool in hierarchical_predict: {[concept.name for concept in pool]}')
+
                 prediction = self.predict(image_data=image_data, unk_threshold=unk_threshold, concepts=pool, leaf_nodes_only=False, **forward_kwargs)
                 prediction_path.append(prediction)
+
+                if segmentations is None:
+                    segmentations: LocalizeAndSegmentOutput = prediction['segmentations']
+                    segmentations.input_image = image_data
+                    image_data = segmentations
 
                 maximizing_concept = self.concept_kb[prediction['predicted_label']]
                 if prediction['is_below_unk_threshold']: # If predicted unknown, stop here
@@ -108,39 +122,38 @@ class ConceptKBPredictor(ConceptKBForwardBase):
             forward_kwargs['concepts'] = self.concept_kb.leaf_concepts
 
         if not include_component_concepts:
-            concepts = forward_kwargs.pop('concepts', self.concept_kb)
+            concepts = forward_kwargs.get('concepts', self.concept_kb)
             component_concepts = set(self.concept_kb.component_concepts)
             concepts_minus_component_concepts = [concept for concept in concepts if concept not in component_concepts]
             forward_kwargs['concepts'] = concepts_minus_component_concepts
 
-        def process_outputs(outputs: dict):
+        logger.debug(f'Concepts passed from predict to forward: {forward_kwargs["concepts"]}')
+
+        def process_outputs(outputs: ForwardOutput):
             # Compute predictions
-            if predict_dl is not None:
-                true_ind = self.label_to_ind[text_label[0]] # int, global index
+            if predict_dl is not None: # Provided with a label
+                true_ind = outputs.concept_names.index(text_label[0])
 
-                if leaf_nodes_only: # To leaf index
-                    true_ind = self.global_ind_to_leaf_ind[true_ind]
-
-            scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
+            scores = torch.tensor([output.cum_score for output in outputs.predictors_outputs])
 
             pred_ind = scores.argmax(dim=0).item() # int
-            predicted_concept_outputs = outputs['predictors_outputs'][pred_ind].cpu()
+            predicted_concept_outputs = outputs.predictors_outputs[pred_ind].cpu()
 
             # Indicate whether max score is below unk_threshold
             is_below_unk_threshold = unk_threshold > 0 and scores[pred_ind].sigmoid() < unk_threshold
 
             pred_dict = {
-                'concept_names': outputs['concept_names'],
+                'concept_names': outputs.concept_names,
                 'predictors_scores': scores.cpu(),
                 'predicted_index': pred_ind,
-                'predicted_label': outputs['concept_names'][pred_ind],
+                'predicted_label': outputs.concept_names[pred_ind],
                 'is_below_unk_threshold': is_below_unk_threshold,
                 'predicted_concept_outputs': predicted_concept_outputs, # This will always be maximizing concept
                 'true_index': true_ind if predict_dl is not None else None,
-                'true_concept_outputs': None if predict_dl is None or true_ind < 0 else outputs['predictors_outputs'][true_ind].cpu()
+                'true_concept_outputs': None if predict_dl is None or true_ind < 0 else outputs.predictors_outputs[true_ind].cpu()
             }
 
-            if forward_kwargs.pop('return_segmentations', False):
+            if forward_kwargs.get('return_segmentations', False):
                 pred_dict['segmentations'] = outputs['segmentations']
 
             predictions.append(pred_dict)

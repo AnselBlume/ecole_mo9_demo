@@ -97,6 +97,15 @@ class Concept:
 
     examples: list[ConceptExample] = field(default_factory=list, metadata={'help': 'Stored example data'})
 
+    def __str__(self) -> str:
+        return f'Concept(name={self.name})'
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __equal__(self, other: Concept) -> bool:
+        return self.name == other.name
+
     def __hash__(self) -> int:
         return hash(self.name)
 

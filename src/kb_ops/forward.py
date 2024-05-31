@@ -67,17 +67,6 @@ class ConceptKBForwardBase:
             for concept in self.concept_kb
         }
 
-        # Compute mapping between global and leaf indices
-        self.leaf_name_to_leaf_ind = {c.name : i for i, c in enumerate(self.concept_kb.leaf_concepts)}
-        self.leaf_ind_to_leaf_name = {v : k for k, v in self.leaf_name_to_leaf_ind.items()}
-
-        self.global_ind_to_leaf_ind = {
-            global_ind : self.leaf_name_to_leaf_ind[concept.name]
-            for global_ind, concept in enumerate(self.concept_kb.concepts)
-            if concept.name in self.leaf_name_to_leaf_ind
-        }
-        self.leaf_ind_to_global_ind = {v : k for k, v in self.global_ind_to_leaf_ind.items()}
-
     def forward_pass(
         self,
         image_data: Union[Image, LocalizeAndSegmentOutput, CachedImageFeatures],
