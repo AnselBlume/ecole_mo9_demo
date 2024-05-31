@@ -145,9 +145,6 @@ class ConceptKBPredictor(ConceptKBForwardBase):
 
             predictions.append(pred_dict)
 
-        if leaf_nodes_only:
-            forward_kwargs['concepts'] = self.concept_kb.leaf_concepts
-
         if predict_dl is not None:
             data_key = self._determine_data_key(predict_dl.dataset)
 
