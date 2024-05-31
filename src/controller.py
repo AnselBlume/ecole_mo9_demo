@@ -119,7 +119,24 @@ class Controller:
         }
 
     def predict_hierarchical(self, image: Image, unk_threshold: float = .1, include_component_concepts: bool = False,) -> list[dict]:
-        return self.predictor.hierarchical_predict(image_data=image, unk_threshold=unk_threshold, include_component_concepts=include_component_concepts)
+        prediction_path: list[dict] = self.predictor.hierarchical_predict(
+            image_data=image,
+            unk_threshold=unk_threshold,
+            include_component_concepts=include_component_concepts
+        )
+
+        if prediction_path[-1]['is_below_unk_threshold']:
+            predicted_label = 'unknown' if len(prediction_path) == 1 else prediction_path[-2]['predicted_label']
+            concept_path = [pred['predicted_label'] for pred in prediction_path[:-1]]
+        else:
+            predicted_label = prediction_path[-1]['predicted_label']
+            concept_path = [pred['predicted_label'] for pred in prediction_path]
+
+        return {
+            'prediction_path': prediction_path,
+            'concept_path': concept_path,
+            'predicted_label': predicted_label
+        }
 
     def predict_from_subtree(self, image: Image, root_concept_name: str, unk_threshold: float = .1) -> list[dict]:
         root_concept = self.retrieve_concept(root_concept_name)
@@ -694,13 +711,41 @@ if __name__ == '__main__':
     from feature_extraction import build_feature_extractor, build_sam, build_desco
     from image_processing import build_localizer_and_segmenter
 
-    coloredlogs.install(level=logging.INFO)
+    coloredlogs.install(level=logging.DEBUG)
 
     # %%
-    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
+    ###############################
+    #  June 2024 Demo Checkpoint #
+    ###############################
+    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1/passenger jet/000005.jpg'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_05_30-11:30:28-rafd2xjd-no_biplane_no_cargo_jet/concept_kb_epoch_50.pt'
+
+    # %%
+    kb = ConceptKB.load(ckpt_path)
+    loc_and_seg = build_localizer_and_segmenter(build_sam(), None)
+    fe = build_feature_extractor()
+
+    retriever = CLIPConceptRetriever(kb.concepts, fe.clip, fe.processor)
+    controller = Controller(loc_and_seg, kb, fe, retriever)
+
+    # %% Run the first prediction
+    img = PIL.Image.open(img_path).convert('RGB')
+    result = controller.predict_concept(img, unk_threshold=.1)
+
+    logger.info(f'Predicted label: {result["predicted_label"]}')
+
+    # %% Hierarchical prediction
+    img = PIL.Image.open(img_path).convert('RGB')
+    result = controller.predict_hierarchical(img, unk_threshold=.1)
+
+    logger.info(f'Concept path: {result["concept_path"]}')
+
+    # %%
+    ###############################
+    #  March 2024 Demo Checkpoint #
+    ###############################
     ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_03_22-15:06:03-xob6535d-v3-dino_pool/concept_kb_epoch_50.pt'
 
-    # %%
     kb = ConceptKB.load(ckpt_path)
     loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
     fe = build_feature_extractor()
@@ -709,6 +754,7 @@ if __name__ == '__main__':
     controller = Controller(loc_and_seg, kb, fe, retriever)
 
     # %% Run the first prediction
+    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
     img = PIL.Image.open(img_path).convert('RGB')
     result = controller.predict_concept(img, unk_threshold=.1)
 
