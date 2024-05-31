@@ -5,12 +5,10 @@ from score import AttributeScorer
 from model.concept import ConceptKB, Concept, ConceptExample
 from PIL.Image import Image
 import logging, coloredlogs
-from feature_extraction import FeatureExtractor
-from image_processing import LocalizerAndSegmenter, LocalizeAndSegmentOutput
+from image_processing import LocalizeAndSegmentOutput
 from kb_ops import ConceptKBTrainer, ConceptKBPredictor
 from kb_ops.retrieve import CLIPConceptRetriever
-from kb_ops.train_test_split import split_from_paths
-from kb_ops.dataset import FeatureDataset, extend_with_global_negatives, split_from_concept_kb
+from kb_ops.dataset import split_from_concept_kb
 from utils import ArticleDeterminer
 from typing import Union, Literal
 from dataclasses import dataclass
@@ -34,21 +32,28 @@ class Controller:
     def __init__(
         self,
         feature_pipeline: ConceptKBFeaturePipeline,
+        trainer: ConceptKBTrainer = None,
+        predictor: ConceptKBPredictor = None,
         retriever: CLIPConceptRetriever = None,
         cacher: ConceptKBFeatureCacher = None,
-        zs_predictor: CLIPAttributePredictor = None,
-        config: ControllerConfig = ControllerConfig()
+        llm_client: LLMClient = None,
+        config: ControllerConfig = ControllerConfig(),
+        zs_predictor: CLIPAttributePredictor = None
     ):
 
         self.concept_kb = feature_pipeline.concept_kb
         self.feature_pipeline = feature_pipeline
-        self.trainer = ConceptKBTrainer(self.concept_kb, self.feature_pipeline)
-        self.predictor = ConceptKBPredictor(self.concept_kb, self.feature_pipeline)
+        self.trainer = trainer if trainer else ConceptKBTrainer(self.concept_kb, self.feature_pipeline)
+        self.predictor = predictor if predictor else ConceptKBPredictor(self.concept_kb, self.feature_pipeline)
+        self.retriever = retriever if retriever else CLIPConceptRetriever(
+            self.concept_kb.concepts,
+            self.feature_pipeline.feature_extractor.clip,
+            self.feature_pipeline.feature_extractor.processor
+        )
         self.cacher = cacher if cacher else ConceptKBFeatureCacher(self.concept_kb, self.feature_pipeline, cache_dir='feature_cache')
+        self.llm_client = llm_client if llm_client else LLMClient()
         self.config = config
 
-        self.retriever = retriever
-        self.llm_client = LLMClient()
         self.attr_scorer = AttributeScorer(zs_predictor)
 
         # Load external knowledgebase of concepts to zero-shot attributes
@@ -716,8 +721,7 @@ if __name__ == '__main__':
     fe = build_feature_extractor()
     feature_pipeline = ConceptKBFeaturePipeline(kb, loc_and_seg, fe)
 
-    retriever = CLIPConceptRetriever(kb.concepts, fe.clip, fe.processor)
-    controller = Controller(feature_pipeline, retriever)
+    controller = Controller(feature_pipeline)
 
     # %% Run the first prediction
     img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1/passenger jet/000001.jpg'
@@ -744,8 +748,7 @@ if __name__ == '__main__':
     fe = build_feature_extractor()
     feature_pipeline = ConceptKBFeaturePipeline(kb, loc_and_seg, fe)
 
-    retriever = CLIPConceptRetriever(kb.concepts, fe.clip, fe.processor)
-    controller = Controller(feature_pipeline, retriever)
+    controller = Controller(feature_pipeline)
 
     # %% Run the first prediction
     img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/adversarial_spoon.jpg'
