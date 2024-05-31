@@ -48,7 +48,7 @@ class ConceptKBPredictor(ConceptKBForwardBase):
                 pool = filter_component_concepts(pool)
 
             while pool: # While we can go deeper down the hierarchy
-                prediction = self.predict(image_data=image_data, unk_threshold=unk_threshold, concepts=pool, **forward_kwargs)
+                prediction = self.predict(image_data=image_data, unk_threshold=unk_threshold, concepts=pool, leaf_nodes_only=False, **forward_kwargs)
                 prediction_path.append(prediction)
 
                 maximizing_concept = self.concept_kb[prediction['predicted_label']]
