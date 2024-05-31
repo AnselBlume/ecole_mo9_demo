@@ -101,12 +101,16 @@ class ConceptKBFeatureCacher:
     def _get_segmentation_cache_path(self, example: ConceptExample):
         return f'{self.cache_dir}/{self.segmentations_sub_dir}/{self._hash_str(example.image_path)}.pkl'
 
-    def _cache_segmentation(self, example: ConceptExample, **loc_and_seg_kwargs):
+    def _cache_segmentation(self, example: ConceptExample, prog_bar: tqdm = None, **loc_and_seg_kwargs):
         image = self._image_from_example(example)
         segmentations = self.feature_pipeline.get_segmentations(image, **loc_and_seg_kwargs)
         segmentations.input_image_path = example.image_path
 
         cache_path = self._get_segmentation_cache_path(example)
+
+        if prog_bar is not None:
+            prog_bar.set_description(f'Caching segmentations {os.path.basename(example.image_path)}')
+
         with open(cache_path, 'wb') as f:
             pickle.dump(segmentations, f)
 
@@ -129,8 +133,9 @@ class ConceptKBFeatureCacher:
         if not len(examples):
             return
 
-        for example in tqdm(examples):
-            self._cache_segmentation(example, **loc_and_seg_kwargs)
+        prog_bar = tqdm(examples)
+        for example in prog_bar:
+            self._cache_segmentation(example, prog_bar=prog_bar, **loc_and_seg_kwargs)
 
     def _get_features_cache_path(self, example: ConceptExample):
         return f'{self.cache_dir}/{self.features_sub_dir}/{self._hash_str(example.image_path)}.pkl'
@@ -152,7 +157,8 @@ class ConceptKBFeatureCacher:
         if not len(examples):
             return
 
-        for example in tqdm(examples):
+        prog_bar = tqdm(examples)
+        for example in prog_bar:
             if example.image_segmentations_path is None:
                 raise RuntimeError('Segmentations must be cached before features can be cached.')
 
@@ -178,6 +184,9 @@ class ConceptKBFeatureCacher:
 
             # Write to cache
             cache_path = self._get_features_cache_path(example)
+
+            prog_bar.set_description(f'Caching features {os.path.basename(example.image_path)}')
+
             with open(cache_path, 'wb') as f:
                 pickle.dump(cached_features, f)
 
