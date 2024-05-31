@@ -97,7 +97,7 @@ class ConceptKBForwardBase:
         concepts = list(self.concept_kb) if not concepts else concepts
         concept_scores = {}
         concepts_for_forward = self._get_concepts_for_forward_pass(concepts)
-        concepts_for_loss = set(concepts)
+        concepts_for_loss = dict.fromkeys(concepts)
 
         n_concepts_for_loss_processed = 0 # How many concepts intended for loss computation have been processed
         for concept in concepts_for_forward:
