@@ -1,8 +1,9 @@
 import os
 from model.concept import ConceptKB, Concept, ConceptExample
 from datetime import datetime
-from typing import Union
+from typing import Union, Callable
 from itertools import chain
+from kb_ops.caching.cacher import ConceptKBFeatureCacher
 
 def get_timestr():
     return datetime.now().strftime('%Y_%m_%d-%H:%M:%S')
@@ -32,17 +33,30 @@ def set_feature_paths(
     else: # list[ConceptExample]
         examples = concepts_or_examples
 
-    def set_paths_if_exists(examples: list[ConceptExample], attr_name: str, base_dir):
+    # Construct cacher with which to compute file locations from image paths
+    dir_to_extract = segmentations_dir if segmentations_dir else features_dir
+    cache_dir = os.path.realpath(os.path.join(dir_to_extract, '..'))
+    segmentations_sub_dir = os.path.relpath(segmentations_dir, cache_dir) if segmentations_dir else None
+    features_sub_dir = os.path.relpath(features_dir, cache_dir) if features_dir else None
+
+    cacher = ConceptKBFeatureCacher(
+        None, None,
+        cache_dir=cache_dir,
+        segmentations_sub_dir=segmentations_sub_dir,
+        features_sub_dir=features_sub_dir
+    )
+
+    def set_paths_if_exists(examples: list[ConceptExample], path_fn: Callable[[ConceptExample],str], attr_name: str):
         for example in examples:
-            base_path = os.path.splitext(os.path.basename(example.image_path))[0] + '.pkl'
-            target_path = os.path.join(base_dir, base_path)
+            target_path = path_fn(example)
+
             if os.path.exists(target_path):
                 setattr(example, attr_name, target_path)
 
     if segmentations_dir and os.path.exists(segmentations_dir):
         # Store presegmented paths in concept examples
-        set_paths_if_exists(examples, 'image_segmentations_path', segmentations_dir)
+        set_paths_if_exists(examples, cacher._get_segmentation_cache_path, 'image_segmentations_path')
 
     if features_dir and os.path.exists(features_dir):
         # Store pre-computed feature paths in concept examples
-        set_paths_if_exists(examples, 'image_features_path', features_dir)
+        set_paths_if_exists(examples, cacher._get_features_cache_path, 'image_features_path')

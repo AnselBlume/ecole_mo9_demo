@@ -13,7 +13,7 @@ from kb_ops.build_kb import label_from_path, label_from_directory
 from model.concept import ConceptKBConfig
 from kb_ops.train_test_split import split
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
-from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline, ConceptKBExampleSampler
+from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline, ConceptKBExampleSampler, ConceptKBFeaturePipelineConfig
 from model.concept import ConceptKB
 import logging, coloredlogs
 from feature_extraction.trained_attrs import N_ATTRS_DINO
@@ -59,6 +59,9 @@ def get_parser() -> argparse.ArgumentParser:
 
     parser.add_argument('--wandb_project', type=str, default='ecole_mo9_demo', help='WandB project name')
     parser.add_argument('--wandb_dir', default='/shared/nas2/blume5/fa23/ecole', help='WandB log directory')
+
+    # Feature pipeline
+    parser.add_argument('--feature_pipeline_config', type=ConceptKBFeaturePipelineConfig, default=ConceptKBFeaturePipelineConfig()),
 
     # Predictor
     parser.add_argument('--predictor.use_ln', type=bool, default=False, help='Whether to use LayerNorm')
@@ -111,7 +114,11 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     # loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
     loc_and_seg = build_localizer_and_segmenter(build_sam(), None) # Don't load DesCo to save startup time
     feature_extractor = build_feature_extractor()
-    feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
+    feature_pipeline = ConceptKBFeaturePipeline(
+        loc_and_seg,
+        feature_extractor,
+        config=ConceptKBFeaturePipelineConfig(**args.feature_pipeline_config.as_dict())
+    )
 
     # %%
     concept_kb.initialize(ConceptKBConfig(
@@ -125,7 +132,7 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     # )) # Uncomment me and comment above to test with no ZS attributes to avoid paying Altman
 
     # %% Train concept detectors
-    trainer = ConceptKBTrainer(concept_kb, feature_pipeline, run)
+    trainer = ConceptKBTrainer(concept_kb, feature_pipeline, wandb_run=run)
 
     # %% Set cached segmentation, feature paths if they are provided and exist
     # NOTE Must recompute features every time we train a new model, as the number of zero-shot attributes
@@ -137,8 +144,6 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     if args.train.use_global_negatives:
         neg_segmentations_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.segmentations)
         set_feature_paths(concept_kb.global_negatives, segmentations_dir=neg_segmentations_dir)
-
-        # concept_kb.global_negatives = concept_kb.global_negatives[:10] # Comment me when not debugging
 
     # Prepare examples
     sampler = ConceptKBExampleSampler(concept_kb)

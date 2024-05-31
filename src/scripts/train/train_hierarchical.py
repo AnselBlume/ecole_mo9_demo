@@ -35,9 +35,11 @@ if __name__ == '__main__':
             n_epochs: 50
 
         extract_label_from: directory
-        cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v1/initial_run
+        cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v1/run2
         wandb_project: ecole_june_demo_2024
 
+        feature_pipeline_config:
+            remove_background: false
 
         hierarchy_config:
             concepts:
