@@ -82,6 +82,7 @@ class Controller:
         loc_and_seg_output: LocalizeAndSegmentOutput = None,
         unk_threshold: float = .1,
         leaf_nodes_only: bool = True,
+        include_component_concepts: bool = False,
         restrict_to_concepts: list[str] = []
     ) -> dict:
         '''
@@ -103,6 +104,7 @@ class Controller:
             unk_threshold=unk_threshold,
             return_segmentations=True,
             leaf_nodes_only=leaf_nodes_only,
+            include_component_concepts=include_component_concepts,
             concepts=concepts
         )
 
