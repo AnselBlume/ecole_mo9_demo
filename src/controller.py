@@ -717,10 +717,7 @@ if __name__ == '__main__':
     ###############################
     #  June 2024 Demo Checkpoint #
     ###############################
-    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1/passenger jet/000005.jpg'
     ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_05_30-11:30:28-rafd2xjd-no_biplane_no_cargo_jet/concept_kb_epoch_50.pt'
-
-    # %%
     kb = ConceptKB.load(ckpt_path)
     loc_and_seg = build_localizer_and_segmenter(build_sam(), None)
     fe = build_feature_extractor()
@@ -729,6 +726,8 @@ if __name__ == '__main__':
     controller = Controller(loc_and_seg, kb, fe, retriever)
 
     # %% Run the first prediction
+    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1/row of windows/000005.jpg'
+
     img = PIL.Image.open(img_path).convert('RGB')
     result = controller.predict_concept(img, unk_threshold=.1)
 
