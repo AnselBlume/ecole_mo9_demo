@@ -163,7 +163,8 @@ class ConceptKBForwardBase:
                 curr_loss += concept_loss
                 total_loss += concept_loss.item()
 
-            outputs.append(output.cpu())
+            if is_concept_for_loss:
+                outputs.append(output.cpu())
 
             if is_concept_for_loss:
                 n_concepts_for_loss_processed += 1
@@ -182,7 +183,7 @@ class ConceptKBForwardBase:
         forward_output = ForwardOutput(
             loss=total_loss if text_label is not None else None,
             predictors_outputs=outputs,
-            concept_names=[concept.name for concept in concepts]
+            concept_names=[concept.name for concept in concepts_for_loss]
         )
 
         if return_segmentations:
@@ -192,6 +193,10 @@ class ConceptKBForwardBase:
         return forward_output
 
     def _get_concepts_for_forward_pass(self, concepts: list[Concept]) -> list[Concept]:
+        '''
+            The concepts necessary for a forward pass may differ from those necessary for prediction,
+            as we need to predict hte component concepts before the containing concepts.
+        '''
         if self.compute_component_concept_scores_from_concept_predictors:
             concepts = self.concept_kb.get_component_concept_subgraph(concepts)
             concepts = self.concept_kb.in_component_order(concepts)
