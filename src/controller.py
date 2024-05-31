@@ -118,8 +118,8 @@ class Controller:
             'plot': img
         }
 
-    def predict_hierarchical(self, image: Image, unk_threshold: float = .1) -> list[dict]:
-        return self.predictor.hierarchical_predict(image_data=image, unk_threshold=unk_threshold)
+    def predict_hierarchical(self, image: Image, unk_threshold: float = .1, include_component_concepts: bool = False,) -> list[dict]:
+        return self.predictor.hierarchical_predict(image_data=image, unk_threshold=unk_threshold, include_component_concepts=include_component_concepts)
 
     def predict_from_subtree(self, image: Image, root_concept_name: str, unk_threshold: float = .1) -> list[dict]:
         root_concept = self.retrieve_concept(root_concept_name)
