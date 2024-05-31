@@ -10,6 +10,7 @@ from PIL.Image import Image
 import pickle
 import logging
 from .cached_image_features import CachedImageFeatures
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -90,11 +91,12 @@ class ConceptKBFeatureCacher:
 
         return examples
 
-    def _hash_str(self, s: str):
-        h = hash(s)
-        h = h % 2**sys.hash_info.width # Map to positive: https://stackoverflow.com/a/78232540/6248951
+    def _hash_str(self, s: str) -> str:
+        md5 = hashlib.md5()
+        md5.update(s.encode())
+        hex = md5.hexdigest()
 
-        return hex(h)[2:] # Get rid of 0x
+        return hex
 
     def _get_segmentation_cache_path(self, example: ConceptExample):
         return f'{self.cache_dir}/{self.segmentations_sub_dir}/{self._hash_str(example.image_path)}.pkl'
