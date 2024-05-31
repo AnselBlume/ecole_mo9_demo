@@ -9,7 +9,7 @@ from PIL.Image import Image
 from dataclasses import dataclass
 
 @dataclass
-class ConceptKBFeaturePipelienConfig:
+class ConceptKBFeaturePipelineConfig:
     compute_component_concept_scores: bool = False
 
     remove_background: bool = True
@@ -21,7 +21,7 @@ class ConceptKBFeaturePipeline:
         self,
         loc_and_seg: LocalizerAndSegmenter,
         feature_extractor: FeatureExtractor,
-        config: ConceptKBFeaturePipelienConfig = ConceptKBFeaturePipelienConfig()
+        config: ConceptKBFeaturePipelineConfig = ConceptKBFeaturePipelineConfig()
     ):
         self.loc_and_seg = loc_and_seg
         self.feature_extractor = feature_extractor
