@@ -36,6 +36,9 @@ class CachedImageFeatures(ImageFeatures):
         self.concept_to_zs_attr_region_scores[concept.name] = features.zs_attr_region_scores.cpu()
 
         if store_component_concept_scores:
+            if not features.component_concept_scores:
+                return
+
             component_concept_scores = features.component_concept_scores.cpu()
             assert len(concept.component_concepts) == len(component_concept_scores)
 

@@ -104,7 +104,7 @@ class ConceptKBPredictor(ConceptKBForwardBase):
         predictions = []
 
         if leaf_nodes_only:
-            assert 'concepts' not in forward_kwargs, 'Cannot specify concepts with leaf_nodes_only=True'
+            assert not forward_kwargs.get('concepts', None), 'Cannot specify concepts with leaf_nodes_only=True'
             forward_kwargs['concepts'] = self.concept_kb.leaf_concepts
 
         if not include_component_concepts:
