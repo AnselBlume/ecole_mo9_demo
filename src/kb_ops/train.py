@@ -162,8 +162,8 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
                 logger.info(
                     f'Validation loss: {outputs.loss},'
-                    + f' Validation component accuracy: {outputs.component_accuracy},'
-                    + f' Validation non-component accuracy: {outputs.non_component_accuracy}'
+                    + f' Validation component accuracy: {outputs.component_accuracy:.4f},'
+                    + f' Validation non-component accuracy: {outputs.non_component_accuracy:.4f}'
                 )
 
         # Construct return dictionary
