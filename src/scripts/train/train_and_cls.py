@@ -50,6 +50,8 @@ def get_parser() -> argparse.ArgumentParser:
                         help='Path to directory of negative example images')
 
     parser.add_argument('--ckpt_path', help='If provided, loads the ConceptKB from this pickle file instead of creating a new one.')
+    parser.add_argument('--use_cached_features_on_ckpt_load', default=True, type=bool,
+                        help='Whether to set feature paths (in addition to the usual segmenation paths) if loading from a checkpoint')
 
     # Cache
     parser.add_argument('--cache.root', default='/shared/nas2/blume5/fa23/ecole/cache/xiaomeng_augmented_data_v3', help='Directory to save example cache')
@@ -156,6 +158,14 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     if args.train.use_global_negatives:
         neg_segmentations_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.segmentations)
         set_feature_paths(concept_kb.global_negatives, segmentations_dir=neg_segmentations_dir)
+
+    if args.ckpt_path and args.use_cached_features_on_ckpt_load:
+        features_dir = os.path.join(args.cache.root, args.cache.features)
+        set_feature_paths(concept_kb, features_dir=features_dir)
+
+        if args.train.use_global_negatives:
+            neg_features_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.features)
+            set_feature_paths(concept_kb.global_negatives, features_dir=neg_features_dir)
 
     # Prepare examples
     sampler = ConceptKBExampleSampler(concept_kb)
