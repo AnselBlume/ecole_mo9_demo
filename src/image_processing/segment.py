@@ -114,8 +114,8 @@ class Segmenter:
 
         try:
             masks: list[dict] = self.sam_amg.generate(np.array(image if segment_before_crop else cropped_image))
-        except ValueError: # Failed to segment due to crop being too small
-            logger.warning('Failed to segment image. Returning full mask.')
+        except (ValueError, IndexError) as e: # Failed to segment due to crop being too small
+            logger.warning(f'Failed to segment image: {e} \nReturning full mask.')
             shape = image.size[::-1] if segment_before_crop else cropped_image.size[::-1]
             return torch.full((1, *shape), True, dtype=torch.bool)
 
