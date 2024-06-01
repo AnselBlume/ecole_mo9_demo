@@ -26,7 +26,8 @@ if __name__ == '__main__':
 
     parser = get_parser()
     args = parse_args(parser, config_str='''
-        # ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_05_31-23:15:00-krc67a6q-no_biplane_no_cargo_jet_v2/concept_kb_epoch_50.pt
+        # ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_01-00:57:58-85pf2vzt-no_bp_no_cj_no_localize/concept_kb_epoch_50.pt
+        # cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v1/no_localize
 
         img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1
         # img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1_tiny
@@ -40,8 +41,8 @@ if __name__ == '__main__':
         cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v1/run2
         wandb_project: ecole_june_demo_2024
 
-        # loc_and_seg_config:
-        #     do_localize: false
+        loc_and_seg_config:
+            do_localize: false
 
         hierarchy_config:
             concepts:
