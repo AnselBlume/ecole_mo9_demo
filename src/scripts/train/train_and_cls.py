@@ -14,6 +14,7 @@ from model.concept import ConceptKBConfig
 from kb_ops.train_test_split import split
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
 from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline, ConceptKBExampleSampler, ConceptKBFeaturePipelineConfig
+from image_processing import LocalizerAndSegmenterConfig
 from model.concept import ConceptKB
 import logging, coloredlogs
 from feature_extraction.trained_attrs import N_ATTRS_DINO
@@ -62,6 +63,7 @@ def get_parser() -> argparse.ArgumentParser:
 
     # Feature pipeline
     parser.add_argument('--feature_pipeline_config', type=ConceptKBFeaturePipelineConfig, default=ConceptKBFeaturePipelineConfig()),
+    parser.add_argument('--loc_and_seg_config', type=LocalizerAndSegmenterConfig, default=LocalizerAndSegmenterConfig())
 
     # Predictor
     parser.add_argument('--predictor.use_ln', type=bool, default=False, help='Whether to use LayerNorm')
@@ -112,7 +114,11 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
 
     # %%
     # loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
-    loc_and_seg = build_localizer_and_segmenter(build_sam(), None) # Don't load DesCo to save startup time
+    loc_and_seg = build_localizer_and_segmenter(
+        build_sam(),
+        None,
+        config=LocalizerAndSegmenterConfig(**args.loc_and_seg_config.as_dict())
+    ) # Don't load DesCo to save startup time
     feature_extractor = build_feature_extractor()
     feature_pipeline = ConceptKBFeaturePipeline(
         loc_and_seg,

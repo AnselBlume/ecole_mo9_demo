@@ -12,10 +12,6 @@ from dataclasses import dataclass
 class ConceptKBFeaturePipelineConfig:
     compute_component_concept_scores: bool = False
 
-    remove_background: bool = True
-    return_crops: bool = True
-    use_bbox_for_crops: bool = False
-
 class ConceptKBFeaturePipeline:
     def __init__(
         self,
@@ -32,17 +28,20 @@ class ConceptKBFeaturePipeline:
         image: Image,
         concept_name: str = '',
         concept_parts: list[str] = [],
+        do_localize: bool = None,
         remove_background: bool = None,
         return_crops: bool = None,
         use_bbox_for_crops: bool = None
     ) -> LocalizeAndSegmentOutput:
 
+        if do_localize is None:
+            do_localize = self.loc_and_seg.config.do_localize
         if remove_background is None:
-            remove_background = self.config.remove_background
+            remove_background = self.loc_and_seg.config.remove_background
         if return_crops is None:
-            return_crops = self.config.return_crops
+            return_crops = self.loc_and_seg.config.return_crops
         if use_bbox_for_crops is None:
-            use_bbox_for_crops = self.config.use_bbox_for_crops
+            use_bbox_for_crops = self.loc_and_seg.config.use_bbox_for_crops
 
         return self.loc_and_seg.localize_and_segment(
             image=image,

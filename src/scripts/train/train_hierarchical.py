@@ -38,8 +38,8 @@ if __name__ == '__main__':
         cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v1/run2
         wandb_project: ecole_june_demo_2024
 
-        feature_pipeline_config:
-            remove_background: false
+        # loc_and_seg_config:
+        #     do_localize: false
 
         hierarchy_config:
             concepts:

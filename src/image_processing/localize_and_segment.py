@@ -11,9 +11,6 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-def build_localizer_and_segmenter(sam: Sam, desco: GLIPDemo):
-    return LocalizerAndSegmenter(Localizer(sam, desco), Segmenter(sam))
-
 @dataclass
 class LocalizeAndSegmentOutput:
     input_image: Image = field(
@@ -66,10 +63,28 @@ class LocalizeAndSegmentOutput:
         metadata={'description': 'Tensor of shape (n_part_detections, 4) of bboxes of localized parts in XYXY format, if concept_parts is provided.'}
     )
 
+@dataclass
+class LocalizerAndSegmenterConfig:
+    do_localize: bool = True
+    remove_background: bool = True
+    return_crops: bool = True
+    use_bbox_for_crops: bool = False
+
+    def __post_init__(self):
+        if not self.do_localize and self.remove_background:
+            logger.warning('remove_background is true while do_localize is false; setting remove_background to false')
+            self.remove_background = False
+
 class LocalizerAndSegmenter:
-    def __init__(self, localizer: Localizer, segmenter: Segmenter):
+    def __init__(
+        self,
+        localizer: Localizer,
+        segmenter: Segmenter,
+        config: LocalizerAndSegmenterConfig = LocalizerAndSegmenterConfig()
+    ):
         self.localizer = localizer
         self.segmenter = segmenter
+        self.config = config
 
         self.article_det = ArticleDeterminer()
 
@@ -79,9 +94,10 @@ class LocalizerAndSegmenter:
         image: Image,
         concept_name: str = '',
         concept_parts: list[str] = [],
-        remove_background: bool = True,
-        return_crops: bool = True,
-        use_bbox_for_crops: bool = False
+        do_localize: bool = None,
+        remove_background: bool = None,
+        return_crops: bool = None,
+        use_bbox_for_crops: bool = None
     ) -> LocalizeAndSegmentOutput:
         '''
             Localizes and segments the concept in the image in to parts.
@@ -90,8 +106,11 @@ class LocalizerAndSegmenter:
                 image (PIL.Image.Image): Image to localize and segment
                 concept_name (str): Name of concept to localize. If not provided, uses rembg to perform foreground segmentation
                 concept_parts (list[str]): List of part names to localize. If not provided, uses SAM to perform part segmentation
+                do_localize (bool): Whether to localize the concept in the image or use the whole image. If false, disables background removal.
                 remove_background (bool): Whether to remove the background from the localized concept.
                 return_crops (bool): If true, returns images of the cropped parts (possibly with background removed) under the key 'part_crops'.
+                use_bbox_for_crops (bool): If true, draws bounding boxes around the parts instead of using the part masks to crop the parts.
+
 
             Returns:
                 LocalizeAndSegmentOutput
@@ -102,9 +121,19 @@ class LocalizerAndSegmenter:
                     'localized_part_bboxes' (torch.IntTensor): Tensor of shape (n_part_detections, 4) of bounding boxes of the localized parts in XYXY format,
                         if concept_parts is provided.
         '''
+        do_localize = do_localize if do_localize is not None else self.config.do_localize
+        remove_background = remove_background if remove_background is not None else self.config.remove_background
+        return_crops = return_crops if return_crops is not None else self.config.return_crops
+        use_bbox_for_crops = use_bbox_for_crops if use_bbox_for_crops is not None else self.config.use_bbox_for_crops
+
         # Localize the concept
         caption = self._get_parts_caption(concept_name, concept_parts) if concept_parts else concept_name
-        bboxes, object_masks = self.localizer.localize(image, caption=caption, tokens_to_ground=[concept_name], return_object_masks=True)
+
+        if do_localize:
+            bboxes, object_masks = self.localizer.localize(image, caption=caption, tokens_to_ground=[concept_name], return_object_masks=True)
+        else:
+            bboxes = torch.tensor([0, 0, image.size[0], image.size[1]], dtype=torch.int32)[None,...] # (x1, y1, x2, y2) = (0, 0, w, h)
+            object_masks = torch.ones(1, image.size[1], image.size[0], dtype=torch.bool) # (1, h, w)
 
         if len(bboxes) == 0: # Fall back to rembg if DesCo fails
             if concept_name:
@@ -215,3 +244,6 @@ class LocalizerAndSegmenter:
             prompt += f'{self.article_det.determine(component_part)}{component_part}'
 
         return prompt
+
+def build_localizer_and_segmenter(sam: Sam, desco: GLIPDemo, config: LocalizerAndSegmenterConfig = LocalizerAndSegmenterConfig()):
+    return LocalizerAndSegmenter(Localizer(sam, desco), Segmenter(sam), config=config)
