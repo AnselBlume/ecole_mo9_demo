@@ -207,9 +207,10 @@ class Localizer:
         tokens_to_ground: list[str] = [],
         conf_thresh: float = .4,
         return_object_masks: bool = True
-    ) -> torch.IntTensor:
+    ) -> Union[torch.IntTensor, tuple[torch.IntTensor,torch.BoolTensor]]:
         '''
-            Returns torch.IntTensor of shape (n_detections, h, w).
+            Returns torch.IntTensor of shape (n_detections, x1, y1, x2, y2).
+            If return_object_masks is True, also returns a torch.BoolTensor of shape (n_detections, h, w)
 
             If caption and token_to_ground are provided, uses DesCo to ground the token in the image.
             Otherwise, uses rembg to perform foreground segmentation.
