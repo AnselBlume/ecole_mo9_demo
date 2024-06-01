@@ -99,13 +99,6 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     run = wandb.init(project=args.wandb_project, config=args.as_flat(), dir=args.wandb_dir, reinit=True)
     # run = None # Comment me to use wandb
 
-    # %% Initialize concept KB
-    label_extractor = label_from_path if args.extract_label_from == 'path' else label_from_directory
-    concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor) if concept_kb is None else concept_kb
-
-    if args.train.use_global_negatives:
-        add_global_negatives(concept_kb, args.negatives_img_dir, limit=args.train.limit_global_negatives)
-
     # Import here so DesCo sees the CUDA device change
     from feature_extraction import (
         build_feature_extractor,
@@ -128,11 +121,18 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
         config=ConceptKBFeaturePipelineConfig(**args.feature_pipeline_config.as_dict())
     )
 
-    # %%
+    # %% Initialize concept KB
     if args.ckpt_path:
         assert concept_kb is None, 'Cannot load a ConceptKB from a checkpoint and also pass one in as an argument'
         concept_kb = ConceptKB.load(args.ckpt_path)
+
     else:
+        label_extractor = label_from_path if args.extract_label_from == 'path' else label_from_directory
+        concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor) if concept_kb is None else concept_kb
+
+        if args.train.use_global_negatives:
+            add_global_negatives(concept_kb, args.negatives_img_dir, limit=args.train.limit_global_negatives)
+
         concept_kb.initialize(ConceptKBConfig(
             encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,
             n_trained_attrs=N_ATTRS_DINO,
