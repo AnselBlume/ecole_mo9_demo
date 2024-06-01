@@ -17,21 +17,20 @@ from.example_sampler import ConceptKBExampleSampler
 logger = logging.getLogger(__name__)
 
 @dataclass
-class TrainOutput(DictDataClass):
-    best_ckpt_epoch: int = None
-    best_ckpt_path: str = None
-    train_outputs: list[ForwardOutput] = None
-    val_outputs: Optional[list[ForwardOutput]] = field(
-        default=None,
-        metadata={'description': 'List of outputs from validation dataloader if val_dl is provided'}
-    )
-
-@dataclass
 class ValidationOutput(DictDataClass):
     loss: float
     component_accuracy: float
     non_component_accuracy: float
-    predicted_concept_outputs: list[ForwardOutput]
+
+@dataclass
+class TrainOutput(DictDataClass):
+    best_ckpt_epoch: int = None
+    best_ckpt_path: str = None
+    train_outputs: list[ForwardOutput] = None
+    val_outputs: Optional[list[ValidationOutput]] = field(
+        default=None,
+        metadata={'description': 'List of outputs from validation dataloader if val_dl is provided'}
+    )
 
 class ConceptKBTrainer(ConceptKBForwardBase):
     def __init__(self, concept_kb: ConceptKB, feature_pipeline: ConceptKBFeaturePipeline = None, wandb_run: Run = None):
@@ -103,7 +102,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         train_outputs = []
 
         val_dl = self._get_dataloader(val_ds, is_train=False) if val_ds else None
-        val_outputs = []
+        val_outputs: list[ValidationOutput] = []
 
         optimizer = torch.optim.Adam(self.concept_kb.parameters(), lr=lr)
         set_score_to_zero_at_indices = set(set_score_to_zero_at_indices)
@@ -167,7 +166,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 )
 
         # Construct return dictionary
-        val_losses = [output.val_loss for output in val_outputs] if val_dl else None
+        val_losses = [output.loss for output in val_outputs] if val_dl else None
         best_ckpt_epoch = np.argmin(val_losses) if val_losses else None
         best_ckpt_path = self._get_ckpt_path(ckpt_dir, ckpt_fmt, best_ckpt_epoch) if val_losses else None
 
@@ -312,7 +311,6 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         self.concept_kb.eval()
 
         total_loss = 0
-        predicted_concept_outputs = []
         data_key = self._determine_data_key(val_dl.dataset)
 
         concepts_for_forward = {c.name : c for c in self.concept_kb}
@@ -326,8 +324,8 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             component_concepts = {c.name : c for c in component_concepts.values() if c.name in leaf_concepts}
             non_component_concepts = {c.name : c for c in non_component_concepts.values() if c.name in leaf_concepts}
 
-        component_acc = Accuracy(task='multiclass', num_classes=len(component_concepts))
-        non_component_acc = Accuracy(task='multiclass', num_classes=len(non_component_concepts))
+        component_accuracy = Accuracy(task='binary').cuda()
+        non_component_accuracy = Accuracy(task='binary').cuda()
 
         for batch in tqdm(val_dl, desc='Validation'):
             image, text_label = batch[data_key], batch['label']
@@ -339,43 +337,26 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             forward_outputs = self.forward_pass(image[0], text_label[0], concepts=concepts_to_train, **forward_kwargs)
             total_loss += forward_outputs.loss # Store loss
 
-            # Compute accuracy forward
-            if text_label[0] in component_concepts:
-                concepts_for_accuracy = component_concepts.values()
-                acc = component_acc
+            # Compute component accuracy
+            concepts_for_component_accuracy = [c for c in concepts_to_train if c.name in component_concepts]
+            if concepts_for_component_accuracy:
+                component_forward_outputs = self.forward_pass(image[0], text_label[0], concepts=concepts_for_component_accuracy, **forward_kwargs)
+                component_accuracy(component_forward_outputs.binary_concept_predictions, component_forward_outputs.binary_concept_labels)
 
-            elif text_label[0] in non_component_concepts:
-                concepts_for_accuracy = non_component_concepts.values()
-                acc = non_component_acc
-
-            else: # Internal node when leaf_nodes_only_for_accuracy is True; can't compute accuracy
-                continue
-
-            accuracy_outputs = self.forward_pass(image[0], text_label[0], concepts=concepts_for_accuracy, **forward_kwargs)
-
-            # Compute predictions and accuracy
-            scores = torch.tensor([output.cum_score for output in accuracy_outputs.predictors_outputs])
-
-            pred_ind = scores.argmax(dim=0, keepdim=True) # (1,) IntTensor
-
-            # Compute true index
-            true_ind = accuracy_outputs.concept_names.index(text_label[0])
-            true_ind = torch.tensor(true_ind).unsqueeze(0) # (1,)
-
-            acc(pred_ind, true_ind)
-
-            # Store predicted output
-            predicted_concept_outputs.append(accuracy_outputs.predictors_outputs[pred_ind.item()])
+            # Compute non-component accuracy
+            concepts_for_non_component_accuracy = [c for c in concepts_to_train if c.name in non_component_concepts]
+            if concepts_for_non_component_accuracy:
+                non_component_forward_outputs = self.forward_pass(image[0], text_label[0], concepts=concepts_for_non_component_accuracy, **forward_kwargs)
+                non_component_accuracy(non_component_forward_outputs.binary_concept_predictions, non_component_forward_outputs.binary_concept_labels)
 
         total_loss = total_loss / len(val_dl)
-        component_acc = component_acc.compute().item()
-        non_component_acc = non_component_acc.compute().item()
+        component_accuracy = component_accuracy.compute().item()
+        non_component_accuracy = non_component_accuracy.compute().item()
 
         val_output = ValidationOutput(
             loss=total_loss,
-            component_accuracy=component_acc,
-            non_component_accuracy=non_component_acc,
-            predicted_concept_outputs=predicted_concept_outputs
+            component_accuracy=component_accuracy,
+            non_component_accuracy=non_component_accuracy
         )
 
         return val_output

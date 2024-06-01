@@ -31,6 +31,16 @@ class ForwardOutput(DictDataClass):
         metadata={'help': 'Names of the concepts for which outputs were computed; corresponds to the order of predictors_outputs'}
     )
 
+    binary_concept_predictions: torch.Tensor = field(
+        default=None,
+        metadata={'help': 'Binary predictions for each concept in concept_names; shape (n_concepts,)'}
+    )
+
+    binary_concept_labels: torch.Tensor = field(
+        default=None,
+        metadata={'help': 'Binary labels for each concept in concept_names; shape (n_concepts,)'}
+    )
+
     segmentations: LocalizeAndSegmentOutput = field(
         default=None,
         metadata={'help': 'Segmentation output if return_segmentations was set to True in the forward pass'}
@@ -99,6 +109,9 @@ class ConceptKBForwardBase:
         concepts_for_forward = self._get_concepts_for_forward_pass(concepts)
         concepts_for_loss = dict.fromkeys(concepts)
 
+        concept_predictions = []
+        concept_labels = []
+
         n_concepts_for_loss_processed = 0 # How many concepts intended for loss computation have been processed
         for concept in concepts_for_forward:
             if features_were_provided:
@@ -142,7 +155,11 @@ class ConceptKBForwardBase:
             # Compute loss and potentially perform backward pass
             if text_label is not None and is_concept_for_loss:
                 binary_label = torch.tensor(int(text_label in self.concept_labels[concept.name]), dtype=score.dtype, device=score.device)
+                binary_prediction = (score > 0).to(binary_label.dtype)
                 concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(concepts_for_loss)
+
+                concept_labels.append(binary_label)
+                concept_predictions.append(binary_prediction)
 
                 # To prevent loss saturation due to sigmoid
                 if set_score_to_zero:
@@ -172,6 +189,8 @@ class ConceptKBForwardBase:
         forward_output = ForwardOutput(
             loss=total_loss if text_label is not None else None,
             predictors_outputs=outputs,
+            binary_concept_predictions=torch.stack(concept_predictions),
+            binary_concept_labels=torch.stack(concept_labels),
             concept_names=[concept.name for concept in concepts_for_loss]
         )
 
@@ -184,7 +203,7 @@ class ConceptKBForwardBase:
     def _get_concepts_for_forward_pass(self, concepts: list[Concept]) -> list[Concept]:
         '''
             The concepts necessary for a forward pass may differ from those necessary for prediction,
-            as we need to predict hte component concepts before the containing concepts.
+            as we need to predict the component concepts before the containing concepts.
         '''
         if self.compute_component_concept_scores_from_concept_predictors:
             concepts = self.concept_kb.get_component_concept_subgraph(concepts)
