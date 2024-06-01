@@ -77,6 +77,7 @@ if __name__ == '__main__':
     concept_kb.to('cuda')
 
     results = trainer.validate(test_dl)
-    logger.info(f'Accuracy: {results["val_acc"]}')
+    logger.info(f'Component Accuracy: {results.component_accuracy}')
+    logger.info(f'Non-Component Accuracy: {results.non_component_accuracy}')
 
 # %%

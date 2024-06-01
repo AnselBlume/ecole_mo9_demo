@@ -28,8 +28,9 @@ class TrainOutput(DictDataClass):
 
 @dataclass
 class ValidationOutput(DictDataClass):
-    val_loss: float
-    val_acc: float
+    loss: float
+    component_accuracy: float
+    non_component_accuracy: float
     predicted_concept_outputs: list[ForwardOutput]
 
 class ConceptKBTrainer(ConceptKBForwardBase):
@@ -121,9 +122,6 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 if not concepts_to_train:
                     logger.warning(f'No concepts to train after intersection with global concepts for example {index}; skipping')
                     continue
-                else:
-                    # logger.debug(f'Using concepts {[c.name for c in concepts_to_train]} for example {index}')
-                    pass
 
                 # Forward pass
                 outputs = self.forward_pass(
@@ -155,11 +153,21 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 outputs = self.validate(val_dl)
                 val_outputs.append(outputs)
 
-                self.log({'val_loss': outputs['val_loss'], 'val_acc': outputs['val_acc'], 'epoch': epoch})
-                logger.info(f'Validation loss: {outputs["val_loss"]}, Validation accuracy: {outputs["val_acc"]}')
+                self.log({
+                    'val_loss': outputs.loss,
+                    'val_component_acc': outputs.component_accuracy,
+                    'val_non_component_acc': outputs.non_component_accuracy,
+                    'epoch': epoch
+                })
+
+                logger.info(
+                    f'Validation loss: {outputs.loss},'
+                    + f' Validation component accuracy: {outputs.component_accuracy},'
+                    + f' Validation non-component accuracy: {outputs.non_component_accuracy}'
+                )
 
         # Construct return dictionary
-        val_losses = [output['val_loss'] for output in val_outputs] if val_dl else None
+        val_losses = [output.val_loss for output in val_outputs] if val_dl else None
         best_ckpt_epoch = np.argmin(val_losses) if val_losses else None
         best_ckpt_path = self._get_ckpt_path(ckpt_dir, ckpt_fmt, best_ckpt_epoch) if val_losses else None
 
@@ -305,55 +313,68 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
         total_loss = 0
         predicted_concept_outputs = []
-        acc = Accuracy(task='multiclass', num_classes=len(self.concept_kb))
         data_key = self._determine_data_key(val_dl.dataset)
 
-        concepts = self.concept_kb.leaf_concepts if leaf_nodes_only_for_accuracy else self.concept_kb
-        concepts = {c.name : c for c in concepts}
+        concepts_for_forward = {c.name : c for c in self.concept_kb}
+
+        # Compute accuracy separately for component and non-component concepts
+        component_concepts: dict[str,Concept] = {c.name : c for c in self.concept_kb.component_concepts}
+        non_component_concepts: dict[str, Concept] = {c.name : c for c in self.concept_kb if c.name not in component_concepts}
+
+        if leaf_nodes_only_for_accuracy:
+            leaf_concepts = {c.name : c for c in self.concept_kb.leaf_concepts}
+            component_concepts = {c.name : c for c in component_concepts.values() if c.name in leaf_concepts}
+            non_component_concepts = {c.name : c for c in non_component_concepts.values() if c.name in leaf_concepts}
+
+        component_acc = Accuracy(task='multiclass', num_classes=len(component_concepts))
+        non_component_acc = Accuracy(task='multiclass', num_classes=len(non_component_concepts))
 
         for batch in tqdm(val_dl, desc='Validation'):
             image, text_label = batch[data_key], batch['label']
-            index = batch['index'][0]
 
             # Get the concepts to train, intersecting example's and global concepts
-            concepts_to_train = self._get_concepts_to_train(batch, concepts)
-
-            if not concepts_to_train:
-                logger.warning(f'No concepts to train after intersection with global concepts for example {index}; skipping')
-                continue
-            else:
-                # logger.debug(f'Using concepts {concepts_to_train} for example {index}')
-                pass
+            concepts_to_train = self._get_concepts_to_train(batch, concepts_for_forward)
 
             # Forward pass
-            outputs = self.forward_pass(image[0], text_label[0], concepts=concepts_to_train, **forward_kwargs)
+            forward_outputs = self.forward_pass(image[0], text_label[0], concepts=concepts_to_train, **forward_kwargs)
+            total_loss += forward_outputs.loss # Store loss
 
-            total_loss += outputs['loss'] # Store loss
+            # Compute accuracy forward
+            if text_label[0] in component_concepts:
+                concepts_for_accuracy = component_concepts.values()
+                acc = component_acc
+
+            elif text_label[0] in non_component_concepts:
+                concepts_for_accuracy = non_component_concepts.values()
+                acc = non_component_acc
+
+            else: # Internal node when leaf_nodes_only_for_accuracy is True; can't compute accuracy
+                continue
+
+            accuracy_outputs = self.forward_pass(image[0], text_label[0], concepts=concepts_for_accuracy, **forward_kwargs)
 
             # Compute predictions and accuracy
-            scores = torch.tensor([output.cum_score for output in outputs['predictors_outputs']])
+            scores = torch.tensor([output.cum_score for output in accuracy_outputs.predictors_outputs])
 
             pred_ind = scores.argmax(dim=0, keepdim=True) # (1,) IntTensor
 
             # Compute true index
-            true_ind = self.label_to_ind[text_label[0]] # Global index
-
-            if leaf_nodes_only_for_accuracy: # To leaf index
-                true_ind = self.global_ind_to_leaf_ind[true_ind]
-
+            true_ind = accuracy_outputs.concept_names.index(text_label[0])
             true_ind = torch.tensor(true_ind).unsqueeze(0) # (1,)
 
             acc(pred_ind, true_ind)
 
             # Store predicted output
-            predicted_concept_outputs.append(outputs['predictors_outputs'][pred_ind.item()])
+            predicted_concept_outputs.append(accuracy_outputs.predictors_outputs[pred_ind.item()])
 
         total_loss = total_loss / len(val_dl)
-        val_acc = acc.compute().item()
+        component_acc = component_acc.compute().item()
+        non_component_acc = non_component_acc.compute().item()
 
         val_output = ValidationOutput(
-            val_loss=total_loss,
-            val_acc=val_acc,
+            loss=total_loss,
+            component_accuracy=component_acc,
+            non_component_accuracy=non_component_acc,
             predicted_concept_outputs=predicted_concept_outputs
         )
 
