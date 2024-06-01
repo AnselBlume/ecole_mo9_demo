@@ -49,6 +49,8 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument('--negatives_img_dir', type=str, default='/shared/nas2/blume5/fa23/ecole/data/imagenet/negatives_rand_1k',
                         help='Path to directory of negative example images')
 
+    parser.add_argument('--ckpt_path', help='If provided, loads the ConceptKB from this pickle file instead of creating a new one.')
+
     # Cache
     parser.add_argument('--cache.root', default='/shared/nas2/blume5/fa23/ecole/cache/xiaomeng_augmented_data_v3', help='Directory to save example cache')
     parser.add_argument('--cache.segmentations', default='segmentations', help='Subdirectory of cache_dir to save segmentations')
@@ -127,15 +129,19 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     )
 
     # %%
-    concept_kb.initialize(ConceptKBConfig(
-        encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,
-        n_trained_attrs=N_ATTRS_DINO,
-        use_ln=args.predictor.use_ln,
-        use_probabilities=args.predictor.use_probabilities,
-        use_full_img=args.predictor.use_full_img,
-        use_regions=args.predictor.use_regions
-    ), llm_client=LLMClient())
-    # )) # Uncomment me and comment above to test with no ZS attributes to avoid paying Altman
+    if args.ckpt_path:
+        assert concept_kb is None, 'Cannot load a ConceptKB from a checkpoint and also pass one in as an argument'
+        concept_kb = ConceptKB.load(args.ckpt_path)
+    else:
+        concept_kb.initialize(ConceptKBConfig(
+            encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,
+            n_trained_attrs=N_ATTRS_DINO,
+            use_ln=args.predictor.use_ln,
+            use_probabilities=args.predictor.use_probabilities,
+            use_full_img=args.predictor.use_full_img,
+            use_regions=args.predictor.use_regions
+        ), llm_client=LLMClient())
+        # )) # Uncomment me and comment above to test with no ZS attributes to avoid paying Altman
 
     # %% Train concept detectors
     trainer = ConceptKBTrainer(concept_kb, feature_pipeline, wandb_run=run)

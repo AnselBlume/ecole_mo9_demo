@@ -26,9 +26,11 @@ if __name__ == '__main__':
 
     parser = get_parser()
     args = parse_args(parser, config_str='''
-        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1
+        # ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_05_31-23:15:00-krc67a6q-no_biplane_no_cargo_jet_v2/concept_kb_epoch_50.pt
 
+        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1
         # img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1_tiny
+
         train:
             # limit_global_negatives: 5
             split: [.7, .2, .1]
@@ -78,12 +80,16 @@ if __name__ == '__main__':
                 fighter jet: ['afterburner']
         ''')
 
-    # Construct KB from images
-    label_extractor = label_from_path if args.extract_label_from == 'path' else label_from_directory
-    concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor)
+    if args.ckpt_path:
+        concept_kb = None # Will be loaded in main
 
-    # Apply graph connectivity and create any concepts without images
-    graph = ConceptGraphParser().parse_graph(path=args.hierarchy_config_path, config=args.hierarchy_config)
-    graph.apply(concept_kb)
+    else:
+        # Construct KB from images
+        label_extractor = label_from_path if args.extract_label_from == 'path' else label_from_directory
+        concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor)
+
+        # Apply graph connectivity and create any concepts without images
+        graph = ConceptGraphParser().parse_graph(path=args.hierarchy_config_path, config=args.hierarchy_config)
+        graph.apply(concept_kb)
 
     main(args, parser, concept_kb=concept_kb)
