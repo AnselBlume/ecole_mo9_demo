@@ -98,7 +98,13 @@ class Concept:
     examples: list[ConceptExample] = field(default_factory=list, metadata={'help': 'Stored example data'})
 
     def __str__(self) -> str:
-        return f'Concept(name={self.name})'
+        return (
+            'Concept(\n'
+                + f'\tname={self.name}\n'
+                + f'\tchildren={[child_name for child_name in self.child_concepts]}\n'
+                + f'\tparts={[component_name for component_name in self.component_concepts]},\n'
+            + ')'
+        )
 
     def __repr__(self) -> str:
         return str(self)
