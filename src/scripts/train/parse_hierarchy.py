@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from model.concept import ConceptKB, Concept
 import logging
 import json
+from collections import deque
 
 logger = logging.getLogger(__file__)
 
@@ -16,6 +17,36 @@ class ConceptGraph:
         self.apply_concepts(concept_kb)
         self.apply_instance_graph(concept_kb)
         self.apply_component_graph(concept_kb)
+        self.add_superclass_parts(concept_kb)
+
+    @staticmethod
+    def add_superclass_parts(concept_kb: ConceptKB):
+        # Get descendants of every concept
+        concept_to_descendants = {
+            concept : dict.fromkeys(concept_kb.rooted_subtree(concept))
+            for concept in concept_kb
+        }
+
+        # Perform BFS, starting from the top of the hierarchy, and have each concept inherit components from its
+        # parents since this is guaranteed to be the most specific component (as we traverse top to bottom)
+        queue = deque(concept_kb.root_concepts)
+        while queue:
+            curr = queue.popleft()
+
+            for parent in curr.parent_concepts.values():
+                for parent_component in parent.component_concepts.values():
+                    parent_component_descendants = concept_to_descendants[parent_component]
+
+                    does_concept_contain_component_or_component_descendant = any(
+                        component in parent_component_descendants
+                        for component in curr.component_concepts.values()
+                    )
+
+                    if not does_concept_contain_component_or_component_descendant:
+                        logger.debug(f'Adding component {parent_component.name} to {curr.name}')
+                        curr.add_component_concept(parent_component)
+
+            queue.extend(curr.child_concepts.values())
 
     def apply_concepts(self, concept_kb: ConceptKB):
         graph_concepts = dict.fromkeys(self.concepts)
