@@ -91,11 +91,25 @@ class ConceptKBExampleSampler:
         self,
         concept_examples: list[ConceptExample],
         use_descendants_as_positives: bool = True,
+        use_containing_concepts_as_positives: bool = False, # TODO
         max_to_sample_per_descendant: int = None, # TODO
         negatives_strategy: Literal['use_all_concepts_as_negatives', 'use_siblings_as_negatives', 'only_positives'] = 'use_siblings_as_negatives'
     ):
         '''
-            use_descendants_as_positives, aka train ancestors on positives.
+            use_descendants_as_positives: trains ancestors on positive examples.
+
+            use_containing_concepts_as_positives: If A contains B, uses images of A as positives for B. This is not necessarily good, unless A always
+                contains B, instead of sometimes contains B (or B is only sometimes visible).
+
+            negatives_strategy:
+                - use_all_concepts_as_negatives: Each example trains on all concepts. Effective for classification, but not for component detection
+                  (since oftentimes we don't know whether an image contains a component or not).
+
+                - use_siblings_as_negatives: Each example trains the concept label's siblings and all of its ancestor's siblings. This is effective for
+                  downwards traversal of the tree during prediction. For components, only uses the component's siblings as it is more likely that
+                  multiple components can be in an image.
+
+                - only_positives: Only train on the positive concept for an image. This is effective for component detection, but not for classification.
         '''
         assert all(example.concept_name for example in concept_examples), 'All examples must have a concept name'
 
@@ -107,8 +121,18 @@ class ConceptKBExampleSampler:
                 # Include the current concept in the returned sibling list. The current concept IS NOT
                 # guaranteed to be first in the list
                 siblings = {concept.name} # Prevent duplicates
-                for parent in concept.parent_concepts.values():
-                    siblings.update(dict.fromkeys(parent.child_concepts.keys())) # Store the sibling names
+
+                # Get siblings of all ancestors
+                ancestors = dict.fromkeys(self.concept_kb.rooted_subtree(concept, reverse_edges=True))
+                for ancestor in ancestors:
+                    if ancestor.name != concept.name: # This concept's children are not siblings
+                        # Don't include siblings of ancestors which are also ancestors, as we only add concepts for negatives here
+                        siblings_and_not_ancestors = {c.name : None for c in ancestor.child_concepts.values() if c not in ancestors}
+                        siblings.update(siblings_and_not_ancestors)
+
+                # Add component siblings only for the current concept, as it is more likely that multiple components can be in an image
+                for container in concept.containing_concepts.values():
+                    siblings.update(dict.fromkeys(container.component_concepts.keys()))
 
                 return list(siblings)
 
