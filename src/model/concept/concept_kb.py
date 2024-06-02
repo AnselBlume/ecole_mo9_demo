@@ -4,6 +4,7 @@ from torch.nn import Parameter
 from model.attribute import Attribute
 from itertools import chain
 from .concept_predictor import ConceptPredictor
+from collections import deque
 import pickle
 from tqdm import tqdm
 import logging
@@ -93,12 +94,14 @@ class ConceptKB:
             If reversed_edges is True, the rooted subtree is the concept itself and all its ancestors.
         '''
         subtree = {}
-        queue = [concept]
+        queue = deque([concept])
 
         while queue:
-            curr = queue.pop()
+            curr = queue.popleft()
+
             if curr.name not in subtree:
                 subtree[curr.name] = curr
+
                 if reverse_edges:
                     queue.extend(curr.parent_concepts.values())
                 else:
