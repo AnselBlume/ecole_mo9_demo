@@ -141,8 +141,14 @@ class Controller:
         root_concept = self.retrieve_concept(root_concept_name)
         return self.predictor.hierarchical_predict(image_data=image, root_concepts=[root_concept], unk_threshold=unk_threshold)
 
-    def predict_root_concept(self, image: Image, unk_threshold: float = .1) -> dict:
-        results = self.predictor.hierarchical_predict(image_data=image, root_concepts=[self.concept_kb.root_concept], unk_threshold=unk_threshold) # list[dict]
+    def predict_root_concept(self, image: Image, unk_threshold: float = .1, include_component_concepts: bool = False) -> dict:
+        results = self.predictor.hierarchical_predict(
+            image_data=image,
+            root_concepts=[self.concept_kb.root_concepts],
+            unk_threshold=unk_threshold,
+            include_component_concepts=include_component_concepts
+        ) # list[dict]
+
         return results[0] # The root concept is the first
 
     def is_concept_in_image(self, image: Image, concept_name: str, unk_threshold: float = .1) -> bool:
