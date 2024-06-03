@@ -189,8 +189,8 @@ class ConceptKBForwardBase:
         forward_output = ForwardOutput(
             loss=total_loss if text_label is not None else None,
             predictors_outputs=outputs,
-            binary_concept_predictions=torch.stack(concept_predictions),
-            binary_concept_labels=torch.stack(concept_labels),
+            binary_concept_predictions=torch.stack(concept_predictions) if concept_predictions else None,
+            binary_concept_labels=torch.stack(concept_labels) if concept_labels else None,
             concept_names=[concept.name for concept in concepts_for_loss]
         )
 
