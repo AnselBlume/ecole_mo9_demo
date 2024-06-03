@@ -634,7 +634,7 @@ class Controller:
         concept1_scores, concept2_scores = scores[0].split((len(concept1.zs_attributes), len(concept2.zs_attributes)))
 
         if weight_scores_by_predictors:
-            concept1_weights = concept1.predictor.zs_attr_predictor.weight.data.cpu()  # TODO Q) Where do the weights come from?
+            concept1_weights = concept1.predictor.zs_attr_predictor.weight.data.cpu()
             concept2_weights = concept2.predictor.zs_attr_predictor.weight.data.cpu()
             predictor_weights = concept1_weights, concept2_weights
 

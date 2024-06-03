@@ -106,11 +106,12 @@ class ConceptKBForwardBase:
 
         concepts = list(self.concept_kb) if not concepts else concepts
         concept_scores = {}
-        concepts_for_forward = self._get_concepts_for_forward_pass(concepts)
-        concepts_for_loss = dict.fromkeys(concepts)
+        concepts_for_forward = self._get_concepts_for_forward_pass(concepts) # NOTE This may output a different (topological) order from concepts list
+        concepts_for_loss = set(concepts)
 
         concept_predictions = []
         concept_labels = []
+        concept_names = []
 
         n_concepts_for_loss_processed = 0 # How many concepts intended for loss computation have been processed
         for concept in concepts_for_forward:
@@ -171,6 +172,7 @@ class ConceptKBForwardBase:
 
             if is_concept_for_loss:
                 outputs.append(output.cpu())
+                concept_names.append(concept.name)
 
             if is_concept_for_loss:
                 n_concepts_for_loss_processed += 1
@@ -191,7 +193,7 @@ class ConceptKBForwardBase:
             predictors_outputs=outputs,
             binary_concept_predictions=torch.stack(concept_predictions) if concept_predictions else None,
             binary_concept_labels=torch.stack(concept_labels) if concept_labels else None,
-            concept_names=[concept.name for concept in concepts_for_loss]
+            concept_names=concept_names
         )
 
         if return_segmentations:
