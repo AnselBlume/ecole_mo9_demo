@@ -100,6 +100,22 @@ class FeatureExtractor(nn.Module):
         if not component_names:
             return torch.tensor([])
 
+        image = image.convert('RGB')
+        scores = []
+
+        for component in component_names:
+            predictions = self.desco.compute_prediction(np.array(image), caption, specified_tokens=[component_name])
+            top_predictions: BoxList = self.desco._post_process(predictions, conf_thresh=0.0)  # Get all predictions
+
+            if len(top_predictions) == 0:
+                scores.append(0.0)
+            else:
+                max_score = top_predictions.get_field("scores").max().item()
+                scores.append(max_score)
+
+        return torch.tensor(scores)
+        
+
     def _get_image_and_region_features(
         self,
         image: Image,
