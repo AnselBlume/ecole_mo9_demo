@@ -29,16 +29,16 @@ if __name__ == '__main__':
         # ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_01-00:57:58-85pf2vzt-no_bp_no_cj_no_localize/concept_kb_epoch_50.pt
         # cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v1/no_localize
 
-        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1
+        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2
         # img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1_tiny
 
         train:
             # limit_global_negatives: 5
-            split: [.7, .2, .1]
+            split: [.7, .2, 0]
             n_epochs: 50
 
         extract_label_from: directory
-        cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v1/run2
+        cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v2/rishit_test # XXX This MUST be changed to a directory which we don't care about to not overwrite checkpoints
         wandb_project: ecole_june_demo_2024
 
         loc_and_seg_config:
@@ -47,11 +47,11 @@ if __name__ == '__main__':
         hierarchy_config:
             concepts:
                 - airplane
-                - commercial aircraft
+                - transport plane
                 # - cargo jet
-                - passenger jet
+                - passenger plane
                 # - biplane
-                - fighter jet
+                # - fighter jet
 
                 # Component concepts
                 - propulsion component
@@ -63,20 +63,20 @@ if __name__ == '__main__':
                 # - double wings
                 # - fixed landing gear
                 # - propeller
-                - afterburner
+                # - afterburner
 
             instance_graph:
-                airplane: ['commercial aircraft', 'biplane', 'fighter jet']
-                commercial aircraft: ['cargo jet', 'passenger jet']
+                airplane: ['transport plane', 'biplane', 'fighter jet']
+                transport plane: ['cargo jet', 'passenger plane']
 
                 propulsion component: ['wing-mounted engine', 'afterburner', 'propeller']
                 wings: ['double wings']
 
             component_graph:
                 airplane: ['wings', 'propulsion component']
-                commercial aircraft: ['wing-mounted engine']
+                transport plane: ['wing-mounted engine']
                 cargo jet: ['bulky fuselage', 'openable nose']
-                passenger jet: ['row of windows']
+                passenger plane: ['row of windows']
                 biplane: ['double wings', 'fixed landing gear', 'propeller']
                 fighter jet: ['afterburner']
         ''')
