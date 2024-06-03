@@ -38,8 +38,15 @@ if __name__ == '__main__':
             n_epochs: 50
 
         extract_label_from: directory
-        cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v2/rishit_test # XXX This MUST be changed to a directory which we don't care about to not overwrite checkpoints
+
+        # XXX This MUST be changed to a directory which we don't care about to not overwrite checkpoints
+        cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v2/rishit_test
+
         wandb_project: ecole_june_demo_2024
+
+        feature_pipeline_config:
+            # Change this to true in order to run component detection with DesCo
+            compute_component_concept_scores: false
 
         loc_and_seg_config:
             do_localize: false
