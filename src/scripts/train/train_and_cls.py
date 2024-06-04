@@ -110,12 +110,10 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     from image_processing import build_localizer_and_segmenter
 
     # %%
-    # loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())
-    loc_and_seg = build_localizer_and_segmenter(
-        build_sam(),
-        None,
-        config=LocalizerAndSegmenterConfig(**args.loc_and_seg_config.as_dict())
-    ) # Don't load DesCo to save startup time
+    loc_and_seg_config = LocalizerAndSegmenterConfig(**args.loc_and_seg_config.as_dict())
+    # loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco(), config=loc_and_seg_config)
+    loc_and_seg = build_localizer_and_segmenter(build_sam(), None, config=loc_and_seg_config) # Don't load DesCo to save startup time
+
     feature_extractor = build_feature_extractor()
     feature_pipeline = ConceptKBFeaturePipeline(
         loc_and_seg,
