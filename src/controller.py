@@ -120,7 +120,7 @@ class Controller:
             'plot': img
         }
 
-    def predict_hierarchical(self, image: Image, unk_threshold: float = .1, include_component_concepts: bool = False,) -> list[dict]:
+    def predict_hierarchical(self, image: Image, unk_threshold: float = .1, include_component_concepts: bool = False) -> list[dict]:
         prediction_path: list[dict] = self.predictor.hierarchical_predict(
             image_data=image,
             unk_threshold=unk_threshold,
