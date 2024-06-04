@@ -47,9 +47,10 @@ class BaseDataset(Dataset):
 
         assert len(data) == len(labels) == len(concepts_to_train_per_example)
 
-        self.data = data
-        self.labels = labels
-        self.concepts_to_train_per_example = concepts_to_train_per_example
+        # Make a copy of the lists, as these may be modified by extension
+        self.data = list(data)
+        self.labels = list(labels)
+        self.concepts_to_train_per_example = list(concepts_to_train_per_example)
 
     def extend(self, data: list, labels: list[str], concepts_to_train_per_example: list[list[str]] = None, train_all_concepts_if_unspecified: bool = False):
         if not concepts_to_train_per_example:
