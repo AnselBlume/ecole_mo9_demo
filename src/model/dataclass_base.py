@@ -11,7 +11,7 @@ class DictDataClass:
         return getattr(self, key)
 
 class DeviceShiftable:
-    def to(self, device, detach=True):
+    def to(self, device, detach: bool = False):
         '''
             Detaches and shifts all tensors to the specified device
         '''
@@ -26,11 +26,11 @@ class DeviceShiftable:
 
         return self
 
-    def cpu(self):
+    def cpu(self, detach: bool = True):
         '''
             Moves all tensors to the CPU.
         '''
-        return self.to('cpu')
+        return self.to('cpu', detach=detach)
 
     def cuda(self):
         '''

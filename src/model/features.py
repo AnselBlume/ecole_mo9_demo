@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from dataclasses import dataclass, field
 from typing import Optional
+from model.dataclass_base import DeviceShiftable
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,7 +12,7 @@ import torch
 from dataclasses import dataclass
 
 @dataclass
-class ImageFeatures:
+class ImageFeatures(DeviceShiftable):
     #####################################
     # Features for internal calculation #
     #####################################
@@ -45,30 +46,6 @@ class ImageFeatures:
         features.trained_attr_region_scores = image_features.trained_attr_region_scores
 
         return features
-
-    def to(self, device):
-        '''
-            Shifts all tensors to the specified device.
-        '''
-        for field in self.__dataclass_fields__:
-            attr = getattr(self, field)
-
-            if isinstance(attr, torch.Tensor):
-                setattr(self, field, attr.to(device))
-
-        return self
-
-    def cpu(self):
-        '''
-            Moves all tensors to the CPU.
-        '''
-        return self.to('cpu')
-
-    def cuda(self):
-        '''
-            Moves all tensors to the GPU.
-        '''
-        return self.to('cuda')
 
 @dataclass
 class FeatureMetadata:

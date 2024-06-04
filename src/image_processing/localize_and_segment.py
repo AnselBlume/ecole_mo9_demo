@@ -7,12 +7,13 @@ from feature_extraction import Sam, GLIPDemo
 from utils import ArticleDeterminer
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from torchvision.utils import draw_bounding_boxes
+from model.dataclass_base import DictDataClass, DeviceShiftable
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
 @dataclass
-class LocalizeAndSegmentOutput:
+class LocalizeAndSegmentOutput(DictDataClass, DeviceShiftable):
     input_image: Image = field(
         default=None,
         metadata={'description': 'Input image'}
