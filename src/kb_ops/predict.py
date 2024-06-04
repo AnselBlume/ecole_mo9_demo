@@ -8,9 +8,29 @@ from typing import Union
 from tqdm import tqdm
 from PIL.Image import Image
 from .forward import ConceptKBForwardBase, ForwardOutput
+from model.dataclass_base import DictDataClass, DeviceShiftable
+from dataclasses import dataclass
 import logging
 
 logger = logging.getLogger(__file__)
+
+@dataclass
+class PredictOutput(DictDataClass, DeviceShiftable):
+    concept_names: list[str] = None
+    predictors_scores: torch.Tensor = None
+    predicted_index: int = None
+    predicted_label: str = None
+    is_below_unk_threshold: bool = None
+    predicted_concept_outputs: torch.Tensor = None # This will always be the maximizing concept
+    true_index: int = None
+    true_concept_outputs: torch.Tensor = None
+    segmentations: LocalizeAndSegmentOutput = None
+
+    def to(self, device: torch.device, detach: bool = False):
+        DeviceShiftable.to(self, device, detach=detach)
+        self.segmentations.to(device, detach=detach)
+
+        return self
 
 class ConceptKBPredictor(ConceptKBForwardBase):
     def __init__(self, concept_kb: ConceptKB, feature_pipeline: ConceptKBFeaturePipeline = None):
@@ -28,7 +48,7 @@ class ConceptKBPredictor(ConceptKBForwardBase):
         unk_threshold: float = 0.,
         include_component_concepts: bool = False,
         **forward_kwargs
-    ) -> Union[list[dict], list[list[dict]]]:
+    ) -> Union[list[PredictOutput], list[list[PredictOutput]]]:
         '''
             If image_data is not None, returns a list of prediction dicts delineating the prediction path down through the tree.
             If predict_dl is not None, returns a list of lists of prediction dicts, where each list corresponds to the prediction
@@ -57,7 +77,14 @@ class ConceptKBPredictor(ConceptKBForwardBase):
             while pool: # While we can go deeper down the hierarchy
                 logger.info(f'Considering concept pool in hierarchical_predict: {[concept.name for concept in pool]}')
 
-                prediction = self.predict(image_data=image_data, unk_threshold=unk_threshold, concepts=pool, leaf_nodes_only=False, **forward_kwargs)
+                prediction = self.predict(
+                    image_data=image_data,
+                    unk_threshold=unk_threshold,
+                    concepts=pool,
+                    leaf_nodes_only=False,
+                    include_component_concepts=include_component_concepts,
+                    **forward_kwargs
+                )
                 prediction_path.append(prediction)
 
                 if segmentations is None:
@@ -104,12 +131,12 @@ class ConceptKBPredictor(ConceptKBForwardBase):
         leaf_nodes_only: bool = True,
         include_component_concepts: bool = False,
         **forward_kwargs
-    ) -> Union[list[dict], dict]:
+    ) -> Union[list[PredictOutput], PredictOutput]:
         '''
             unk_threshold: Number between [0,1]. If sigmoid(max concept score) is less than this,
                 the field 'is_below_unk_threshold' will be set to True in the prediction dict.
 
-            Returns: List of prediction dicts if predict_dl is provided, else a single prediction dict.
+            Returns: List of PredictOutputs if predict_dl is provided, else a single PredictOutput.
         '''
         if not ((predict_dl is None) ^ (image_data is None)):
             raise ValueError('Exactly one of predict_dl or image_data must be provided')
@@ -142,21 +169,21 @@ class ConceptKBPredictor(ConceptKBForwardBase):
             # Indicate whether max score is below unk_threshold
             is_below_unk_threshold = unk_threshold > 0 and scores[pred_ind].sigmoid() < unk_threshold
 
-            pred_dict = {
-                'concept_names': outputs.concept_names,
-                'predictors_scores': scores.cpu(),
-                'predicted_index': pred_ind,
-                'predicted_label': outputs.concept_names[pred_ind],
-                'is_below_unk_threshold': is_below_unk_threshold,
-                'predicted_concept_outputs': predicted_concept_outputs, # This will always be maximizing concept
-                'true_index': true_ind if predict_dl is not None else None,
-                'true_concept_outputs': None if predict_dl is None or true_ind < 0 else outputs.predictors_outputs[true_ind].cpu()
-            }
+            prediction = PredictOutput(
+                concept_names=outputs.concept_names,
+                predictors_scores=scores,
+                predicted_index=pred_ind,
+                predicted_label=outputs.concept_names[pred_ind],
+                is_below_unk_threshold=is_below_unk_threshold,
+                predicted_concept_outputs=predicted_concept_outputs,
+                true_index=true_ind if predict_dl is not None else None,
+                true_concept_outputs=None if predict_dl is None or true_ind < 0 else outputs.predictors_outputs[true_ind]
+            )
 
             if forward_kwargs.get('return_segmentations', False):
-                pred_dict['segmentations'] = outputs['segmentations']
+                prediction.segmentations = outputs.segmentations
 
-            predictions.append(pred_dict)
+            predictions.append(prediction.cpu())
 
         if predict_dl is not None:
             data_key = self._determine_data_key(predict_dl.dataset)
