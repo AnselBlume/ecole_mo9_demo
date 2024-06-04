@@ -13,7 +13,8 @@ from kb_ops.build_kb import label_from_path, label_from_directory
 from model.concept import ConceptKBConfig
 from kb_ops.train_test_split import split
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
-from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline, ConceptKBExampleSampler, ConceptKBFeaturePipelineConfig
+from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline, ConceptKBFeaturePipelineConfig
+from kb_ops.example_sampler import ConceptKBExampleSampler, ConceptsToTrainNegativeStrategy
 from image_processing import LocalizerAndSegmenterConfig
 from model.concept import ConceptKB
 import logging, coloredlogs
@@ -91,8 +92,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument('--train.split', type=tuple[float,float,float], default=(.6, .2, .2), help='Train, val, test split ratios')
 
     parser.add_argument('--train.use_descandants_as_positives', type=bool, default=True, help='Whether to train more general concepts (hypernyms) with its more specific instances (hyponyms)')
-    parser.add_argument('--train.negatives_strategy', choices=['use_all_concepts_as_negatives', 'use_siblings_as_negatives', 'only_positives'],
-                        default='use_siblings_as_negatives')
+    parser.add_argument('--train.negatives_strategy', type=ConceptsToTrainNegativeStrategy, default=ConceptsToTrainNegativeStrategy.use_siblings_as_negatives)
 
     return parser
 

@@ -1,9 +1,18 @@
 from model.concept import ConceptKB, Concept, ConceptExample
 import numpy as np
 import logging
-from typing import Literal
+from typing import Union
+from enum import Enum
 
 logger = logging.getLogger(__file__)
+
+class ConceptsToTrainNegativeStrategy(Enum):
+    '''
+        See ExampleSampler.get_concepts_to_train_per_example for more information on each strategy.
+    '''
+    use_all_concepts_as_negatives = 'use_all_concepts_as_negatives'
+    use_siblings_as_negatives = 'use_siblings_as_negatives'
+    only_positives = 'only_positives'
 
 class ConceptKBExampleSampler:
     def __init__(
@@ -93,9 +102,12 @@ class ConceptKBExampleSampler:
         use_descendants_as_positives: bool = True,
         use_containing_concepts_as_positives: bool = False, # TODO
         max_to_sample_per_descendant: int = None, # TODO
-        negatives_strategy: Literal['use_all_concepts_as_negatives', 'use_siblings_as_negatives', 'only_positives'] = 'use_siblings_as_negatives'
-    ):
+        negatives_strategy: ConceptsToTrainNegativeStrategy = ConceptsToTrainNegativeStrategy.use_siblings_as_negatives
+    ) -> Union[list[None], list[list[str]]]:
         '''
+            Returns the list of concepts to train per example based on the passed arguments.
+            Note that this doesn't actually sample examples, but instead returns the list of concepts to train for each example
+
             use_descendants_as_positives: trains ancestors on positive examples.
 
             use_containing_concepts_as_positives: If A contains B, uses images of A as positives for B. This is not necessarily good, unless A always
@@ -113,10 +125,10 @@ class ConceptKBExampleSampler:
         '''
         assert all(example.concept_name for example in concept_examples), 'All examples must have a concept name'
 
-        if negatives_strategy == 'use_all_concepts_as_negatives':
+        if negatives_strategy == ConceptsToTrainNegativeStrategy.use_all_concepts_as_negatives:
             concepts_to_train_per_example = [None for _ in range(len(concept_examples))] # Each example should train on all concepts
 
-        elif negatives_strategy == 'use_siblings_as_negatives':
+        elif negatives_strategy == ConceptsToTrainNegativeStrategy.use_siblings_as_negatives:
             def get_siblings_names(concept: Concept) -> list[Concept]:
                 # Include the current concept in the returned sibling list. The current concept IS NOT
                 # guaranteed to be first in the list
@@ -146,7 +158,7 @@ class ConceptKBExampleSampler:
                 for example in concept_examples
             ]
 
-        elif negatives_strategy == 'only_positives':
+        elif negatives_strategy == ConceptsToTrainNegativeStrategy.only_positives:
             concepts_to_train_per_example = [[example.concept_name] for example in concept_examples]
 
         else:
