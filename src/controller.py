@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ControllerConfig:
     concept_to_zs_attrs_json_path: str = CONCEPT_TO_ATTRS_PATH
-    use_concept_predictors_for_concept_components: bool = True
 
 class Controller:
     def __init__(
@@ -67,6 +66,10 @@ class Controller:
 
         self.cached_predictions = []
         self.cached_images = []
+
+    @property
+    def use_concept_predictors_for_concept_components(self):
+        return not self.feature_pipeline.config.compute_component_concept_scores
 
     ##############
     # Prediction #
@@ -335,7 +338,7 @@ class Controller:
         for concept in self.concept_kb:
             self.cacher.recache_zs_attr_features(concept)
 
-            if not self.config.use_concept_predictors_for_concept_components: # Using fixed scores for concept-image pairs
+            if not self.use_concept_predictors_for_concept_components: # Using fixed scores for concept-image pairs
                 self.cacher.recache_component_concept_scores(concept)
 
         train_ds, val_ds, test_ds = split_from_concept_kb(self.concept_kb, split=split, use_concepts_as_negatives=use_concepts_as_negatives)
@@ -401,7 +404,7 @@ class Controller:
         def cache_hook(examples):
             self.cacher.recache_zs_attr_features(concept, examples=examples)
 
-            if not self.config.use_concept_predictors_for_concept_components: # Using fixed scores for concept-image pairs
+            if not self.use_concept_predictors_for_concept_components: # Using fixed scores for concept-image pairs
                 self.cacher.recache_component_concept_scores(concept, examples=examples)
 
         if stopping_condition == 'n_epochs' or len(self.concept_kb) <= 1:
