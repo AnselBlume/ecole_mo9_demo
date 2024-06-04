@@ -5,4 +5,4 @@ from .predict import ConceptKBPredictor
 from .feature_pipeline import ConceptKBFeaturePipeline, ConceptKBFeaturePipelineConfig
 from .dataset import ImageDataset, PresegmentedDataset, FeatureDataset
 from .retrieve import CLIPConceptRetriever
-from .example_sampler import ConceptKBExampleSampler
+from .example_sampler import ConceptKBExampleSampler, ConceptsToTrainNegativeStrategy
