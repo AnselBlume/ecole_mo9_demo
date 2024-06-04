@@ -21,7 +21,7 @@ class DictDataClass:
 class ForwardOutput(DictDataClass):
     loss: Optional[float] = None
 
-    predictors_outputs: list = field(
+    predictors_outputs: list[ConceptPredictorOutput] = field(
         default=None,
         metadata={'help': 'List of ConceptPredictorOutput objects for each Concept specified in the forward pass\' concepts parameter'}
     )
