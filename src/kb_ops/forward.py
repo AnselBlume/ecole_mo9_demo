@@ -3,19 +3,13 @@ import torch.nn.functional as F
 from image_processing import LocalizeAndSegmentOutput
 from torch.utils.data import DataLoader, Dataset
 from model.concept import ConceptKB, Concept, ConceptPredictorOutput
+from model.dataclass_base import DictDataClass
 from .caching import CachedImageFeatures
 from kb_ops.dataset import ImageDataset, list_collate, PresegmentedDataset, FeatureDataset
 from .feature_pipeline import ConceptKBFeaturePipeline
 from typing import Union, Optional
 from dataclasses import dataclass, field
 from PIL.Image import Image
-
-class DictDataClass:
-    '''
-        Class used for backward compatibility with code that expected dictionary outputs.
-    '''
-    def __getitem__(self, key):
-        return getattr(self, key)
 
 @dataclass
 class ForwardOutput(DictDataClass):
