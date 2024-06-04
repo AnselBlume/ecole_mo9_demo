@@ -132,6 +132,46 @@ def get_heatmap_differences_figure(
 
     return fig
 
+def get_pre_visualization_heatmap(
+    heatmap: torch.Tensor,
+    img: Image.Image,
+    img_mask: np.ndarray,
+    strategy: Literal['normalize', 'clamp'] = 'clamp',
+    is_heatmap_processed: bool = False,
+    clamp_radius=5,
+    clamp_center=0,
+    clamp_discretize_radius=.1 # Discretization after normalizing to [0,1]
+):
+    '''
+        Version of get_heatmap_visualization without the blending with the original image.
+    '''
+
+    logger.debug(f'Heatmap (min, max): {heatmap.min().item():.2f}, {heatmap.max().item():.2f}')
+    logger.debug(f'is_heatmap_processed: {is_heatmap_processed}')
+
+    # Mask image background
+    img = np.array(img) * img_mask[..., None] # (h, w, 3)
+
+    if strategy == 'normalize':
+        if not is_heatmap_processed:
+            fg_vals = heatmap[img_mask] # Foreground values
+            min_val = fg_vals.min()
+            max_val = fg_vals.max()
+
+            heatmap = (heatmap - min_val) / (max_val - min_val) # Normalize
+
+    elif strategy == 'clamp':
+        if not is_heatmap_processed:
+            heatmap = heatmap - clamp_center # Center at zero
+            heatmap = heatmap.clamp(-clamp_radius, clamp_radius) # Restrict to [-radius, radius]
+            heatmap = (heatmap + clamp_radius) / (2 * clamp_radius) # Normalize to [0, 1] with zero at .5
+
+            heatmap[np.abs(heatmap - .5) < clamp_discretize_radius] = .5 # Discretize around .5
+            heatmap[heatmap < .5 - clamp_discretize_radius] = 0
+            heatmap[heatmap > .5 + clamp_discretize_radius] = 1
+
+    return  heatmap
+
 def get_heatmap_visualization(
     heatmap: torch.Tensor,
     img: Image.Image,
