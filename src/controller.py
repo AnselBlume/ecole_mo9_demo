@@ -361,7 +361,7 @@ class Controller:
         sample_all_negatives: bool = False,
         min_prob_margin = .2,
         max_retrieval_distance=.01,
-        use_concepts_as_negatives: bool = False
+        use_concepts_as_negatives: bool = True
     ):
         '''
             Trains the specified concept with name concept_name for the specified number of epochs.
@@ -713,19 +713,19 @@ class Controller:
 # %%
 if __name__ == '__main__':
     import os
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 
     import PIL
     from feature_extraction import build_feature_extractor, build_sam, build_desco
     from image_processing import build_localizer_and_segmenter
 
-    coloredlogs.install(level=logging.DEBUG)
+    coloredlogs.install(level=logging.INFO)
 
     # %%
     ###############################
     #  June 2024 Demo Checkpoint #
     ###############################
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_05_30-11:30:28-rafd2xjd-no_biplane_no_cargo_jet/concept_kb_epoch_50.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_03-00:42:32-dd87rspm-airplanes_v2-pp_fj/concept_kb_epoch_50.pt'
     kb = ConceptKB.load(ckpt_path)
     loc_and_seg = build_localizer_and_segmenter(build_sam(), None)
     fe = build_feature_extractor()
@@ -746,6 +746,65 @@ if __name__ == '__main__':
     result = controller.predict_hierarchical(img, unk_threshold=.1)
 
     logger.info(f'Concept path: {result["concept_path"]}')
+
+    # %% New concept training
+    new_concept_name = 'biplane'
+    parent_concept_name = 'airplane'
+
+    new_concept_image_paths = [
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/biplane/000001.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/biplane/000002.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/biplane/000003.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/biplane/000004.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/biplane/000005.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/biplane/000006.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/biplane/000008.jpg'
+    ]
+
+    new_concept_examples = [ConceptExample(new_concept_name, image_path=image_path) for image_path in new_concept_image_paths]
+
+    controller.add_concept(new_concept_name, parent_concept_names=[parent_concept_name])
+
+    controller.train_concept(
+        new_concept_name,
+        new_examples=new_concept_examples
+    )
+
+    # %% Predict with new concept
+    test_image_paths = [
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/biplane/000010.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/biplane/000011.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/passenger plane/000021.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/fighter jet/Screenshot 2024-06-02 at 9.18.58 PM.png',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/afterburner/sr71.png',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2/row of windows/000021.jpg'
+    ]
+    test_image_labels = [
+        'biplane',
+        'biplane',
+        'passenger plane',
+        'fighter jet',
+        'afterburner',
+        'row of windows'
+    ]
+    include_component_parts = [
+        False,
+        False,
+        False,
+        False,
+        True,
+        True
+    ]
+
+    for img_path, label, include_components in zip(test_image_paths, test_image_labels, include_component_parts):
+        img = PIL.Image.open(img_path).convert('RGB')
+        result = controller.predict_concept(img, unk_threshold=.1, include_component_concepts=include_components)
+        logger.info(f'Predicted label: {result["predicted_label"]}')
+
+        result = controller.predict_hierarchical(img, unk_threshold=.1, include_component_concepts=include_components)
+        logger.info(f'Hierarchical Predicted label: {result["predicted_label"]}')
+
+        logger.info(f'Expected label: {label}')
 
     # %%
     ###############################
