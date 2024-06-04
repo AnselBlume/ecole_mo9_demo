@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from model.features import ImageFeatures
 from dataclasses import dataclass
+from model.dataclass_base import DeviceShiftable
 
 class BatchedPredictor:
     pass
@@ -14,7 +15,7 @@ class ConceptPredictorFeatures(ImageFeatures):
     component_concept_scores: torch.Tensor = None # (1, n_component_concepts)
 
 @dataclass
-class ConceptPredictorOutput:
+class ConceptPredictorOutput(DeviceShiftable):
     img_score: torch.Tensor = None # (,)
 
     region_scores: torch.Tensor = None # (n_regions,)
@@ -30,33 +31,6 @@ class ConceptPredictorOutput:
 
     all_scores_weighted: torch.Tensor = None # (1 + 1 + 2*n_trained_attrs + 2*n_zs_attrs,)
     cum_score: torch.Tensor = None # (,); For backpropagating loss or for prediction
-
-    def to(self, device, detach=True):
-        '''
-            Detaches and shifts all tensors to the specified device
-        '''
-        for field in self.__dataclass_fields__:
-            attr = getattr(self, field)
-
-            if isinstance(attr, torch.Tensor):
-                if detach:
-                    attr = attr.detach()
-
-                setattr(self, field, attr.to(device))
-
-        return self
-
-    def cpu(self):
-        '''
-            Moves all tensors to the CPU.
-        '''
-        return self.to('cpu')
-
-    def cuda(self):
-        '''
-            Moves all tensors to the GPU.
-        '''
-        return self.to('cuda')
 
 class Hadamard(nn.Module):
     def __init__(self, n_features: int, bias: bool = False):
