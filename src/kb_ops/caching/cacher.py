@@ -219,7 +219,7 @@ class ConceptKBFeatureCacher:
             ):
                 cached_features.cuda()
 
-                zs_attr_img_scores, zs_attr_region_scores = self.feature_pipeline._get_zero_shot_attr_scores(concept, cached_features)
+                zs_attr_img_scores, zs_attr_region_scores = self.feature_pipeline._get_zero_shot_attr_scores(concept, cached_features, recompute_scores=True)
 
                 cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
                 cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores

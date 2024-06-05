@@ -104,11 +104,6 @@ class ConceptKBFeaturePipeline:
         concept: Concept,
         cached_features: CachedImageFeatures = None,
     ) -> ConceptPredictorFeatures:
-        '''
-            Args:
-                update_cached_features (bool): If true, updates the CachedImageFeatures with computed zero-shot attributes and component concept scores.
-                    Component concept scores are computed and updated only if self.config.compute_component_concept_scores is True.
-        '''
 
         if cached_features is None:
             # Base image features
@@ -130,13 +125,13 @@ class ConceptKBFeaturePipeline:
 
         return concept_predictor_features
 
-    def _get_zero_shot_attr_scores(self, concept: Concept, cached_features: CachedImageFeatures):
+    def _get_zero_shot_attr_scores(self, concept: Concept, cached_features: CachedImageFeatures, recompute_scores: bool = False):
         '''
             Returns a tuple of tensors of shapes:
                 (1, n_zs_attrs) for the zero-shot attribute scores for the image.
                 (n_regions, n_zs_attrs) for the zero-shot attribute scores for each region.
         '''
-        if concept.name in cached_features.concept_to_zs_attr_img_scores and concept.name in cached_features.concept_to_zs_attr_region_scores:
+        if not recompute_scores and concept.name in cached_features.concept_to_zs_attr_img_scores and concept.name in cached_features.concept_to_zs_attr_region_scores:
             zs_attr_img_scores = cached_features.concept_to_zs_attr_img_scores[concept.name] # (1, n_zs_attrs)
             zs_attr_region_scores = cached_features.concept_to_zs_attr_region_scores[concept.name] # (n_regions, n_zs_attrs)
 
