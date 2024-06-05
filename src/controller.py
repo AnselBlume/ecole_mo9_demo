@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ControllerConfig:
     concept_to_zs_attrs_json_path: str = CONCEPT_TO_ATTRS_PATH
+    cache_predictions: bool = False
 
 class Controller:
     def __init__(
@@ -93,7 +94,8 @@ class Controller:
         Returns: dict with keys 'predicted_label' and 'plot' of types str and PIL.Image, respectively.
         '''
         # TODO Predict with loc_and_seg_output if provided; for use with modified segmentations/background removals
-        self.cached_images.append(image)
+        if self.config.cache_predictions:
+            self.cached_images.append(image)
 
         if restrict_to_concepts:
             assert not leaf_nodes_only, 'Specifying concepts to restrict prediction to is only supported when leaf_nodes_only=False.'
@@ -110,7 +112,8 @@ class Controller:
             concepts=concepts
         )
 
-        self.cached_predictions.append(prediction)
+        if self.config.cache_predictions:
+            self.cached_predictions.append(prediction)
 
         img = plot_predicted_classes(prediction, threshold=unk_threshold, return_img=True)
         predicted_label = prediction['predicted_label'] if not prediction['is_below_unk_threshold'] else 'unknown'
@@ -322,6 +325,27 @@ class Controller:
     ########################
     # Concept Modification #
     ########################
+    def add_examples(self, examples: list[ConceptExample], concept_name: str = None, concept: Concept = None):
+        if not (bool(concept_name is None) ^ bool(concept is None)):
+            raise ValueError('Exactly one of concept_name or concept must be provided.')
+
+        if concept is None:
+            concept = self.retrieve_concept(concept_name)
+
+        image_paths = {ex.image_path for ex in concept.examples}
+
+        for example in examples:
+            if not example.concept_name: # Ensure concept name is set
+                example.concept_name = concept.name
+
+            if example.image_path not in image_paths: # Ensure no duplicate examples for this concept
+                concept.examples.append(example)
+
+        return concept
+
+    def train_markov_blanket(self, concept_name: str, **train_concept_kwargs):
+        pass
+
     def train(
         self,
         split: tuple[float, float, float] = (.6, .2, .2),
@@ -377,15 +401,7 @@ class Controller:
             logger.info(f'No concept found for "{concept_name}". Creating new concept.')
             concept = self.add_concept(concept_name)
 
-        # If new_examples are not already in the Concept, add them to the examples list
-        # Identify concept examples by their image_paths
-        image_paths = {ex.image_path for ex in concept.examples}
-        for example in new_examples:
-            if not example.concept_name: # Ensure this is set
-                example.concept_name = concept.name
-
-            if example.image_path not in image_paths:
-                concept.examples.append(example)
+        self.add_examples(new_examples, concept=concept) # Nop if no examples to add
 
         # Ensure features are prepared, only generating those which don't already exist or are dirty
         self.cacher.cache_segmentations([concept], only_uncached_or_dirty=True)
@@ -692,7 +708,7 @@ class Controller:
 # %%
 if __name__ == '__main__':
     import os
-    os.environ['CUDA_VISIBLE_DEVICES'] = '7'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
     import PIL
     from feature_extraction import build_feature_extractor, build_sam, build_desco
