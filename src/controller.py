@@ -355,11 +355,9 @@ class Controller:
     def train_concept(
         self,
         concept_name: str,
-        stopping_condition: Literal['n_epochs', 'until_correct'] = 'n_epochs',
+        stopping_condition: Literal['n_epochs'] = 'n_epochs',
         new_examples: list[ConceptExample] = [],
         n_epochs: int = 5,
-        sample_all_negatives: bool = False,
-        min_prob_margin = .2,
         max_retrieval_distance=.01,
         use_concepts_as_negatives: bool = True
     ):
@@ -368,9 +366,8 @@ class Controller:
 
             Args:
                 concept_name: The concept to train. If it does not exist, it will be created.
-                stopping_condition: The condition to stop training. Must be 'n_epochs' as 'until_correct' is disabled.
+                stopping_condition: The condition to stop training. Must be 'n_epochs'.
                 new_examples: If provided, these examples will be added to the concept's examples list.
-                sample_all_negatives: Unused parameter as stopping_condition=='until_correct' is disabled.
         '''
         # Try to retrieve concept
         try:
@@ -379,11 +376,6 @@ class Controller:
         except:
             logger.info(f'No concept found for "{concept_name}". Creating new concept.')
             concept = self.add_concept(concept_name)
-
-        if stopping_condition == 'until_correct':
-            if not new_examples:
-                logger.info('No examples provided; considering all concept examples as stopping condition via correctness')
-                new_examples = concept.examples
 
         # If new_examples are not already in the Concept, add them to the examples list
         # Identify concept examples by their image_paths
@@ -417,19 +409,6 @@ class Controller:
                 n_epochs=n_epochs,
                 post_sampling_hook=cache_hook,
                 lr=1e-2,
-                use_concepts_as_negatives=use_concepts_as_negatives
-            )
-
-        elif stopping_condition == 'until_correct':
-            self.trainer.train_concept(
-                concept,
-                stopping_condition='until_correct',
-                min_prob_margin=min_prob_margin,
-                new_examples=new_examples,
-                sample_all_negatives=sample_all_negatives,
-                post_sampling_hook=cache_hook,
-                n_epochs_between_predictions=1,
-                lr=1e-2,# high learning rate so hopefully doesn't take too long to reach margins
                 use_concepts_as_negatives=use_concepts_as_negatives
             )
 
