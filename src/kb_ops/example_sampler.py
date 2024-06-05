@@ -1,7 +1,7 @@
 from model.concept import ConceptKB, Concept, ConceptExample
 import numpy as np
 import logging
-from typing import Union
+from typing import Union, Literal
 from enum import Enum
 
 logger = logging.getLogger(__file__)
@@ -23,12 +23,43 @@ class ConceptKBExampleSampler:
         self.concept_kb = concept_kb
         self.rng = np.random.default_rng(random_seed)
 
-    def get_all_examples(self, concepts: list[Concept]) -> tuple[list[ConceptExample], list[str]]:
+    def get_all_examples(
+        self,
+        concepts: list[Concept],
+        include_concept_specific_negatives_for: Union[None, Literal['all'], list[str]] = None
+    ) -> tuple[list[ConceptExample], list[str]]:
+
+        '''
+            include_concept_specific_negatives_for:
+                - None: Only include positive examples
+                - 'all': Include all examples
+                - list of str: Include negative examples for the specified concepts (each string is a concept name)
+        '''
+        # Construct set of concepts to include negatives for
+        if not include_concept_specific_negatives_for:
+            concepts_to_include_negatives_for = set()
+
+        elif include_concept_specific_negatives_for == 'all':
+            concepts_to_include_negatives_for = {concept.name for concept in concepts}
+
+        elif isinstance(include_concept_specific_negatives_for, list): # Guaranteed to be > 0 since not Falsey
+            assert all(isinstance(elmt, str) for elmt in include_concept_specific_negatives_for)
+            concepts_to_include_negatives_for = set(include_concept_specific_negatives_for)
+
+        else:
+            raise ValueError(f'Invalid include_concept_specific_negatives_for: {include_concept_specific_negatives_for}')
+
+        # Get all examples for the specified concepts
         all_examples = []
         all_labels = []
         for concept in concepts:
-            n_examples = len(concept.examples)
-            all_examples.extend(concept.examples)
+            examples = concept.examples
+
+            if concept.name not in concepts_to_include_negatives_for:
+                examples = [example for example in examples if not example.is_negative]
+
+            n_examples = len(examples)
+            all_examples.extend(examples)
             all_labels.extend([concept.name] * n_examples)
 
         return all_examples, all_labels
@@ -36,24 +67,43 @@ class ConceptKBExampleSampler:
     def sample_examples(
         self,
         concepts: list[Concept],
-        n_examples_per_concept: int
+        n_examples_per_concept: int = None,
+        n_examples_from_union: int = None,
+        include_concept_specific_negatives_for: Union[None, Literal['all'], list[str]] = None
     ):
         '''
-            Samples n_examples_per_concept examples from each concept in concepts.
+            If n_examples_per_concept, samples n_examples_per_concept examples from each concept in concepts.
+            If n_examples_from_union, samples n_examples_from_union examples from the union of all concepts' examples.
         '''
-        sampled_examples = []
-        sampled_labels = []
-        for concept in concepts:
+        if not (bool (n_examples_per_concept) ^ bool(n_examples_from_union)):
+            raise ValueError('Exactly one of n_examples_per_concept or n_examples_from_union must be specified')
+
+        if n_examples_from_union:
+            # Sample n_examples_from_union examples from the union of all concepts
+            all_examples, all_labels = self.get_all_examples(concepts, include_concept_specific_negatives_for=include_concept_specific_negatives_for)
+
             try:
-                examples = self.rng.choice(concept.examples, n_examples_per_concept, replace=False)
+                sampled_indices = self.rng.choice(len(all_examples), n_examples_from_union, replace=False)
             except ValueError:
-                logger.debug(f'Not enough examples to sample from for concept {concept.name}; using all examples')
-                examples = concept.examples
+                logger.debug(f'Not enough examples to sample from for all concepts; using all examples')
+                sampled_indices = range(len(all_examples))
 
-            sampled_examples.extend(examples)
+            sampled_examples = [all_examples[i] for i in sampled_indices]
+            sampled_labels = [all_labels[i] for i in sampled_indices]
 
-            # Add labels
-            sampled_labels.extend([concept.name] * len(examples))
+        if n_examples_per_concept:
+            sampled_examples = []
+            sampled_labels = []
+            for concept in concepts:
+                examples, _ = self.get_all_examples([concept], include_concept_specific_negatives_for=include_concept_specific_negatives_for)
+
+                try:
+                    examples = self.rng.choice(examples, n_examples_per_concept, replace=False)
+                except ValueError:
+                    logger.debug(f'Not enough examples to sample from for concept {concept.name}; using all examples')
+
+                sampled_examples.extend(examples)
+                sampled_labels.extend([concept.name] * len(examples))
 
         return sampled_examples, sampled_labels
 
@@ -61,7 +111,8 @@ class ConceptKBExampleSampler:
         self,
         n_pos_examples: int,
         neg_concepts: list[Concept],
-        min_neg_ratio_per_concept: float = 1.0
+        min_neg_ratio_per_concept: float = 1.0,
+        sample_from_descendants: bool = True
     ) -> tuple[list[ConceptExample], list[str]]:
         '''
             Samples negative examples from the given negative concepts, trying to match the given ratio.
@@ -70,12 +121,10 @@ class ConceptKBExampleSampler:
                 n_pos_examples: Number of positive examples
                 neg_concepts: List of negative concepts to sample at least one example of each from
                 min_neg_ratio: Minimum ratio of negative examples to positive examples
-                rng: Random number generator used for sampling from negative concepts
+                sample_from_descendants: If True, samples negatives from the union of a concept and its descendants' examples
 
             Returns: Tuple of (sampled_examples, sampled_concept_names)
         '''
-        # TODO Sample descendants of each negative concept if the concept is not a leaf node
-
         # Decide how many negatives to sample per concept
         n_neg_per_concept = max(int(min_neg_ratio_per_concept * n_pos_examples), 1)
 
@@ -84,15 +133,24 @@ class ConceptKBExampleSampler:
         sampled_examples = []
         sampled_concept_names = []
         for neg_concept in neg_concepts:
+
+            if sample_from_descendants:
+                examples, labels = self.get_all_examples(self.concept_kb.rooted_subtree(neg_concept))
+            else:
+                examples, labels = neg_concept.examples, [neg_concept.name] * len(neg_concept.examples)
+
             try:
-                neg_examples = self.rng.choice(neg_concept.examples, n_neg_per_concept, replace=False)
+                sampled_inds = self.rng.choice(len(examples), n_neg_per_concept, replace=False)
+                neg_examples = [examples[i] for i in sampled_inds]
+                neg_labels = [labels[i] for i in sampled_inds]
 
             except ValueError: # Not enough negative examples
                 logger.debug(f'Not enough examples to sample from for concept {neg_concept.name}; using all examples')
-                neg_examples = neg_concept.examples
+                neg_examples = examples
+                neg_labels = labels
 
             sampled_examples.extend(neg_examples)
-            sampled_concept_names.extend([neg_concept.name] * len(neg_examples))
+            sampled_concept_names.extend(neg_labels)
 
         return sampled_examples, sampled_concept_names
 

@@ -185,12 +185,12 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         *, # Force the use of kwargs after this point due to API changes
         stopping_condition: Literal['n_epochs', 'validation'] = 'n_epochs',
         n_epochs: int = 10,
-        use_descendants_as_positives: bool = False,
+        use_descendants_as_positives: bool = True,
         n_sampled_positives_per_descendant: int = 3,
         use_concepts_as_negatives: bool = False,
         sample_all_negatives: bool = False,
-        sample_only_siblings_for_negatives: bool = False,
-        sample_only_leaf_nodes_for_negatives: bool = True,
+        sample_only_siblings_for_negatives: bool = True,
+        sample_only_leaf_nodes_for_negatives: bool = False,
         post_sampling_hook: Callable[[list[ConceptExample]], Any] = None,
         n_global_negatives: int = 250,
         **train_kwargs
@@ -255,13 +255,16 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 neg_concept_names = []
 
             # Construct positive examples
+            pos_examples = concept.examples
+            concept_names = [concept.name] * len(pos_examples)
+
             if use_descendants_as_positives:
                 descendants = self.concept_kb.rooted_subtree(concept)
-                pos_examples, concept_names = self.sampler.sample_examples(descendants, n_sampled_positives_per_descendant)
+                descendants = [c for c in descendants if c.name != concept.name] # Exclude self
 
-            else:
-                pos_examples = concept.examples
-                concept_names = [concept.name] * len(pos_examples)
+                descendant_pos_examples, descendant_concept_names = self.sampler.sample_examples(descendants, n_examples_per_concept=n_sampled_positives_per_descendant)
+                pos_examples.extend(descendant_pos_examples)
+                concept_names.extend(descendant_concept_names)
 
             pos_labels = [ # Handle concept-specific negatives
                 concept_name if not ex.is_negative else FeatureDataset.NEGATIVE_LABEL
