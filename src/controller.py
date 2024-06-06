@@ -3,10 +3,12 @@ import torch
 import json
 from score import AttributeScorer
 from model.concept import ConceptKB, Concept, ConceptExample
+import PIL.Image
 from PIL.Image import Image
 import logging, coloredlogs
 from image_processing import LocalizeAndSegmentOutput
 from kb_ops import ConceptKBTrainer, ConceptKBPredictor
+from kb_ops.predict import PredictOutput
 from kb_ops.retrieve import CLIPConceptRetriever
 from kb_ops.dataset import split_from_concept_kb
 from utils import ArticleDeterminer
@@ -19,7 +21,8 @@ from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 from kb_ops.caching import ConceptKBFeatureCacher
 from utils import to_device
 from kb_ops.build_kb import CONCEPT_TO_ATTRS_PATH
-from vis_utils import plot_predicted_classes, plot_image_differences, plot_concept_differences, plot_zs_attr_differences
+from visualization.vis_utils import plot_predicted_classes, plot_image_differences, plot_concept_differences, plot_zs_attr_differences
+from visualization.heatmap import HeatmapVisualizer
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,7 @@ class Controller:
         retriever: CLIPConceptRetriever = None,
         cacher: ConceptKBFeatureCacher = None,
         llm_client: LLMClient = None,
+        heatmap_visualizer: HeatmapVisualizer = None,
         config: ControllerConfig = ControllerConfig(),
         zs_predictor: CLIPAttributePredictor = None
     ):
@@ -53,6 +57,10 @@ class Controller:
         )
         self.cacher = cacher if cacher else ConceptKBFeatureCacher(concept_kb, self.feature_pipeline, cache_dir='feature_cache')
         self.llm_client = llm_client if llm_client else LLMClient()
+        self.heatmap_visualizer = heatmap_visualizer if heatmap_visualizer else HeatmapVisualizer(
+            concept_kb,
+            feature_pipeline.feature_extractor.dino_feature_extractor
+         )
         self.config = config
 
         self.attr_scorer = AttributeScorer(zs_predictor)
@@ -124,7 +132,7 @@ class Controller:
         }
 
     def predict_hierarchical(self, image: Image, unk_threshold: float = .1, include_component_concepts: bool = False) -> list[dict]:
-        prediction_path: list[dict] = self.predictor.hierarchical_predict(
+        prediction_path: list[PredictOutput] = self.predictor.hierarchical_predict(
             image_data=image,
             unk_threshold=unk_threshold,
             include_component_concepts=include_component_concepts
@@ -138,9 +146,9 @@ class Controller:
             concept_path = [pred['predicted_label'] for pred in prediction_path]
 
         return {
-            'prediction_path': prediction_path,
-            'concept_path': concept_path,
-            'predicted_label': predicted_label
+            'prediction_path': prediction_path, # list[PredictOutput]
+            'concept_path': concept_path, # list[str]
+            'predicted_label': predicted_label # str
         }
 
     def predict_from_subtree(self, image: Image, root_concept_name: str, unk_threshold: float = .1) -> list[dict]:
@@ -711,6 +719,94 @@ class Controller:
         # See scripts/vis_contributions.py
         pass
 
+    ######################
+    # Heatmap Comparison #
+    ######################
+    def heatmap_image_comparison(self, image1: Image, image2: Image):
+        '''
+            Implements: "What are the differences between these two images"
+        '''
+        # Choose the highest ranking concepts for visualization regardless of whether they're unknown
+        concept1_pred: PredictOutput = self.predict_hierarchical(image1)['prediction_path'][-1]
+        concept2_pred: PredictOutput = self.predict_hierarchical(image2)['prediction_path'][-1]
+
+        concept1 = self.retrieve_concept(concept1_pred.predicted_label)
+        concept2 = self.retrieve_concept(concept2_pred.predicted_label)
+
+        c1_minus_c2_image1, c2_minus_c1_image1 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, image1)
+        c1_minus_c2_image2, c2_minus_c1_image2 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, image2)
+
+        return {
+            'concept1_prediction': concept1_pred, # PredictOutput
+            'concept2_prediction': concept2_pred, # PredictOutput
+            'concept1_minus_concept2_on_image1': c1_minus_c2_image1, # PIL.Image.Image
+            'concept2_minus_concept1_on_image1': c2_minus_c1_image1, # PIL.Image.Image
+            'concept1_minus_concept2_on_image2': c1_minus_c2_image2, # PIL.Image.Image
+            'concept2_minus_concept1_on_image2': c2_minus_c1_image2  # PIL.Image.Image
+        }
+
+    def heatmap(self, image: Image, concept_name: str, only_score_increasing_regions: bool = False, only_score_decreasing_regions: bool = False) -> Image:
+        '''
+            If only_score_increasing_regions is True, implements:
+                "Why is this a <class x>"
+
+            If only_score_decreasing_regions is True, implements:
+                "What are the differences between this and <class x>"
+
+            If neither is true, shows the full heatmap (both increasing and decreasing regions).
+        '''
+        if only_score_increasing_regions and only_score_decreasing_regions:
+            raise ValueError('At most one of only_score_increasing_regions and only_score_decreasing_regions can be True.')
+
+        concept = self.retrieve_concept(concept_name)
+
+        if only_score_increasing_regions:
+            heatmap = self.heatmap_visualizer.get_positive_heatmap_visualization(concept, image)
+        elif only_score_decreasing_regions:
+            heatmap = self.heatmap_visualizer.get_negative_heatmap_visualization(concept, image)
+        else: # Visualize all regions
+            heatmap = self.heatmap_visualizer.get_heatmap_visualization(concept, image)
+
+        return heatmap
+
+    def heatmap_class_difference(self, concept1_name: str, concept2_name: str, image: Image = None):
+        '''
+            If image is provided, implements:
+                "Why is this <class x> and not <class y>"
+
+            Otherwise, implements:
+                "What is the difference between <class x> and <class y>"
+        '''
+        concept1 = self.retrieve_concept(concept1_name)
+        concept2 = self.retrieve_concept(concept2_name)
+
+        if image is None:
+            def load_positive_image(concept: Concept) -> Image:
+                for example in concept.examples:
+                    if not example.is_negative:
+                        return PIL.Image.open(example.image_path)
+
+            concept1_image = load_positive_image(concept1)
+            concept2_image = load_positive_image(concept2)
+
+            concept1_minus_concept2_image1, concept2_minus_concept1_image1 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, concept1_image)
+            concept1_minus_concept2_image2, concept2_minus_concept1_image2 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, concept2_image)
+
+            return {
+                'concept1_minus_concept2_on_concept1_image': concept1_minus_concept2_image1, # PIL.Image.Image
+                'concept2_minus_concept1_on_concept1_image': concept2_minus_concept1_image1, # PIL.Image.Image
+                'concept1_minus_concept2_on_concept2_image': concept1_minus_concept2_image2, # PIL.Image.Image
+                'concept2_minus_concept1_on_concept2_image': concept2_minus_concept1_image2  # PIL.Image.Image
+            }
+
+        else:
+            concept1_minus_concept2, concept2_minus_concept1 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, image)
+
+            return {
+                'concept1_minus_concept2': concept1_minus_concept2, # PIL.Image.Image
+                'concept2_minus_concept1': concept2_minus_concept1  # PIL.Image.Image
+            }
+
 # %%
 if __name__ == '__main__':
     import os
@@ -726,7 +822,7 @@ if __name__ == '__main__':
     ###############################
     #  June 2024 Demo Checkpoint #
     ###############################
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_03-00:42:32-dd87rspm-airplanes_v2-pp_fj/concept_kb_epoch_50.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_05-20:23:53-yd491eo3-all_planes_and_guns-infer_localize/concept_kb_epoch_50.pt'
     kb = ConceptKB.load(ckpt_path)
     loc_and_seg = build_localizer_and_segmenter(build_sam(), None)
     fe = build_feature_extractor()
