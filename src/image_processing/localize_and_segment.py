@@ -63,6 +63,7 @@ class LocalizeAndSegmentOutput(DictDataClass, DeviceShiftable):
         default=None,
         metadata={'description': 'Tensor of shape (n_part_detections, 4) of bboxes of localized parts in XYXY format, if concept_parts is provided.'}
     )
+    
 
 @dataclass
 class LocalizerAndSegmenterConfig:

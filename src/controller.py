@@ -138,6 +138,13 @@ class Controller:
             include_component_concepts=include_component_concepts
         )
 
+        # Get heatmap visualizations for each concept components in the prediction path
+        for pred in prediction_path:
+            component_concepts = pred.predicted_concept_components_to_scores.keys()
+            pred.predicted_concept_compoents_heatmaps = {
+                concept: self.heatmap(image, concept) for concept in component_concepts
+            }
+
         if prediction_path[-1]['is_below_unk_threshold']:
             predicted_label = 'unknown' if len(prediction_path) == 1 else prediction_path[-2]['predicted_label']
             concept_path = [pred['predicted_label'] for pred in prediction_path[:-1]]
@@ -153,7 +160,34 @@ class Controller:
 
     def predict_from_subtree(self, image: Image, root_concept_name: str, unk_threshold: float = .1) -> list[dict]:
         root_concept = self.retrieve_concept(root_concept_name)
-        return self.predictor.hierarchical_predict(image_data=image, root_concepts=[root_concept], unk_threshold=unk_threshold)
+        prediction_path: list[PredictOutput] = self.predictor.hierarchical_predict(
+            image_data=image,
+            root_concepts=[root_concept],
+            unk_threshold=unk_threshold
+        )
+        # Get heatmap visualizations for each concept components in the prediction path
+        for pred in prediction_path:
+            component_concepts = pred.predicted_concept_components_to_scores.keys()
+            pred.predicted_concept_compoents_heatmaps = {
+                concept: self.heatmap(image, concept) for concept in component_concepts
+            }
+
+        if prediction_path[-1]["is_below_unk_threshold"]:
+            predicted_label = (
+                "unknown"
+                if len(prediction_path) == 1
+                else prediction_path[-2]["predicted_label"]
+            )
+            concept_path = [pred["predicted_label"] for pred in prediction_path[:-1]]
+        else:
+            predicted_label = prediction_path[-1]["predicted_label"]
+            concept_path = [pred["predicted_label"] for pred in prediction_path]
+
+        return {
+            "prediction_path": prediction_path,  # list[PredictOutput]
+            "concept_path": concept_path,  # list[str]
+            "predicted_label": predicted_label,  # str
+        }
 
     def predict_root_concept(self, image: Image, unk_threshold: float = .1, include_component_concepts: bool = False) -> dict:
         results = self.predictor.hierarchical_predict(
@@ -358,8 +392,9 @@ class Controller:
     def get_markov_blanket(self, concept_names: list[str]) -> list[Concept]:
         concepts = [self.retrieve_concept(concept_name) for concept_name in concept_names]
 
-        markov_blanket_union = {}
+        markov_blanket_union = set()
         for concept in concepts:
+            print(self.concept_kb.markov_blanket(concept))
             markov_blanket_union.update(self.concept_kb.markov_blanket(concept))
 
         return list(markov_blanket_union)
@@ -813,7 +848,7 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
     import PIL
-    from feature_extraction import build_feature_extractor, build_sam, build_desco
+    from feature_extraction import build_feature_extractor, build_sam
     from image_processing import build_localizer_and_segmenter
 
     coloredlogs.install(level=logging.INFO)
@@ -837,6 +872,7 @@ if __name__ == '__main__':
     result = controller.predict_concept(img, unk_threshold=.1)
 
     logger.info(f'Predicted label: {result["predicted_label"]}')
+    controller.train_concepts(['airplane'])
 
     # %% Hierarchical prediction
     img = PIL.Image.open(img_path).convert('RGB')

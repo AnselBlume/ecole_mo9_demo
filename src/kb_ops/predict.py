@@ -11,6 +11,7 @@ from .forward import ConceptKBForwardBase, ForwardOutput
 from model.dataclass_base import DictDataClass, DeviceShiftable
 from dataclasses import dataclass
 import logging
+import PIL.Image
 
 logger = logging.getLogger(__file__)
 
@@ -23,6 +24,7 @@ class PredictOutput(DictDataClass, DeviceShiftable):
     is_below_unk_threshold: bool = None
     predicted_concept_outputs: ConceptPredictorOutput = None # This will always be the maximizing concept
     predicted_concept_components_to_scores: dict[str,float] = None # Mapping from predicted concept's components to their scores
+    predicted_concept_compoents_heatmaps: dict[str, PIL.Image.Image] = None
     true_index: int = None
     true_concept_outputs: torch.Tensor = None
     segmentations: LocalizeAndSegmentOutput = None
