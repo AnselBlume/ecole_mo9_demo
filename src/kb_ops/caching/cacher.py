@@ -24,13 +24,15 @@ class ConceptKBFeatureCacher:
         feature_pipeline: ConceptKBFeaturePipeline,
         cache_dir = 'feature_cache',
         segmentations_sub_dir = 'segmentations',
-        features_sub_dir = 'features'
+        features_sub_dir = 'features',
+        infer_localize_from_component: bool = True
     ):
         self.concept_kb = concept_kb
         self.feature_pipeline = feature_pipeline
         self.cache_dir = cache_dir
         self.segmentations_sub_dir = segmentations_sub_dir
         self.features_sub_dir = features_sub_dir
+        self.infer_localize_from_component = infer_localize_from_component
 
     @property
     def segmentations_dir(self):
@@ -103,6 +105,12 @@ class ConceptKBFeatureCacher:
 
     def _cache_segmentation(self, example: ConceptExample, prog_bar: tqdm = None, **loc_and_seg_kwargs):
         image = self._image_from_example(example)
+
+        if self.infer_localize_from_component:
+            # Perform localization only if the concept is not a component concept
+            if example.concept_name and self.concept_kb[example.concept_name].containing_concepts:
+                loc_and_seg_kwargs['do_localize'] = True
+
         segmentations = self.feature_pipeline.get_segmentations(image, **loc_and_seg_kwargs)
         segmentations.input_image_path = example.image_path
 
