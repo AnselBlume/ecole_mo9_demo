@@ -343,8 +343,18 @@ class Controller:
 
         return concept
 
-    def train_markov_blanket(self, concept_name: str, **train_concept_kwargs):
-        pass
+    def train_concepts(self, concept_names: list[str], **train_concept_kwargs):
+        for concept in self.get_markov_blanket(concept_names):
+            self.train_concept(concept.name, **train_concept_kwargs)
+
+    def get_markov_blanket(self, concept_names: list[str]) -> list[Concept]:
+        concepts = [self.retrieve_concept(concept_name) for concept_name in concept_names]
+
+        markov_blanket_union = {}
+        for concept in concepts:
+            markov_blanket_union.update(self.concept_kb.markov_blanket(concept))
+
+        return list(markov_blanket_union)
 
     def train(
         self,
@@ -394,12 +404,8 @@ class Controller:
                 new_examples: If provided, these examples will be added to the concept's examples list.
         '''
         # Try to retrieve concept
-        try:
-            concept = self.retrieve_concept(concept_name, max_retrieval_distance=max_retrieval_distance) # Low retrieval distance to force exact match
-            logger.info(f'Retrieved concept with name: "{concept.name}"')
-        except:
-            logger.info(f'No concept found for "{concept_name}". Creating new concept.')
-            concept = self.add_concept(concept_name)
+        concept = self.retrieve_concept(concept_name, max_retrieval_distance=max_retrieval_distance) # Low retrieval distance to force exact match
+        logger.info(f'Retrieved concept with name: "{concept.name}"')
 
         self.add_examples(new_examples, concept=concept) # Nop if no examples to add
 
@@ -455,7 +461,7 @@ class Controller:
 
             return retrieved_concept.concept
 
-    def add_hyponym(self, child_name: str, parent_name: str, child_max_retrieval_distance: float = 0.):
+    def add_hyponym(self, child_name: str, parent_name: str, child_max_retrieval_distance: float = 0.2):
         parent = self.retrieve_concept(parent_name)
 
         try:
@@ -465,7 +471,7 @@ class Controller:
 
         child.add_parent_concept(parent) # This sets the parent's child pointer as well
 
-    def add_component_concept(self, component_concept_name: str, concept_name: str, component_max_retrieval_distance: float = 0.):
+    def add_component_concept(self, component_concept_name: str, concept_name: str, component_max_retrieval_distance: float = 0.2):
         concept = self.retrieve_concept(concept_name)
 
         try:
