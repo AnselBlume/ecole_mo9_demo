@@ -1,11 +1,10 @@
 # %%
 '''
-    Script to visualize the evolution of classifier heatmaps after training a concept one example
-    at a time.
+    Script to visualize algebraic operations on heatmaps (difference, intersection).
 '''
 import os
 if __name__ == '__main__':
-    os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 
 import sys
 sys.path.append(os.path.realpath(os.path.join(__file__, '../../src'))) # src
@@ -37,9 +36,13 @@ coloredlogs.install(level='DEBUG', logger=logger)
 
 rembg_session = new_session('isnet-general-use')
 
-def get_foreground_mask(img: Image.Image):
-    bw_img = remove(img, post_process_mask=True, session=rembg_session, only_mask=True) # single-channel image
-    img_mask = np.array(bw_img) > 0 # (h, w)
+def get_foreground_mask(img: Image.Image, remove_background: bool = True):
+    if remove_background:
+        bw_img = remove(img, post_process_mask=True, session=rembg_session, only_mask=True) # single-channel image
+        img_mask = np.array(bw_img) > 0 # (h, w)
+
+    else:
+        img_mask = np.ones((img.height, img.width), dtype=bool)
 
     return img_mask
 
@@ -64,6 +67,39 @@ def get_concept_heatmap(concept: Concept, img: Image.Image, fe: DINOFeatureExtra
 
     return heatmap
 
+def get_heatmap_figure(
+    concept: Concept,
+    img_path: str,
+    fe: DINOFeatureExtractor,
+    remove_background: bool = True,
+    **vis_kwargs
+):
+    img = Image.open(img_path).convert('RGB')
+    img_mask = get_foreground_mask(img, remove_background=remove_background)
+
+    concept_heatmap = get_concept_heatmap(concept, img, fe)
+
+    fig = plt.figure(figsize=(15,10), constrained_layout=True)
+    grid = GridSpec(2, 2, figure=fig, wspace=.05, hspace=.05)
+
+    # Original image
+    orig_img_ax = fig.add_subplot(grid[:,0])
+    orig_img_ax.imshow(img)
+    orig_img_ax.axis('off')
+    orig_img_ax.set_title('Original Image')
+
+    # Concept heatmap
+    concept_heatmap_vis, concept_heatmap = get_heatmap_visualization(concept_heatmap, img, img_mask, **vis_kwargs)
+    concept_heatmap_ax = fig.add_subplot(grid[:,1])
+    concept_heatmap_ax.imshow(concept_heatmap_vis)
+    concept_heatmap_ax.axis('off')
+    concept_heatmap_ax.set_title(f'{concept.name.capitalize()} Heatmap')
+
+    # Move title upwards to put distance between it and plot
+    fig.suptitle('Heatmap Visualization', fontsize=24, weight='bold', y=1.05)
+
+    return fig
+
 def get_heatmap_differences_figure(
     concept1: Concept,
     concept2: Concept,
@@ -71,10 +107,11 @@ def get_heatmap_differences_figure(
     fe: DINOFeatureExtractor,
     figsize=(15,10),
     intersection_min: float = .5,
+    remove_background: bool = True,
     **vis_kwargs
 ):
     img = Image.open(img_path).convert('RGB')
-    img_mask = get_foreground_mask(img)
+    img_mask = get_foreground_mask(img, remove_background=remove_background)
 
     concept1_heatmap = get_concept_heatmap(concept1, img, fe)
     concept2_heatmap = get_concept_heatmap(concept2, img, fe)
@@ -181,6 +218,7 @@ def get_heatmap_visualization(
     is_heatmap_processed: bool = False,
     clamp_radius=5,
     clamp_center=0,
+    discretize_clamp: bool = True,
     clamp_discretize_radius=.1 # Discretization after normalizing to [0,1]
 ):
 
@@ -207,9 +245,10 @@ def get_heatmap_visualization(
             heatmap = heatmap.clamp(-clamp_radius, clamp_radius) # Restrict to [-radius, radius]
             heatmap = (heatmap + clamp_radius) / (2 * clamp_radius) # Normalize to [0, 1] with zero at .5
 
-            heatmap[np.abs(heatmap - .5) < clamp_discretize_radius] = .5 # Discretize around .5
-            heatmap[heatmap < .5 - clamp_discretize_radius] = 0
-            heatmap[heatmap > .5 + clamp_discretize_radius] = 1
+            if discretize_clamp:
+                heatmap[np.abs(heatmap - .5) < clamp_discretize_radius] = .5 # Discretize around .5
+                heatmap[heatmap < .5 - clamp_discretize_radius] = 0
+                heatmap[heatmap > .5 + clamp_discretize_radius] = 1
 
         heatmap_vis = colormaps['viridis'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
         # heatmap_vis = colormaps['bwr'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
@@ -230,18 +269,69 @@ def get_heatmap_visualization(
 
         heatmap_vis = cv2.cvtColor(np.uint8(hsv2), cv2.COLOR_HSV2RGB) # This already handles blending with original image
 
-
     heatmap_vis = heatmap_vis * img_mask[..., None] # (h, w, 3); mask background
 
     return heatmap_vis, heatmap
 
-def vis_checkpoint(ckpt_path: str, concepts_to_vis: tuple[str,str], max_to_vis_per_concept: int = 3, **vis_kwargs):
+def vis_checkpoint(
+    ckpt_path: str,
+    dir_to_vis: str = None,
+    max_to_vis_per_concept: int = 3,
+    remove_background: bool = True,
+    infer_backtround_removal: bool = False,
+    **vis_kwargs
+):
     '''
-        Visualize the heatmaps of existing checkpointed concept predictors on each other's test images.
+        Visualize the heatmaps of existing checkpointed concept predictors on their test images.
     '''
     concept_kb = ConceptKB.load(ckpt_path)
 
-    feature_pipeline = ConceptKBFeaturePipeline(concept_kb, loc_and_seg, feature_extractor)
+    for concept_to_vis in concept_kb:
+        # Get paths
+        if dir_to_vis:
+            paths = list_paths(args.dir_to_vis, exts=['.jpg', '.jpeg', '.png'])
+
+        else:
+            # Get image paths for concept
+            all_paths = [
+                e.image_path
+                for concept in concept_kb
+                for e in concept.examples
+            ]
+
+            paths = all_paths
+            labels = [concept.name for concept in concept_kb for e in concept.examples]
+
+            # (_, _), (_, _), (test_paths, test_labels) = split_from_paths(all_paths)
+            # if len(test_paths) == 0:
+            #     logger.warning(f'No test images for concept {concept_to_vis.name}; selecting all images including train.')
+            #     test_paths = all_paths
+
+            concept_paths = [path for i, path in enumerate(paths) if labels[i] == concept_to_vis.name][:max_to_vis_per_concept]
+            remove_background_for_concept = concept_to_vis not in concept_kb.component_concepts if infer_background_removal else remove_background
+            paths = concept_paths
+
+        # Output figures
+        for i, img_path in enumerate(paths, start=1):
+            fig = get_heatmap_figure(concept_to_vis, img_path, dino_fe, remove_background=remove_background_for_concept, **vis_kwargs)
+            fig.savefig(f'{concept_to_vis.name}_image_{i}_heatmap.jpg', bbox_inches='tight')
+
+def vis_checkpoint_by_comparison(
+    ckpt_path: str,
+    concepts_to_vis: tuple[str,str],
+    dir_to_vis: str = None,
+    max_to_vis_per_concept: int = 3,
+    remove_background: bool = True,
+    **vis_kwargs
+):
+    '''
+        Visualize the heatmaps of existing checkpointed concept predictors on each other's test images.
+
+        If dir_to_vis is provided, visualizes the concepts on images in this directory. Else, uses each concept's test images.
+    '''
+    concept_kb = ConceptKB.load(ckpt_path)
+
+    feature_pipeline = ConceptKBFeaturePipeline(loc_and_seg, feature_extractor)
     retriever = CLIPConceptRetriever(concept_kb.concepts, *clip)
     cacher = ConceptKBFeatureCacher(concept_kb, feature_pipeline)
 
@@ -262,11 +352,11 @@ def vis_checkpoint(ckpt_path: str, concepts_to_vis: tuple[str,str], max_to_vis_p
     ]
 
     # Visualize and output heatmaps
-    if args.dir_to_vis:
+    if dir_to_vis:
         paths = list_paths(args.dir_to_vis, exts=['.jpg', '.jpeg', '.png'])
 
         for img_path in paths:
-            fig = get_heatmap_differences_figure(concept1, concept2, img_path, dino_fe, **vis_kwargs)
+            fig = get_heatmap_differences_figure(concept1, concept2, img_path, dino_fe, remove_background=remove_background, **vis_kwargs)
             fig.savefig(f'{os.path.basename(img_path).split(".")[0]}_heatmaps.jpg', bbox_inches='tight')
 
     else: # Use test images from checkpoint
@@ -308,6 +398,9 @@ def parse_args(cl_args = None, config_str: str = None):
 
 # %%
 if __name__ == '__main__':
+    # XXX While this script tries to visualize the ConceptKB's test images, depending on the split used for training the KB it may not have any test
+    # images. Hence, the model may have been trained on the images themselves.
+
     # Original hyperparameters for XAD-v3 used clamp_center=0, clamp_radius=5., clamp_discretize_radius=.1
 
     # %% Build controller components
@@ -316,32 +409,65 @@ if __name__ == '__main__':
     feature_extractor = build_feature_extractor(dino_model=build_dino(), clip_model=clip[0], clip_processor=clip[1])
     dino_fe = feature_extractor.dino_feature_extractor
 
-    for clamp_radius in [1, 3, 5]:
-        for clamp_center in [-2, -1, 0]:
-            for clamp_discretize_radius in [.3, 1, 3]:
+    # Single-concept visualization
+    output_dir = '/shared/nas2/blume5/fa23/ecole/results/vis_heatmap_sweep/single_concepts_infer_rembg'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_05-20:23:53-yd491eo3-all_planes_and_guns-infer_localize/concept_kb_epoch_26.pt'
+    remove_background = False
+    infer_background_removal = True
+    discretize_clamp = False
 
-                args = parse_args(config_str=f'''
-                    ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_05_13-06:46:31-ra29szos-firerarms_more_exs_v2/concept_kb_epoch_25.pt
-                    max_to_vis_per_concept: 10
+    for clamp_radius in [3, 5]:
+        for clamp_center in [0, 3, 6]:
+            for clamp_discretize_radius in [0]: # [.1, .3, .6]:
+                vis_kwargs = {
+                    'clamp_radius': clamp_radius,
+                    'clamp_center': clamp_center,
+                    'clamp_discretize_radius': clamp_discretize_radius,
+                    'discretize_clamp': discretize_clamp
+                }
 
-                    concepts_to_compare:
-                        - barrett xm109
-                        - cheytac m200
+                sub_output_dir = os.path.join(output_dir, f'clamp_radius_{clamp_radius}_center_{clamp_center}_discretize_{discretize_clamp}_radius_{clamp_discretize_radius}')
+                os.makedirs(sub_output_dir, exist_ok=True)
+                os.chdir(sub_output_dir)
 
-                    dir_to_vis: /shared/nas2/blume5/fa23/ecole/data/firearms14k/two_subset/test
-                    output_dir: /shared/nas2/blume5/fa23/ecole/vis_heatmap_sweep/clamp_radius_{clamp_radius}_center_{clamp_center}_discretize_{clamp_discretize_radius}
+                vis_checkpoint(ckpt_path, remove_background=remove_background, **vis_kwargs)
 
-                    vis:
-                        strategy: clamp
-                        clamp_radius: {clamp_radius}
-                        clamp_center: {clamp_center}
-                        clamp_discretize_radius: {clamp_discretize_radius}
-                ''')
+    sys.exit(0)
 
-                # Change working directory to generate outputs there
-                output_dir = os.path.realpath(args.output_dir)
-                os.makedirs(output_dir, exist_ok=True)
-                os.chdir(output_dir)
+    # Concept comparison
+    concepts_to_compare_l = [
+        ('biplane', 'transport plane'),
+        ('cargo jet', 'passenger plane'),
+        ('fighter jet', 'transport plane')
+    ]
 
-                # Create visualizations
-                vis_checkpoint(args.ckpt_path, args.concepts_to_compare, max_to_vis_per_concept=args.max_to_vis_per_concept, **args.vis.as_dict())
+    for concepts_to_compare in concepts_to_compare_l:
+        for clamp_radius in [1, 3, 5]:
+            for clamp_center in [-2, -1, 0]:
+                for clamp_discretize_radius in [.3, 1, 3]:
+
+                    args = parse_args(config_str=f'''
+                        ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_05_13-06:46:31-ra29szos-firerarms_more_exs_v2/concept_kb_epoch_25.pt
+                        max_to_vis_per_concept: 10
+
+                        concepts_to_compare:
+                            - barrett xm109
+                            - cheytac m200
+
+                        dir_to_vis: /shared/nas2/blume5/fa23/ecole/data/firearms14k/two_subset/test
+                        output_dir: /shared/nas2/blume5/fa23/ecole/vis_heatmap_sweep/clamp_radius_{clamp_radius}_center_{clamp_center}_discretize_{clamp_discretize_radius}
+
+                        vis:
+                            strategy: clamp
+                            clamp_radius: {clamp_radius}
+                            clamp_center: {clamp_center}
+                            clamp_discretize_radius: {clamp_discretize_radius}
+                    ''')
+
+                    # Change working directory to generate outputs there
+                    output_dir = os.path.realpath(args.output_dir)
+                    os.makedirs(output_dir, exist_ok=True)
+                    os.chdir(output_dir)
+
+                    # Create visualizations
+                    vis_checkpoint_by_comparison(args.ckpt_path, args.concepts_to_compare, max_to_vis_per_concept=args.max_to_vis_per_concept, **args.vis.as_dict())
