@@ -169,7 +169,7 @@ class ConceptKBPredictor(ConceptKBForwardBase):
             predicted_label = outputs.concept_names[pred_ind]
             predicted_concept_components_to_scores = {
                 component_name : outputs.all_concept_scores[component_name]
-                for component_name in self.concept_kb[predicted_label]
+                for component_name in self.concept_kb[predicted_label].component_concepts
             }
 
             # Indicate whether max score is below unk_threshold
