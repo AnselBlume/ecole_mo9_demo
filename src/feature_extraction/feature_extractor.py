@@ -11,7 +11,7 @@ from feature_extraction import (
 from PIL.Image import Image
 from model.features import ImageFeatures
 from feature_extraction.dino_features import get_rescaled_features, region_pool, interpolate_masks
-# from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
+from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
 import logging
 logger = logging.getLogger(__file__)
 
@@ -22,7 +22,7 @@ class FeatureExtractor(nn.Module):
         dino: nn.Module,
         clip: CLIPModel,
         processor: CLIPProcessor,
-        desco = None,
+        desco: GLIPDemo = None,
         use_cls_features: bool = False,
     ):
         '''
