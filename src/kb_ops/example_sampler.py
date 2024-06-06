@@ -70,7 +70,7 @@ class ConceptKBExampleSampler:
         n_examples_per_concept: int = None,
         n_examples_from_union: int = None,
         include_concept_specific_negatives_for: Union[None, Literal['all'], list[str]] = None
-    ):
+    ) -> tuple[list[ConceptExample], list[str]]:
         '''
             If n_examples_per_concept, samples n_examples_per_concept examples from each concept in concepts.
             If n_examples_from_union, samples n_examples_from_union examples from the union of all concepts' examples.
