@@ -360,7 +360,7 @@ class Controller:
 
         markov_blanket_union = {}
         for concept in concepts:
-            markov_blanket_union.update(self.concept_kb.markov_blanket(concept))
+            markov_blanket_union.update(dict.fromkeys(self.concept_kb.markov_blanket(concept)))
 
         return list(markov_blanket_union)
 
