@@ -14,7 +14,7 @@ from model.concept import ConceptKBConfig
 from kb_ops.train_test_split import split
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
 from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline, ConceptKBFeaturePipelineConfig
-from kb_ops.example_sampler import ConceptKBExampleSampler, ConceptsToTrainNegativeStrategy
+from kb_ops.example_sampler import ConceptKBExampleSampler, ConceptKBExampleSamplerConfig
 from image_processing import LocalizerAndSegmenterConfig
 from model.concept import ConceptKB
 import logging, coloredlogs
@@ -69,6 +69,7 @@ def get_parser() -> argparse.ArgumentParser:
     # Feature pipeline
     parser.add_argument('--feature_pipeline_config', type=ConceptKBFeaturePipelineConfig, default=ConceptKBFeaturePipelineConfig()),
     parser.add_argument('--loc_and_seg_config', type=LocalizerAndSegmenterConfig, default=LocalizerAndSegmenterConfig())
+    parser.add_argument('--example_sampler_config', type=ConceptKBExampleSamplerConfig, default=ConceptKBExampleSamplerConfig())
 
     # Predictor
     parser.add_argument('--predictor.use_ln', type=bool, default=False, help='Whether to use LayerNorm')
@@ -90,9 +91,6 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument('--train.limit_global_negatives', type=int, help='The number of global negative examples to use during training. If None, uses all')
 
     parser.add_argument('--train.split', type=tuple[float,float,float], default=(.6, .2, .2), help='Train, val, test split ratios')
-
-    parser.add_argument('--train.use_descandants_as_positives', type=bool, default=True, help='Whether to train more general concepts (hypernyms) with its more specific instances (hyponyms)')
-    parser.add_argument('--train.negatives_strategy', type=ConceptsToTrainNegativeStrategy, default=ConceptsToTrainNegativeStrategy.use_siblings_as_negatives)
 
     return parser
 
@@ -172,17 +170,9 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     all_labels = list(chain.from_iterable([[c.name for _ in c.examples] for c in concept_kb])) # No way currently to indicate concept-specific negatives from files
 
     (train_exs, train_labels), (val_exs, val_labels), (test_exs, test_labels) = split(all_examples, all_labels, split=args.train.split)
-    train_concepts_to_train_per_example = sampler.get_concepts_to_train_per_example(
-        train_exs,
-        use_descendants_as_positives=args.train.use_descandants_as_positives,
-        negatives_strategy=args.train.negatives_strategy
-    )
 
-    val_concepts_to_train_per_example = sampler.get_concepts_to_train_per_example(
-        val_exs,
-        use_descendants_as_positives=args.train.use_descandants_as_positives,
-        negatives_strategy=args.train.negatives_strategy
-    )
+    train_concepts_to_train_per_example = sampler.get_concepts_to_train_per_example(train_exs)
+    val_concepts_to_train_per_example = sampler.get_concepts_to_train_per_example(val_exs)
 
     # Pre-cache features
     cacher = ConceptKBFeatureCacher(

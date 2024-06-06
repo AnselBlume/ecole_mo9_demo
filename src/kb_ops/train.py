@@ -192,7 +192,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         sample_all_negatives: bool = False,
         sample_only_siblings_for_negatives: bool = True,
         sample_only_leaf_nodes_for_negatives: bool = False,
-        use_containing_concept_for_positives: bool = True,
+        use_containing_concepts_for_positives: bool = False,
         n_sampled_positives_per_containing_concept: int = 3,
         post_sampling_hook: Callable[[list[ConceptExample]], Any] = None,
         n_global_negatives: int = 250,
@@ -214,6 +214,13 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 n_sampled_positives_per_descendant: Number of positive examples to sample per descendant.
 
                 use_concepts_as_negatives: Whether to use negative examples from other concepts in the ConceptKB.
+
+                sample_all_negatives: Whether to sample all negative examples from the negative concepts.
+                sample_only_siblings_for_negatives: Whether to sample only siblings of the concept for negative examples.
+                sample_only_leaf_nodes_for_negatives: Whether to sample only leaf nodes for negative examples.
+
+                use_containing_concepts_for_positives: Whether to use containing concepts for positive examples.
+                n_sampled_positives_per_containing_concept: Number of positive examples to sample per containing concept.
 
                 n_global_negatives: Number of global negative examples to sample for training.
 
@@ -270,7 +277,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 pos_examples.extend(descendant_pos_examples)
                 concept_names.extend(descendant_concept_names)
 
-            if use_containing_concept_for_positives and concept.containing_concepts:
+            if use_containing_concepts_for_positives and concept.containing_concepts:
                 # This is a component concept actively contained in another concept (not just a descendant of a component)
                 containing_concept_positives, containing_concept_names = self.sampler.sample_examples(
                     concept.containing_concepts.values(),

@@ -18,7 +18,7 @@ class ConceptsToTrainNegativeStrategy(Enum):
 @dataclass
 class ConceptKBExampleSamplerConfig:
     use_descendants_as_positives: bool = True
-    use_containing_concepts_for_positives: bool = True
+    use_containing_concepts_for_positives: bool = False
     negatives_strategy: ConceptsToTrainNegativeStrategy = ConceptsToTrainNegativeStrategy.use_siblings_as_negatives
 
     random_seed: int = 42
