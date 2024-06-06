@@ -11,7 +11,7 @@ from matplotlib import colormaps
 import PIL
 from llm.attr_retrieval import retrieve_attributes
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
-from vis_utils import image_from_masks, show
+from visualization.vis_utils import image_from_masks, show
 from utils import ArticleDeterminer
 import math
 from tqdm import tqdm

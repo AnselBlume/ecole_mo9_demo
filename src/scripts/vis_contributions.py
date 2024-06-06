@@ -7,7 +7,7 @@ from tqdm import tqdm
 from model.concept import ConceptKB
 from kb_ops import ConceptKBPredictor, ConceptKBFeaturePipeline
 from feature_extraction import build_feature_extractor
-from model.concept_predictor import ConceptPredictorOutput
+from model.concept.concept_predictor import ConceptPredictorOutput
 from kb_ops.dataset import PresegmentedDataset, list_collate
 from kb_ops.train_test_split import split_from_paths
 from torch.utils.data import DataLoader
@@ -15,7 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from PIL.Image import Image
-from vis_utils import image_from_masks
+from visualization.vis_utils import image_from_masks
 from torchvision.transforms.functional import to_pil_image, pil_to_tensor
 import jsonargparse as argparse
 from torchmetrics import Accuracy

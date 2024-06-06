@@ -1,21 +1,21 @@
 import numpy as np
 import sys
-import os 
-from tqdm import tqdm 
+import os
+from tqdm import tqdm
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
-import os 
-import json 
-import cv2 
-from tqdm import tqdm 
+import os
+import json
+import cv2
+from tqdm import tqdm
 from typing import Optional
-import vis_utils
-from vis_utils import mask_and_crop_image
-from PIL import Image, ImageDraw 
+import visualization.vis_utils as vis_utils
+from visualization.vis_utils import mask_and_crop_image
+from PIL import Image, ImageDraw
 from pycocotools import mask as mask_utils
-import skimage 
-import pickle 
+import skimage
+import pickle
 def open_file(filename,use_json=True):
         if use_json:
             with open(filename) as fopen:
@@ -23,7 +23,7 @@ def open_file(filename,use_json=True):
         else:
             with open(filename,'rb') as fopen:
                 contents = pickle.load(fopen)
-        return contents 
+        return contents
 def save_file(filename,contents):
     with open(filename,'w+') as fwrite:
         json.dump(contents,fwrite)
@@ -44,9 +44,9 @@ def load_features(annotation_file:str,attribute_to_index:str,feature_dir:str,sav
         for n in entry['negative_attributes']:
             if n in list(attribute_to_id.keys()):
                 attribute_id = attribute_to_id[n]
-                labels[attribute_id] = -1 
+                labels[attribute_id] = -1
         if os.path.exists(os.path.join(feature_dir,instance_id+'.pkl')):
-            feature_file = open_file(os.path.join(feature_dir,instance_id+'.pkl'),use_json=False)                
+            feature_file = open_file(os.path.join(feature_dir,instance_id+'.pkl'),use_json=False)
             if not np.isnan(feature_file['region_feature']).any():
 
                 all_features.append(feature_file['region_feature'])

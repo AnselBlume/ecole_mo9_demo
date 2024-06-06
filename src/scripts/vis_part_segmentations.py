@@ -2,7 +2,7 @@ import PIL
 import os
 from torchvision.utils import draw_bounding_boxes
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
-from vis_utils import image_from_masks
+from visualization.vis_utils import image_from_masks
 from feature_extraction import build_sam, build_desco
 from llm import LLMClient, retrieve_parts
 from image_processing import build_localizer_and_segmenter

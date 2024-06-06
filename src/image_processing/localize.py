@@ -241,7 +241,7 @@ class Localizer:
 if __name__ == '__main__':
     # Imports
     import PIL
-    from vis_utils import show, image_from_masks
+    from visualization.vis_utils import show, image_from_masks
     from torchvision.utils import draw_bounding_boxes
     from torchvision.transforms.functional import pil_to_tensor
     from feature_extraction import build_sam_predictor, build_desco

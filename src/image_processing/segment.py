@@ -162,7 +162,7 @@ class Segmenter:
 # %%
 if __name__ == '__main__':
     import PIL
-    from vis_utils import image_from_masks, show
+    from visualization.vis_utils import image_from_masks, show
     from feature_extraction import build_sam, build_desco
     from mo9_demo.src.image_processing.localize import Localizer
     from torchvision.utils import draw_bounding_boxes
