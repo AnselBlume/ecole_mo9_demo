@@ -47,6 +47,7 @@ class ConceptKBFeaturePipeline:
             image=image,
             concept_name=concept_name,
             concept_parts=concept_parts,
+            do_localize=do_localize,
             remove_background=remove_background,
             return_crops=return_crops,
             use_bbox_for_crops=use_bbox_for_crops
