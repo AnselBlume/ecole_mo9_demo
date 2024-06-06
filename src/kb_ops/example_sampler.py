@@ -3,6 +3,7 @@ import numpy as np
 import logging
 from typing import Union, Literal
 from enum import Enum
+from dataclasses import dataclass
 
 logger = logging.getLogger(__file__)
 
@@ -14,14 +15,23 @@ class ConceptsToTrainNegativeStrategy(Enum):
     use_siblings_as_negatives = 'use_siblings_as_negatives'
     only_positives = 'only_positives'
 
+@dataclass
+class ConceptKBExampleSamplerConfig:
+    use_descendants_as_positives: bool = True
+    use_containing_concepts_for_positives: bool = True
+    negatives_strategy: ConceptsToTrainNegativeStrategy = ConceptsToTrainNegativeStrategy.use_siblings_as_negatives
+
+    random_seed: int = 42
+
 class ConceptKBExampleSampler:
     def __init__(
         self,
         concept_kb: ConceptKB,
-        random_seed: int = 42
+        config: ConceptKBExampleSamplerConfig = ConceptKBExampleSamplerConfig()
     ):
         self.concept_kb = concept_kb
-        self.rng = np.random.default_rng(random_seed)
+        self.config = config
+        self.rng = np.random.default_rng(config.random_seed)
 
     def get_all_examples(
         self,
@@ -157,10 +167,10 @@ class ConceptKBExampleSampler:
     def get_concepts_to_train_per_example(
         self,
         concept_examples: list[ConceptExample],
-        use_descendants_as_positives: bool = True,
-        use_containing_concepts_as_positives: bool = False, # TODO
+        use_descendants_as_positives: bool = None,
+        use_containing_concepts_for_positives: bool = None,
         max_to_sample_per_descendant: int = None, # TODO
-        negatives_strategy: ConceptsToTrainNegativeStrategy = ConceptsToTrainNegativeStrategy.use_siblings_as_negatives
+        negatives_strategy: ConceptsToTrainNegativeStrategy = None
     ) -> Union[list[None], list[list[str]]]:
         '''
             Returns the list of concepts to train per example based on the passed arguments.
@@ -181,6 +191,13 @@ class ConceptKBExampleSampler:
 
                 - only_positives: Only train on the positive concept for an image. This is effective for component detection, but not for classification.
         '''
+        if use_descendants_as_positives is None:
+            use_descendants_as_positives = self.config.use_descendants_as_positives
+        if use_containing_concepts_for_positives is None:
+            use_containing_concepts_for_positives = self.config.use_containing_concepts_for_positives
+        if negatives_strategy is None:
+            negatives_strategy = self.config.negatives_strategy
+
         assert all(example.concept_name for example in concept_examples), 'All examples must have a concept name'
 
         if negatives_strategy == ConceptsToTrainNegativeStrategy.use_all_concepts_as_negatives:
@@ -246,5 +263,14 @@ class ConceptKBExampleSampler:
                 for ancestor in concept_to_ancestors[example.concept_name]:
                     if ancestor not in concepts_to_train_set:
                         concepts_to_train.append(ancestor)
+
+        if use_containing_concepts_for_positives:
+            # To use containing concepts for positives, we need to add component concepts to the list of concepts to train on
+            for example, concepts_to_train in zip(concept_examples, concepts_to_train_per_example):
+                concepts_to_train_set = set(concepts_to_train)
+
+                for component_name in self.concept_kb[example.concept_name].component_concepts:
+                    if component_name not in concepts_to_train_set:
+                        concepts_to_train.append(component_name)
 
         return concepts_to_train_per_example

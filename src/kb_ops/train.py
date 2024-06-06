@@ -179,6 +179,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
         return train_output
 
+    # TODO convert these arguments into a dataclass config
     def train_concept(
         self,
         concept: Concept,
@@ -191,6 +192,8 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         sample_all_negatives: bool = False,
         sample_only_siblings_for_negatives: bool = True,
         sample_only_leaf_nodes_for_negatives: bool = False,
+        use_containing_concept_for_positives: bool = True,
+        n_sampled_positives_per_containing_concept: int = 3,
         post_sampling_hook: Callable[[list[ConceptExample]], Any] = None,
         n_global_negatives: int = 250,
         **train_kwargs
@@ -259,9 +262,23 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 descendants = self.concept_kb.rooted_subtree(concept)
                 descendants = [c for c in descendants if c.name != concept.name] # Exclude self
 
-                descendant_pos_examples, descendant_concept_names = self.sampler.sample_examples(descendants, n_examples_per_concept=n_sampled_positives_per_descendant)
+                descendant_pos_examples, descendant_concept_names = self.sampler.sample_examples(
+                    descendants,
+                    n_examples_per_concept=n_sampled_positives_per_descendant
+                )
+
                 pos_examples.extend(descendant_pos_examples)
                 concept_names.extend(descendant_concept_names)
+
+            if use_containing_concept_for_positives and concept.containing_concepts:
+                # This is a component concept actively contained in another concept (not just a descendant of a component)
+                containing_concept_positives, containing_concept_names = self.sampler.sample_examples(
+                    concept.containing_concepts.values(),
+                    n_examples_per_concept=n_sampled_positives_per_containing_concept
+                )
+
+                pos_examples.extend(containing_concept_positives)
+                concept_names.extend(containing_concept_names)
 
             pos_labels = [ # Handle concept-specific negatives
                 concept_name if not ex.is_negative else FeatureDataset.NEGATIVE_LABEL
