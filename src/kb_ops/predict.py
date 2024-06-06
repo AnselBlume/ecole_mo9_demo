@@ -1,7 +1,7 @@
 import torch
 from image_processing import LocalizeAndSegmentOutput
 from torch.utils.data import DataLoader
-from model.concept import ConceptKB, Concept
+from model.concept import ConceptKB, Concept, ConceptPredictorOutput
 from .caching import CachedImageFeatures
 from .feature_pipeline import ConceptKBFeaturePipeline
 from typing import Union
@@ -21,7 +21,8 @@ class PredictOutput(DictDataClass, DeviceShiftable):
     predicted_index: int = None
     predicted_label: str = None
     is_below_unk_threshold: bool = None
-    predicted_concept_outputs: torch.Tensor = None # This will always be the maximizing concept
+    predicted_concept_outputs: ConceptPredictorOutput = None # This will always be the maximizing concept
+    predicted_concept_components_to_scores: dict[str,float] = None # Mapping from predicted concept's components to their scores
     true_index: int = None
     true_concept_outputs: torch.Tensor = None
     segmentations: LocalizeAndSegmentOutput = None
@@ -164,7 +165,12 @@ class ConceptKBPredictor(ConceptKBForwardBase):
             scores = torch.tensor([output.cum_score for output in outputs.predictors_outputs])
 
             pred_ind = scores.argmax(dim=0).item() # int
-            predicted_concept_outputs = outputs.predictors_outputs[pred_ind].cpu()
+            predicted_concept_outputs: ConceptPredictorOutput = outputs.predictors_outputs[pred_ind].cpu()
+            predicted_label = outputs.concept_names[pred_ind]
+            predicted_concept_components_to_scores = {
+                component_name : outputs.all_concept_scores[component_name]
+                for component_name in self.concept_kb[predicted_label]
+            }
 
             # Indicate whether max score is below unk_threshold
             is_below_unk_threshold = unk_threshold > 0 and scores[pred_ind].sigmoid() < unk_threshold
@@ -173,9 +179,10 @@ class ConceptKBPredictor(ConceptKBForwardBase):
                 concept_names=outputs.concept_names,
                 predictors_scores=scores,
                 predicted_index=pred_ind,
-                predicted_label=outputs.concept_names[pred_ind],
+                predicted_label=predicted_label,
                 is_below_unk_threshold=is_below_unk_threshold,
                 predicted_concept_outputs=predicted_concept_outputs,
+                predicted_concept_components_to_scores=predicted_concept_components_to_scores,
                 true_index=true_ind if predict_dl is not None else None,
                 true_concept_outputs=None if predict_dl is None or true_ind < 0 else outputs.predictors_outputs[true_ind]
             )

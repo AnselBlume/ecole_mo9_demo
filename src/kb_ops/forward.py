@@ -35,6 +35,11 @@ class ForwardOutput(DictDataClass):
         metadata={'help': 'Binary labels for each concept in concept_names; shape (n_concepts,)'}
     )
 
+    all_concept_scores: dict[str, float] = field(
+        default=None,
+        metadata={'help': 'Mapping from concept name to its detection score (including component concepts which may not be computed here)'}
+    )
+
     segmentations: LocalizeAndSegmentOutput = field(
         default=None,
         metadata={'help': 'Segmentation output if return_segmentations was set to True in the forward pass'}
@@ -100,6 +105,7 @@ class ConceptKBForwardBase:
 
         concepts = list(self.concept_kb) if not concepts else concepts
         concept_scores = {}
+        all_concept_scores: dict[str,float] = {} # All scores, including component score inputs, to be output
         concepts_for_forward = self._get_concepts_for_forward_pass(concepts) # NOTE This may output a different (topological) order from concepts list
         concepts_for_loss = set(concepts)
 
@@ -138,6 +144,11 @@ class ConceptKBForwardBase:
                     component_concept_scores = torch.tensor([[]], device=features.image_features.device)
 
                 features.component_concept_scores = component_concept_scores
+
+            all_concept_scores.update({ # Store component concept scores regardless of where they are computed
+                component_name : component_score.item()
+                for component_name, component_score in zip(concept.component_concepts, features.component_concept_scores[0])
+            })
 
             # Compute concept predictor outputs
             is_concept_for_loss = concept in concepts_for_loss
@@ -182,12 +193,15 @@ class ConceptKBForwardBase:
             curr_loss.backward()
 
         # Return results
+        all_concept_scores.update({concept.name : score.item() for concept.name, score in concept_scores.items()}) # Add scores computed here
+
         forward_output = ForwardOutput(
             loss=total_loss if text_label is not None else None,
             predictors_outputs=outputs,
+            concept_names=concept_names,
             binary_concept_predictions=torch.stack(concept_predictions) if concept_predictions else None,
             binary_concept_labels=torch.stack(concept_labels) if concept_labels else None,
-            concept_names=concept_names
+            all_concept_scores=all_concept_scores
         )
 
         if return_segmentations:
