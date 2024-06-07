@@ -418,8 +418,9 @@ class Controller:
         self.add_examples(new_examples, concept=concept) # Nop if no examples to add
 
         # Ensure features are prepared, only generating those which don't already exist or are dirty
-        self.cacher.cache_segmentations([concept], only_uncached_or_dirty=True)
-        self.cacher.cache_features([concept], only_uncached_or_dirty=True)
+        # Cache all concepts, since we might sample from concepts whose examples haven't been cached yet
+        self.cacher.cache_segmentations(only_uncached_or_dirty=True)
+        self.cacher.cache_features(only_uncached_or_dirty=True)
 
         # Hook to recache zs_attr_features after negative examples have been sampled
         # This is faster than calling recache_zs_attr_features on all examples in the concept_kb
@@ -822,13 +823,15 @@ if __name__ == '__main__':
     ###############################
     #  June 2024 Demo Checkpoint #
     ###############################
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_05-20:23:53-yd491eo3-all_planes_and_guns-infer_localize/concept_kb_epoch_50.pt'
+    # ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_05-20:23:53-yd491eo3-all_planes_and_guns-infer_localize/concept_kb_epoch_50.pt'
+    ckpt_path = '/shared/nas2/knguye71/ecole-june-demo/conceptKB_ckpt/4e4ae4c91b8056053d0ad3ca05170be0c73a76b060656eca5b21b449c1cf92e6/concept_kb_epoch_1717745539.8286664.pt'
     kb = ConceptKB.load(ckpt_path)
     loc_and_seg = build_localizer_and_segmenter(build_sam(), None)
     fe = build_feature_extractor()
     feature_pipeline = ConceptKBFeaturePipeline(loc_and_seg, fe)
 
     controller = Controller(kb, feature_pipeline)
+    controller.train_concepts(['airplane', 'biplane'])
 
     # %% Run the first prediction
     img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1/passenger jet/000001.jpg'
