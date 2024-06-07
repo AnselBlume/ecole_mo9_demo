@@ -128,6 +128,7 @@ class Controller:
 
         return {
             'predicted_label': predicted_label,
+            'predict_output': prediction,
             'plot': img
         }
 
@@ -166,7 +167,13 @@ class Controller:
         return results[0] # The root concept is the first
 
     def is_concept_in_image(self, image: Image, concept_name: str, unk_threshold: float = .1) -> bool:
-        return self.predict_concept(image, unk_threshold=unk_threshold, leaf_nodes_only=False, restrict_to_concepts=[concept_name])
+        return self.predict_concept(
+            image,
+            unk_threshold=unk_threshold,
+            leaf_nodes_only=False,
+            restrict_to_concepts=[concept_name],
+            include_component_concepts=True
+        )
 
     def localize_and_segment(
         self,
@@ -734,8 +741,16 @@ class Controller:
         concept1 = self.retrieve_concept(concept1_pred.predicted_label)
         concept2 = self.retrieve_concept(concept2_pred.predicted_label)
 
-        c1_minus_c2_image1, c2_minus_c1_image1 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, image1)
-        c1_minus_c2_image2, c2_minus_c1_image2 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, image2)
+        if concept1.name == concept2.name:
+            image1_heatmap = self.heatmap(image1, concept1.name)
+            image2_heatmap = self.heatmap(image2, concept1.name)
+
+            c1_minus_c2_image1 = c2_minus_c1_image1 = image1_heatmap
+            c1_minus_c2_image2 = c2_minus_c1_image2 = image2_heatmap
+
+        else:
+            c1_minus_c2_image1, c2_minus_c1_image1 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, image1)
+            c1_minus_c2_image2, c2_minus_c1_image2 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, image2)
 
         return {
             'concept1_prediction': concept1_pred, # PredictOutput
@@ -823,28 +838,26 @@ if __name__ == '__main__':
     ###############################
     #  June 2024 Demo Checkpoint #
     ###############################
-    # ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_05-20:23:53-yd491eo3-all_planes_and_guns-infer_localize/concept_kb_epoch_50.pt'
-    ckpt_path = '/shared/nas2/knguye71/ecole-june-demo/conceptKB_ckpt/4e4ae4c91b8056053d0ad3ca05170be0c73a76b060656eca5b21b449c1cf92e6/concept_kb_epoch_1717745539.8286664.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_06-23:31:12-8ckp59v8-all_planes_and_guns/concept_kb_epoch_50.pt'
     kb = ConceptKB.load(ckpt_path)
     loc_and_seg = build_localizer_and_segmenter(build_sam(), None)
     fe = build_feature_extractor()
     feature_pipeline = ConceptKBFeaturePipeline(loc_and_seg, fe)
 
     controller = Controller(kb, feature_pipeline)
-    controller.train_concepts(['airplane', 'biplane'])
+    # controller.train_concepts(['airplane', 'biplane'])
 
     # %% Run the first prediction
-    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1/passenger jet/000001.jpg'
-
+    img_path = '/shared/nas2/blume5/fa23/ecole/Screenshot 2024-06-07 at 6.23.02 AM.png'
     img = PIL.Image.open(img_path).convert('RGB')
-    result = controller.predict_concept(img, unk_threshold=.1)
+    result = controller.is_concept_in_image(img, 'wing-mounted engine', unk_threshold=.001)
 
+    # %%
+    result = controller.predict_concept(img, unk_threshold=.1)
     logger.info(f'Predicted label: {result["predicted_label"]}')
 
     # %% Hierarchical prediction
-    img = PIL.Image.open(img_path).convert('RGB')
     result = controller.predict_hierarchical(img, unk_threshold=.1)
-
     logger.info(f'Concept path: {result["concept_path"]}')
 
     # %% New concept training
