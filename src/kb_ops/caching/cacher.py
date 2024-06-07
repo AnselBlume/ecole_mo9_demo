@@ -161,6 +161,7 @@ class ConceptKBFeatureCacher:
         logger.info(f'Caching features at {cache_dir}')
 
         examples = self._get_examples(concepts, only_uncached_or_dirty=only_uncached_or_dirty, type='features', include_global_negatives=include_global_negatives)
+        print("Caching features for", len(examples), "examples")
 
         if not len(examples):
             return

@@ -154,7 +154,9 @@ class HeatmapVisualizer:
             heatmap_vis = self.config.opacity * heatmap_vis + (1 - self.config.opacity) * img / 255 # Blend with original image
 
         elif self.config.strategy == HeatmapStrategy.CLAMP:
-            heatmap_vis: np.ndarray = colormaps['viridis'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
+            heatmap_vis: np.ndarray = colormaps["cividis"](heatmap)[
+                ..., :3
+            ]  # (h, w) --> (h, w, 4) --> (h, w, 3)
             # heatmap_vis = colormaps['bwr'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
             heatmap_vis = self.config.opacity * heatmap_vis + (1 - self.config.opacity) * img / 255
 

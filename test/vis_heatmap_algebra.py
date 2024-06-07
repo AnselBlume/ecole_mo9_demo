@@ -250,7 +250,9 @@ def get_heatmap_visualization(
                 heatmap[heatmap < .5 - clamp_discretize_radius] = 0
                 heatmap[heatmap > .5 + clamp_discretize_radius] = 1
 
-        heatmap_vis = colormaps['viridis'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
+        heatmap_vis = colormaps["cividis"](heatmap)[
+            ..., :3
+        ]  # (h, w) --> (h, w, 4) --> (h, w, 3)
         # heatmap_vis = colormaps['bwr'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
         heatmap_vis = opacity * heatmap_vis + (1 - opacity) * img / 255 # Blend with original image
 

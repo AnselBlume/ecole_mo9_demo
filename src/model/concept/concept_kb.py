@@ -161,6 +161,11 @@ class ConceptKB:
         for concept in self.concepts:
             concept.predictor.to(device)
 
+    def device(self) -> str:
+        '''
+            Returns the device of the first concept predictor.
+        '''
+        return next(iter(self.concepts)).predictor.device()
     def save(self, path):
         '''
             Saves the ConceptKB to a pickle file.

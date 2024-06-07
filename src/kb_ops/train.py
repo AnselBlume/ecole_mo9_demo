@@ -320,6 +320,10 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             # Assume features are already cached and get paths
             all_feature_paths = [sample.image_features_path for sample in all_samples]
             if any(feature_path is None for feature_path in all_feature_paths):
+                # print("all_samples", all_samples)
+                # print("all_feature_paths", all_feature_paths)
+                # print("all_labels", all_labels)
+                
                 raise RuntimeError('All examples must have image_features_path set to train individual Concept')
 
             # Construct train ds
