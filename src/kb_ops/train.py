@@ -215,9 +215,6 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 n_global_negatives: Number of global negative examples to sample for training.
 
         '''
-        if not concept.examples:
-            raise ValueError('Concept must have examples to train')
-
         if stopping_condition == 'validation':
             # Implement some way to perform validation as a stopping condition
             raise NotImplementedError('Validation is not yet implemented')
@@ -270,6 +267,10 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                 concept_name if not ex.is_negative else FeatureDataset.NEGATIVE_LABEL
                 for ex, concept_name in zip(pos_examples, concept_names)
             ]
+
+            if not pos_examples:
+                logger.warning(f'No positive examples found for concept {concept.name}; skipping')
+                return
 
             # Merge positive and negative examples
             all_samples = pos_examples + neg_examples
