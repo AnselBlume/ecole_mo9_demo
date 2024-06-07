@@ -233,34 +233,6 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         else:
             # Create examples and labels
 
-            # Potentially sample negative concepts
-            if use_concepts_as_negatives:
-                if sample_only_siblings_for_negatives:
-                    siblings = {} # Not including self
-                    for parent in concept.parent_concepts.values():
-                        for child in parent.child_concepts.values():
-                            if child.name not in siblings and child.name != concept.name:
-                                siblings[child.name] = child
-
-                    neg_concepts = list(siblings.values())
-
-                elif sample_only_leaf_nodes_for_negatives:
-                    # Leaf nodes which aren't components
-                    component_concepts = set(self.concept_kb.component_concepts)
-                    neg_concepts = [c for c in self.concept_kb.leaf_concepts if c not in component_concepts and c != concept]
-                else:
-                    neg_concepts = [c for c in self.concept_kb if c != concept]
-
-                # Sample the negative examples from the negative concepts
-                if sample_all_negatives:
-                    neg_examples, neg_concept_names = self.sampler.get_all_examples(neg_concepts)
-                else:
-                    neg_examples, neg_concept_names = self.sampler.sample_negative_examples(len(concept.examples), neg_concepts)
-
-            else:
-                neg_examples = []
-                neg_concept_names = []
-
             # Construct positive examples
             pos_examples = concept.examples
             concept_names = [concept.name] * len(pos_examples)
@@ -295,6 +267,51 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             if not pos_examples:
                 logger.warning(f'No positive examples found for concept {concept.name}; skipping')
                 return
+
+            # Potentially sample negative concepts
+            if use_concepts_as_negatives:
+                if sample_only_siblings_for_negatives:
+
+                    if concept.parent_concepts: # Not a root node
+                        siblings = {} # Not including self
+                        for parent in concept.parent_concepts.values():
+                            for child in parent.child_concepts.values():
+                                if child.name not in siblings and child.name != concept.name:
+                                    siblings[child.name] = child
+
+                    else: # Root node; if this isn't a component concept, sample from other non-component concepts
+                        component_concepts = set(self.concept_kb.component_concepts)
+
+                        if concept not in component_concepts:
+                            non_component_root_siblings = {
+                                c.name : c
+                                for c in self.concept_kb.root_concepts
+                                if c.name != concept.name and c not in component_concepts
+                            }
+
+                            siblings = non_component_root_siblings
+
+                        else:
+                            siblings = {}
+
+                    neg_concepts = list(siblings.values())
+
+                elif sample_only_leaf_nodes_for_negatives:
+                    # Leaf nodes which aren't components
+                    component_concepts = set(self.concept_kb.component_concepts)
+                    neg_concepts = [c for c in self.concept_kb.leaf_concepts if c not in component_concepts and c != concept]
+                else:
+                    neg_concepts = [c for c in self.concept_kb if c != concept]
+
+                # Sample the negative examples from the negative concepts
+                if sample_all_negatives:
+                    neg_examples, neg_concept_names = self.sampler.get_all_examples(neg_concepts)
+                else:
+                    neg_examples, neg_concept_names = self.sampler.sample_negative_examples(len(pos_examples), neg_concepts)
+
+            else:
+                neg_examples = []
+                neg_concept_names = []
 
             # Merge positive and negative examples
             all_samples = pos_examples + neg_examples
