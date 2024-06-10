@@ -2,7 +2,7 @@
 Utility base classes for dataclasses.
 '''
 import torch
-from typing import Callable
+from typing import Callable, Union, Any
 
 class DictDataClass:
     '''
@@ -16,11 +16,19 @@ class DeviceShiftable:
         '''
             Applies a function to all tensors in the dataclass.
         '''
+        def apply(attr: Union[list, dict, torch.Tensor, Any]):
+            if isinstance(attr, torch.Tensor):
+                return func(attr)
+            elif isinstance(attr, list):
+                return [apply(x) for x in attr]
+            elif isinstance(attr, dict):
+                return {k : apply(v) for k, v in attr.items()}
+            else:
+                return attr
+
         for field in self.__dataclass_fields__:
             attr = getattr(self, field)
-
-            if isinstance(attr, torch.Tensor):
-                setattr(self, field, func(attr))
+            setattr(self, field, apply(attr))
 
         return self
 
