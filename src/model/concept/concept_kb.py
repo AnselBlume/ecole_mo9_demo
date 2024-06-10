@@ -76,7 +76,7 @@ class ConceptKB:
     def concepts(self) -> list[Concept]:
         return self.get_concepts()
 
-    def markov_blanket(self, concept: Concept, include_component_concepts: bool = False) -> list[Concept]:
+    def markov_blanket(self, concept: Concept, include_component_concept_roots: bool = False) -> list[Concept]:
         '''
             Returns the set of concepts which influence the prediction of this concept when traversing the graph from
             roots to leaves. This is not a true Markov blanket, but is similar in function.
@@ -84,7 +84,7 @@ class ConceptKB:
             Specifically, the list includes the concept itself, its ancestors, its ancestors' siblings, and non-component
             root nodes (as its highest-level ancestor may not have siblings by definition of having a parent).
 
-            If include_component_concepts is True, the list also includes the root nodes which are component-concepts.
+            If include_component_concepts is True, the list also includes the root nodes which are component concepts.
         '''
         # Add ancestors and the concept itself
         blanket = dict.fromkeys(self.rooted_subtree(concept, reverse_edges=True))
@@ -93,7 +93,7 @@ class ConceptKB:
         blanket.update(dict.fromkeys(self.children_of([c for c in blanket if c.name != concept.name])))
 
         # Add root nodes
-        if include_component_concepts: # All root nodes
+        if include_component_concept_roots: # All root nodes
             blanket.update(dict.fromkeys(self.root_concepts))
         else: # Non-component root nodes
             component_concepts = set(self.component_concepts)
