@@ -27,9 +27,10 @@ class PredictOutput(DictDataClass, DeviceShiftable):
     true_concept_outputs: torch.Tensor = None
     segmentations: LocalizeAndSegmentOutput = None
 
-    def to(self, device: torch.device, detach: bool = False):
-        DeviceShiftable.to(self, device, detach=detach)
-        self.segmentations.to(device, detach=detach)
+    def to(self, device: torch.device):
+        DeviceShiftable.to(self, device)
+        self.segmentations.to(device)
+        self.predicted_concept_outputs.to(device)
 
         return self
 
@@ -165,7 +166,7 @@ class ConceptKBPredictor(ConceptKBForwardBase):
             scores = torch.tensor([output.cum_score for output in outputs.predictors_outputs])
 
             pred_ind = scores.argmax(dim=0).item() # int
-            predicted_concept_outputs: ConceptPredictorOutput = outputs.predictors_outputs[pred_ind].cpu()
+            predicted_concept_outputs: ConceptPredictorOutput = outputs.predictors_outputs[pred_ind].cpu().detach()
             predicted_label = outputs.concept_names[pred_ind]
             predicted_concept_components_to_scores = {
                 component_name : outputs.all_concept_scores[component_name]
