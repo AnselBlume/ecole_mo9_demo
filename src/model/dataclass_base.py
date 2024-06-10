@@ -2,6 +2,7 @@
 Utility base classes for dataclasses.
 '''
 import torch
+from typing import Callable
 
 class DictDataClass:
     '''
@@ -11,29 +12,38 @@ class DictDataClass:
         return getattr(self, key)
 
 class DeviceShiftable:
-    def to(self, device, detach: bool = False):
+    def apply_to_tensors(self, func: Callable[[torch.Tensor], torch.Tensor]):
         '''
-            Detaches and shifts all tensors to the specified device
+            Applies a function to all tensors in the dataclass.
         '''
         for field in self.__dataclass_fields__:
             attr = getattr(self, field)
 
             if isinstance(attr, torch.Tensor):
-                if detach:
-                    attr = attr.detach()
-
-                setattr(self, field, attr.to(device))
+                setattr(self, field, func(attr))
 
         return self
 
-    def cpu(self, detach: bool = True):
+    def to(self, device):
+        '''
+            Shifts all tensors to the specified device
+        '''
+        return self.apply_to_tensors(lambda x: x.to(device))
+
+    def cpu(self):
         '''
             Moves all tensors to the CPU.
         '''
-        return self.to('cpu', detach=detach)
+        return self.to('cpu')
 
     def cuda(self):
         '''
             Moves all tensors to the GPU.
         '''
         return self.to('cuda')
+
+    def detach(self):
+        '''
+            Detaches all tensors.
+        '''
+        return self.apply_to_tensors(lambda x: x.detach())
