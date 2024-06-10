@@ -226,6 +226,10 @@ def _compute_resized_output_size(
     if len(size) == 1:  # specified size only for the smallest edge
         h, w = image_size
         short, long = (w, h) if w <= h else (h, w)
+
+        if short == size[0]: # ANSEL addition to match torchvision.transforms.resize behavior
+            return image_size
+
         requested_new_short = size if isinstance(size, int) else size[0]
 
         new_short, new_long = requested_new_short, int(requested_new_short * long / short)
