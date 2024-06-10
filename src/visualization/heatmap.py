@@ -7,7 +7,7 @@
 if __name__ == '__main__':
     import os
     import sys
-    os.environ['CUDA_VISIBLE_DEVICES'] = '7'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '4'
     sys.path.append('/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src')
 
 import rembg.sessions
@@ -271,7 +271,7 @@ if __name__ == '__main__':
 
     coloredlogs.install(level='DEBUG', logger=logger)
 
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_05-20:23:53-yd491eo3-all_planes_and_guns-infer_localize/concept_kb_epoch_26.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_06-23:31:12-8ckp59v8-all_planes_and_guns/concept_kb_epoch_50.pt'
 
     concept_kb = ConceptKB.load(ckpt_path)
 
@@ -281,7 +281,8 @@ if __name__ == '__main__':
     dino_fe = feature_extractor.dino_feature_extractor
 
     # %%
-    image_path1 = concept_kb['assault rifle'].examples[2].image_path
+    # image_path1 = concept_kb['assault rifle'].examples[2].image_path
+    image_path1 = '/shared/nas2/blume5/fa23/ecole/1024x768-SR91762.jpg'
     image_path2 = concept_kb['fighter jet'].examples[0].image_path
 
     config = HeatmapVisualizerConfig(
@@ -304,12 +305,15 @@ if __name__ == '__main__':
     visualizer = HeatmapVisualizer(concept_kb, dino_fe, config=config)
     self = visualizer # For debugging
 
-    concept1 = concept_kb['assault rifle']
-    concept2 = concept_kb['sniper rifle']
+    concept1 = concept_kb['sniper rifle']
+    concept2 = concept_kb['machine gun']
     img = Image.open(image_path1).convert('RGB')
+    from torchvision.transforms import functional as F
 
-    # visualizer.get_positive_heatmap_visualization(concept1, img)
+    img = F.resize(img, 300) # Resizing image too small hurts background removal
+
+    visualizer.get_positive_heatmap_visualization(concept1, img)
     # visualizer.get_negative_heatmap_visualization(concept1, img)
     # visualizer.get_heatmap_visualization(concept1, img)
-    map1, map2 = visualizer.get_difference_heatmap_visualizations(concept1, concept2, img)
+    # map1, map2 = visualizer.get_difference_heatmap_visualizations(concept1, concept2, img)
 # %%
