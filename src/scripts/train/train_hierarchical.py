@@ -1,6 +1,6 @@
 # %%
 import os # Change DesCo CUDA device here
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 # Prepend to path so starts searching at src first
 import sys
@@ -29,18 +29,18 @@ if __name__ == '__main__':
         # ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_01-00:57:58-85pf2vzt-no_bp_no_cj_no_localize/concept_kb_epoch_50.pt
         # cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v1/no_localize
 
-        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v2
-        # img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_v1_tiny
+        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_and_guns_v2
 
         train:
             # limit_global_negatives: 5
-            split: [.7, .2, 0]
+            split: [1., 0, 0]
             n_epochs: 50
 
         extract_label_from: directory
 
         # XXX This MUST be changed to a directory which we don't care about to not overwrite checkpoints
-        cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v2/rishit_test
+        # cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v3/pp_gun
+        cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_and_guns_v2/change_me
 
         wandb_project: ecole_june_demo_2024
 
@@ -51,26 +51,45 @@ if __name__ == '__main__':
         loc_and_seg_config:
             do_localize: false
 
+        example_sampler_config:
+            use_descendants_as_positives: true
+            use_containing_concepts_for_positives: false
+
         hierarchy_config:
             concepts:
                 - airplane
                 - transport plane
-                # - cargo jet
+                - cargo jet
                 - passenger plane
-                # - biplane
-                # - fighter jet
+                - biplane
+                - fighter jet
+
+                - gun
+                # - assault rifle
+                - sniper rifle
+                - machine gun
+                - pistol
 
                 # Component concepts
                 - propulsion component
                 - wings
                 - wing-mounted engine
-                # - bulky fuselage
+                - bulky fuselage
                 # - openable nose
                 - row of windows
-                # - double wings
-                # - fixed landing gear
-                # - propeller
-                # - afterburner
+                - double wings
+                - fixed landing gear
+                - propeller
+                - afterburner
+
+                - trigger
+                - barrel
+                - grip
+                - bipod or tripod
+                - scope
+                - grip with magazine
+                - ammunition belt
+                # - detachable box magazine
 
             instance_graph:
                 airplane: ['transport plane', 'biplane', 'fighter jet']
@@ -79,6 +98,9 @@ if __name__ == '__main__':
                 propulsion component: ['wing-mounted engine', 'afterburner', 'propeller']
                 wings: ['double wings']
 
+                gun: ['assault rifle', 'sniper rifle', 'machine gun', 'pistol']
+                grip: ['grip with magazine']
+
             component_graph:
                 airplane: ['wings', 'propulsion component']
                 transport plane: ['wing-mounted engine']
@@ -86,6 +108,11 @@ if __name__ == '__main__':
                 passenger plane: ['row of windows']
                 biplane: ['double wings', 'fixed landing gear', 'propeller']
                 fighter jet: ['afterburner']
+
+                gun: ['trigger', 'barrel', 'grip']
+                pistol: ['grip with magazine']
+                sniper rifle: ['scope', 'bipod or tripod']
+                machine gun: ['bipod or tripod', 'ammunition belt']
         ''')
 
     if args.ckpt_path:
