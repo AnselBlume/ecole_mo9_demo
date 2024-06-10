@@ -441,7 +441,12 @@ class Controller:
         def cache_hook(examples):
             self.cacher.recache_zs_attr_features(concept, examples=examples)
 
-            if not self.use_concept_predictors_for_concept_components: # Using fixed scores for concept-image pairs
+            # Handle component concepts
+            if self.use_concept_predictors_for_concept_components:
+                for component in concept.component_concepts.values():
+                    self.cacher.recache_zs_attr_features(component, examples=examples) # Needed to predict the componnt concept
+
+            else: # Using fixed scores for concept-image pairs
                 self.cacher.recache_component_concept_scores(concept, examples=examples)
 
         if stopping_condition == 'n_epochs' or len(self.concept_kb) <= 1:
