@@ -111,7 +111,7 @@ class ConceptKBFeatureCacher:
             if example.concept_name and self.concept_kb[example.concept_name].containing_concepts:
                 loc_and_seg_kwargs['do_localize'] = True
 
-        segmentations = self.feature_pipeline.get_segmentations(image, **loc_and_seg_kwargs)
+        segmentations = self.feature_pipeline.get_segmentations(image, **loc_and_seg_kwargs).cpu()
         segmentations.input_image_path = example.image_path
 
         cache_path = self._get_segmentation_cache_path(example)
