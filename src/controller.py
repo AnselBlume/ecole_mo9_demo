@@ -167,13 +167,20 @@ class Controller:
         return results[0] # The root concept is the first
 
     def is_concept_in_image(self, image: Image, concept_name: str, unk_threshold: float = .1) -> bool:
-        return self.predict_concept(
+        do_localize = self.feature_pipeline.loc_and_seg.config.do_localize
+        self.feature_pipeline.loc_and_seg.config.do_localize = False
+
+        prediction = self.predict_concept(
             image,
             unk_threshold=unk_threshold,
             leaf_nodes_only=False,
             restrict_to_concepts=[concept_name],
             include_component_concepts=True
         )
+
+        self.feature_pipeline.loc_and_seg.config.do_localize = do_localize
+
+        return prediction
 
     def localize_and_segment(
         self,
@@ -838,7 +845,7 @@ if __name__ == '__main__':
     ###############################
     #  June 2024 Demo Checkpoint #
     ###############################
-    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_06-23:31:12-8ckp59v8-all_planes_and_guns/concept_kb_epoch_50.pt'
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_06-23:31:12-8ckp59v8-all_planes_and_guns/concept_kb_epoch_20.pt'
     kb = ConceptKB.load(ckpt_path)
     loc_and_seg = build_localizer_and_segmenter(build_sam(), None)
     fe = build_feature_extractor()
