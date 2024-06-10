@@ -164,9 +164,9 @@ class Controller:
         )
 
         return {
-            'predicted_label': predicted_label,
-            'predict_output': prediction,
-            'plot': img
+            "predicted_label": predicted_label,
+            "predict_output": prediction,
+            "plot": img,
         }
 
     def predict_hierarchical(
@@ -254,13 +254,20 @@ class Controller:
     def is_concept_in_image(
         self, image: Image, concept_name: str, unk_threshold: float = 0.1
     ) -> bool:
-        return self.predict_concept(
+        do_localize = self.feature_pipeline.loc_and_seg.config.do_localize
+        self.feature_pipeline.loc_and_seg.config.do_localize = False
+
+        prediction = self.predict_concept(
             image,
             unk_threshold=unk_threshold,
             leaf_nodes_only=False,
             restrict_to_concepts=[concept_name],
-            include_component_concepts=True
+            include_component_concepts=True,
         )
+
+        self.feature_pipeline.loc_and_seg.config.do_localize = do_localize
+
+        return prediction
 
     def localize_and_segment(
         self,
@@ -934,8 +941,16 @@ class Controller:
             c1_minus_c2_image2 = c2_minus_c1_image2 = image2_heatmap
 
         else:
-            c1_minus_c2_image1, c2_minus_c1_image1 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, image1)
-            c1_minus_c2_image2, c2_minus_c1_image2 = self.heatmap_visualizer.get_difference_heatmap_visualizations(concept1, concept2, image2)
+            c1_minus_c2_image1, c2_minus_c1_image1 = (
+                self.heatmap_visualizer.get_difference_heatmap_visualizations(
+                    concept1, concept2, image1
+                )
+            )
+            c1_minus_c2_image2, c2_minus_c1_image2 = (
+                self.heatmap_visualizer.get_difference_heatmap_visualizations(
+                    concept1, concept2, image2
+                )
+            )
 
         return {
             "concept1_prediction": concept1_pred,  # PredictOutput
@@ -1064,17 +1079,19 @@ if __name__ == "__main__":
     # controller.train_concepts(['airplane', 'biplane'])
 
     # %% Run the first prediction
-    img_path = '/shared/nas2/blume5/fa23/ecole/Screenshot 2024-06-07 at 6.23.02 AM.png'
-    img = PIL.Image.open(img_path).convert('RGB')
-    result = controller.is_concept_in_image(img, 'wing-mounted engine', unk_threshold=.001)
+    img_path = "/shared/nas2/blume5/fa23/ecole/Screenshot 2024-06-07 at 6.23.02 AM.png"
+    img = PIL.Image.open(img_path).convert("RGB")
+    result = controller.is_concept_in_image(
+        img, "wing-mounted engine", unk_threshold=0.001
+    )
 
     # %%
-    result = controller.predict_concept(img, unk_threshold=.1)
+    result = controller.predict_concept(img, unk_threshold=0.1)
     logger.info(f'Predicted label: {result["predicted_label"]}')
     controller.train_concepts(["airplane"])
 
     # %% Hierarchical prediction
-    result = controller.predict_hierarchical(img, unk_threshold=.1)
+    result = controller.predict_hierarchical(img, unk_threshold=0.1)
     logger.info(f'Concept path: {result["concept_path"]}')
 
     # %% New concept training
