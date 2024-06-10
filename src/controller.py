@@ -266,7 +266,7 @@ class Controller:
         child_concept_names: list[str] = [],
         containing_concept_names: list[str] = [],
         component_concept_names: list[str] = [],
-        use_singular_name: bool = True
+        use_singular_name: bool = False
     ):
         if not (bool(concept_name is None) ^ bool(concept is None)):
             raise ValueError('Exactly one of concept_name or concept must be provided.')
@@ -833,7 +833,7 @@ class Controller:
 # %%
 if __name__ == '__main__':
     import os
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '4'
 
     import PIL
     from feature_extraction import build_feature_extractor, build_sam, build_desco
@@ -852,7 +852,35 @@ if __name__ == '__main__':
     feature_pipeline = ConceptKBFeaturePipeline(loc_and_seg, fe)
 
     controller = Controller(kb, feature_pipeline)
-    # controller.train_concepts(['airplane', 'biplane'])
+
+    # %% Add a new concept and train it
+    new_concept_name = 'bomber'
+    controller.add_concept(new_concept_name, parent_concept_names=['airplane'])
+
+    image_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/bomber'
+
+    examples = [
+        ConceptExample(concept_name=new_concept_name, image_path=os.path.join(image_dir, basename))
+        for basename in os.listdir(image_dir)
+    ]
+
+    controller.add_examples(examples, new_concept_name)
+    # controller.train_concepts([new_concept_name])
+
+    # Add another new concept
+    new_concept_name = 'bomber wing'
+    # controller.add_concept(new_concept_name, parent_concept_names=['bomber'])
+    controller.add_concept(new_concept_name, containing_concept_names=['bomber'])
+
+    image_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/bomber_wings'
+
+    examples = [
+        ConceptExample(concept_name=new_concept_name, image_path=os.path.join(image_dir, basename))
+        for basename in os.listdir(image_dir)
+    ]
+
+    controller.add_examples(examples, new_concept_name)
+    controller.train_concepts([new_concept_name])
 
     # %% Run the first prediction
     img_path = '/shared/nas2/blume5/fa23/ecole/Screenshot 2024-06-07 at 6.23.02 AM.png'
