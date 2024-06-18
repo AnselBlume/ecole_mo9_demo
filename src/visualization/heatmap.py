@@ -195,6 +195,8 @@ class HeatmapVisualizer:
             concept.predictor.img_features_weight
         ).eval().cpu()
 
+        img = img.convert('RGB')
+
         # Patch features
         _, patch_feats = get_rescaled_features(self.dino_fe, [img], interpolate_on_cpu=True)
         patch_feats = patch_feats[0] # (resized_h, resized_w, d)

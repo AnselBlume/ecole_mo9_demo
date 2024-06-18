@@ -101,7 +101,7 @@ class ConceptKBFeatureCacher:
         return hex
 
     def _get_segmentation_cache_path(self, example: ConceptExample):
-        return f'{self.cache_dir}/{self.segmentations_sub_dir}/{self._hash_str(example.image_path)}.pkl'
+        return os.path.realpath(f'{self.cache_dir}/{self.segmentations_sub_dir}/{self._hash_str(example.image_path)}.pkl')
 
     def _cache_segmentation(self, example: ConceptExample, prog_bar: tqdm = None, **loc_and_seg_kwargs):
         image = self._image_from_example(example)
