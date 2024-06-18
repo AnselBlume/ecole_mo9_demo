@@ -70,6 +70,7 @@ class HeatmapVisualizer:
         self.rembg_session = rembg_session
 
     def get_difference_heatmap_visualizations(self, concept1: Concept, concept2: Concept, img: Image.Image) -> tuple[Image.Image, Image.Image]:
+        img = img.convert("RGB")
         img_mask = self._get_foreground_mask(img)
 
         concept1_heatmap = self._get_heatmap(concept1, img)
