@@ -12,7 +12,7 @@ import numpy as np
 from tqdm import tqdm
 import logging
 from .forward import ConceptKBForwardBase, ForwardOutput, DictDataClass
-from.example_sampler import ConceptKBExampleSampler
+from .example_sampler import ConceptKBExampleSampler
 
 logger = logging.getLogger(__name__)
 
