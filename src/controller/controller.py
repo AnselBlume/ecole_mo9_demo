@@ -20,7 +20,6 @@ class Controller(
         self.cacher.recache_zs_attr_features(concept) # Recompute zero-shot attribute scores
         self.train_concept(concept.name, new_examples=concept.examples)
 
-
 # %%
 if __name__ == '__main__':
     import os
