@@ -194,7 +194,11 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         n_global_negatives: int = 250
     ) -> tuple[list[ConceptExample], FeatureDataset]:
         '''
-            Constructs a dataset for training a single concept.
+            Constructs a dataset for training a single concept by sampling examples.
+
+            This differs from full-blown, offline training scripts where the set of concepts are restricted to one
+            in that this method sample examples (and negatives) to create a smaller representative dataset,
+            allowing for faster training than offline training using all examples.
 
             Arguments:
                 concept: Concept to train.
