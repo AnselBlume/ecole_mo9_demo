@@ -180,10 +180,10 @@ class ControllerTrainMixin(BaseController):
 
             # Root nodes are also "siblings" at the highest level
             if include_component_roots_as_ancestor_siblings:
+                concepts_to_train.update(dict.fromkeys(self.concept_kb.root_concepts))
+            else:
                 component_concepts = set(self.concept_kb.component_concepts)
                 concepts_to_train.update({c : None for c in self.concept_kb.root_concepts if c not in component_concepts})
-            else:
-                concepts_to_train.update(dict.fromkeys(self.concept_kb.root_concepts))
 
         return list(concepts_to_train)
 
