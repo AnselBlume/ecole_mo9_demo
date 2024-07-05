@@ -73,10 +73,10 @@ class BaseController:
         concept_name = concept_name.strip()
 
         if concept_name in self.concept_kb:
-            return self.concept_kb[concept_name]
+            concept = self.concept_kb[concept_name]
 
         elif concept_name.lower() in self.concept_kb:
-            return self.concept_kb[concept_name]
+            concept = self.concept_kb[concept_name.lower()]
 
         else:
             retrieved_concept = self.retriever.retrieve(concept_name, 1)[0]
@@ -84,7 +84,11 @@ class BaseController:
             if retrieved_concept.distance > max_retrieval_distance:
                 raise RuntimeError(f'No concept found for "{concept_name}".')
 
-            return retrieved_concept.concept
+            concept = retrieved_concept.concept
+
+        logger.info(f'Retrieved concept with name: "{concept.name}" for input "{concept_name}"')
+
+        return concept
 
     ################################
     # Concept Addition and Removal #
