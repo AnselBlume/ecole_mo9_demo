@@ -185,7 +185,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         *, # Force the use of kwargs after this point due to API changes
         use_descendants_as_positives: bool = True,
         n_sampled_positives_per_descendant: int = 3,
-        use_concepts_as_negatives: bool = False,
+        use_concepts_as_negatives: bool = True,
         sample_all_negatives: bool = False,
         sample_only_siblings_for_negatives: bool = True,
         sample_only_leaf_nodes_for_negatives: bool = False,
