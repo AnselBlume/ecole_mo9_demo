@@ -2,6 +2,7 @@ from base import BaseController
 from kb_ops.dataset import split_from_concept_kb
 from model.concept import Concept, ConceptExample
 from typing import Literal
+from collections import deque
 import logging
 
 logger = logging.getLogger(__file__)
@@ -110,18 +111,10 @@ class ControllerTrainMixin(BaseController):
         # TODO Add a variant that merges all of the datasets (merging duplicate examples using datasets' concepts_to_train field) and runs trainer.train()
 
         concepts = [self.retrieve_concept(c, max_retrieval_distance=max_retrieval_distance) for c in concept_names]
+        concept_selector = ConcurrentTrainingConceptSelector(concepts)
 
-        dependencies = self._get_concept_retraining_dependencies(concepts)
-        dependencies = {k : v for k, v in sorted(dependencies.items(), key=lambda item: len(item[1]))} # Sort in ascending order of number of dependencies
-
-        was_trained = set()
-
-        for concept, concept_dependencies in dependencies.items():
-            # NOTE this if statement is a nop as this is single-threaded, but demonstrates what to check for in multiprocessing
-            concept_dependencies_to_be_trained = set(concept_dependencies).intersection(concepts)
-
-            if not all(dependency in was_trained for dependency in concept_dependencies_to_be_trained): # All dependencies should have been trained
-                raise RuntimeError(f'Concept "{concept.name}" has untrained dependencies: {concept_dependencies}')
+        while concept_selector.num_concepts_remaining > 0:
+            concept = concept_selector.get_next_concept()
 
             examples, dataset = self.trainer.construct_dataset_for_concept_training(concept, use_concepts_as_negatives=use_concepts_as_negatives)
 
@@ -136,11 +129,9 @@ class ControllerTrainMixin(BaseController):
                 self.cacher.recache_component_concept_scores(concept, examples=examples)
 
             self.trainer.train_concept(concept, samples_and_dataset=(examples, dataset), n_epochs=n_epochs, **train_concept_kwargs)
-            was_trained.add(concept)
 
-    # Get concepts to train and each of their dependencies
-    # For each concept, get its dataset and examples, recaching each.
-    # Then call trainer.train_concept
+            concept_selector.mark_concept_completed(concept)
+
     def _get_concepts_to_train_to_update_concept(
         self,
         concept: Concept,
@@ -187,14 +178,51 @@ class ControllerTrainMixin(BaseController):
 
         return list(concepts_to_train)
 
-    def _get_concept_retraining_dependencies(self, concepts_to_train: list[Concept]) -> dict[Concept, list[Concept]]:
-        '''
-            Returns a mapping from concepts (names) to concepts (names) they are dependent on for training/inference.
+class ConcurrentTrainingConceptSelector:
+    def __init__(self, concepts_to_train: list[Concept]):
+        self.concepts_to_train = concepts_to_train
 
-            dependencies[concept] = [Concept A, Concept B, ...] means Concept A, Concept B, ... should be retrained before Concept
-            (if they are to be retrained).
+        self._leaf_concepts = self._get_initial_leaf_concepts(concepts_to_train)
+        self._remaining_dependencies = self._get_initial_dependencies(concepts_to_train)
+
+        self._completed_concepts = {}
+
+    @property
+    def num_concepts_remaining(self) -> int:
+        return len(self.concepts_to_train) - len(self._completed_concepts)
+
+    def get_next_concept(self) -> Concept:
         '''
+            Returns the next concept to train, based on the current state of the training process.
+            Raises IndexError if there are currently no leaf concepts to train.
+        '''
+        return self._leaf_concepts.popleft()
+
+    def mark_concept_completed(self, concept: Concept):
+        '''
+            Removes the concept from the list of remaining dependencies for all concepts that depend on it (containing concepts).
+        '''
+        self._completed_concepts[concept] = None # Mark as completed
+
+        # Update containing concepts
+        for containing_concept in concept.containing_concepts.values():
+            if containing_concept not in self.concepts_to_train:
+                continue
+
+            containing_concept_dependencies = self._remaining_dependencies[containing_concept]
+            containing_concept_dependencies.remove(concept)
+
+            if len(containing_concept_dependencies) == 0: # Concept is now a leaf concept
+                self._leaf_concepts.append(containing_concept)
+
+    def _get_initial_dependencies(self, concepts_to_train: list[Concept]) -> dict[Concept, list[Concept]]:
+        concepts_to_train_set = set(concepts_to_train)
+
         return {
-            concept : list(concept.component_concepts.values())
+            concept :
+            {component for component in concept.component_concepts.values() if component in concepts_to_train_set}
             for concept in concepts_to_train
         }
+
+    def _get_initial_leaf_concepts(self, concepts_to_train: list[Concept]) -> deque[Concept]:
+        return deque([concept for concept in concepts_to_train if len(concept.component_concepts) == 0])
