@@ -42,7 +42,7 @@ class BaseDataset(Dataset):
                 Otherwise, only the positive concept will be trained for each example if concepts_to_train_per_example is None.
         '''
         if not concepts_to_train_per_example:
-            logger.info('concepts_to_train_per_example not provided for dataset; constructing')
+            logger.debug('concepts_to_train_per_example not provided for dataset; constructing')
             concepts_to_train_per_example = self.get_concepts_to_train_per_example(labels, train_all_concepts_if_unspecified)
 
         assert len(data) == len(labels) == len(concepts_to_train_per_example)
@@ -54,7 +54,7 @@ class BaseDataset(Dataset):
 
     def extend(self, data: list, labels: list[str], concepts_to_train_per_example: list[list[str]] = None, train_all_concepts_if_unspecified: bool = False):
         if not concepts_to_train_per_example:
-            logger.info('concepts_to_train_per_example not provided for dataset; constructing')
+            logger.debug('concepts_to_train_per_example not provided for dataset; constructing')
             concepts_to_train_per_example = self.get_concepts_to_train_per_example(labels, train_all_concepts=train_all_concepts_if_unspecified)
 
         assert len(data) == len(labels) == len(concepts_to_train_per_example)
@@ -75,11 +75,11 @@ class BaseDataset(Dataset):
             If train_all_concepts is True, all concepts will be trained for all examples. Otherwise, only the positive concept will be trained for each example.
         '''
         if train_all_concepts:
-            logger.info('train_all_concepts is True; constructing dataset which trains all concepts for all examples.')
+            logger.debug('train_all_concepts is True; constructing dataset which trains all concepts for all examples.')
             concepts_to_train_per_example = [None for _ in range(len(labels))]
 
         else:
-            logger.info('train_all_concepts is False; constructing dataset which trains only positive concept for each example.')
+            logger.debug('train_all_concepts is False; constructing dataset which trains only positive concept for each example.')
             if any(label == NEGATIVE_LABEL for label in labels):
                 raise RuntimeError('Negative labels found in dataset; cannot construct concepts_to_train_per_example automatically.')
 

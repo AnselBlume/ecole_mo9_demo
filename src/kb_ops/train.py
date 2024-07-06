@@ -12,7 +12,7 @@ import numpy as np
 from tqdm import tqdm
 import logging
 from .forward import ConceptKBForwardBase, ForwardOutput, DictDataClass
-from.example_sampler import ConceptKBExampleSampler
+from .example_sampler import ConceptKBExampleSampler
 
 logger = logging.getLogger(__name__)
 
@@ -179,36 +179,29 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
         return train_output
 
-    # TODO convert these arguments into a dataclass config
-    def train_concept(
+    def construct_dataset_for_concept_training(
         self,
         concept: Concept,
         *, # Force the use of kwargs after this point due to API changes
-        stopping_condition: Literal['n_epochs', 'validation'] = 'n_epochs',
-        n_epochs: int = 10,
         use_descendants_as_positives: bool = True,
         n_sampled_positives_per_descendant: int = 3,
-        use_concepts_as_negatives: bool = False,
+        use_concepts_as_negatives: bool = True,
         sample_all_negatives: bool = False,
         sample_only_siblings_for_negatives: bool = True,
         sample_only_leaf_nodes_for_negatives: bool = False,
         use_containing_concepts_for_positives: bool = False,
         n_sampled_positives_per_containing_concept: int = 3,
-        post_sampling_hook: Callable[[list[ConceptExample]], Any] = None,
-        n_global_negatives: int = 250,
-        **train_kwargs
-    ) -> TrainOutput:
+        n_global_negatives: int = 250
+    ) -> tuple[list[ConceptExample], FeatureDataset]:
         '''
-            Trains the given concept for n_epochs if provided, else until it correctly predicts the
-            examples in until_correct_example_paths.
+            Constructs a dataset for training a single concept by sampling examples.
+
+            This differs from full-blown, offline training scripts where the set of concepts are restricted to one
+            in that this method sample examples (and negatives) to create a smaller representative dataset,
+            allowing for faster training than offline training using all examples.
 
             Arguments:
                 concept: Concept to train.
-
-                stopping_condition: One of 'n_epochs' or 'validation'.
-                    If 'n_epochs', training will stop after n_epochs.
-
-                n_epochs: Number of epochs to train for if stopping_condition is 'n_epochs'.
 
                 use_descendants_as_positives: Whether to use descendants of the concept as positive examples.
                 n_sampled_positives_per_descendant: Number of positive examples to sample per descendant.
@@ -224,6 +217,144 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
                 n_global_negatives: Number of global negative examples to sample for training.
 
+            Returns:
+                Tuple of list of ConceptExamples used to train the concept and the constructed FeatureDataset.
+        '''
+        # Create examples and labels
+
+        # Construct positive examples
+        pos_examples = concept.examples
+        concept_names = [concept.name] * len(pos_examples)
+
+        if use_descendants_as_positives:
+            descendants = self.concept_kb.rooted_subtree(concept)
+            descendants = [c for c in descendants if c.name != concept.name] # Exclude self
+
+            descendant_pos_examples, descendant_concept_names = self.sampler.sample_examples(
+                descendants,
+                n_examples_per_concept=n_sampled_positives_per_descendant
+            )
+
+            pos_examples.extend(descendant_pos_examples)
+            concept_names.extend(descendant_concept_names)
+
+        if use_containing_concepts_for_positives and concept.containing_concepts:
+            # This is a component concept actively contained in another concept (not just a descendant of a component)
+            containing_concept_positives, containing_concept_names = self.sampler.sample_examples(
+                concept.containing_concepts.values(),
+                n_examples_per_concept=n_sampled_positives_per_containing_concept
+            )
+
+            pos_examples.extend(containing_concept_positives)
+            concept_names.extend(containing_concept_names)
+
+        pos_labels = [ # Handle concept-specific negatives
+            concept_name if not ex.is_negative else FeatureDataset.NEGATIVE_LABEL
+            for ex, concept_name in zip(pos_examples, concept_names)
+        ]
+
+        if not pos_examples:
+            logger.warning(f'No positive examples found for concept {concept.name}; skipping')
+            return
+
+        # Potentially sample negative concepts
+        if use_concepts_as_negatives:
+            if sample_only_siblings_for_negatives:
+
+                if concept.parent_concepts: # Not a root node
+                    siblings = {} # Not including self
+                    for parent in concept.parent_concepts.values():
+                        for child in parent.child_concepts.values():
+                            if child.name not in siblings and child.name != concept.name:
+                                siblings[child.name] = child
+
+                else: # Root node; if this isn't a component concept, sample from other non-component concepts
+                    component_concepts = set(self.concept_kb.component_concepts)
+
+                    if concept not in component_concepts:
+                        non_component_root_siblings = {
+                            c.name : c
+                            for c in self.concept_kb.root_concepts
+                            if c.name != concept.name and c not in component_concepts
+                        }
+
+                        siblings = non_component_root_siblings
+
+                    else:
+                        siblings = {}
+
+                neg_concepts = list(siblings.values())
+
+            elif sample_only_leaf_nodes_for_negatives:
+                # Leaf nodes which aren't components
+                component_concepts = set(self.concept_kb.component_concepts)
+                neg_concepts = [c for c in self.concept_kb.leaf_concepts if c not in component_concepts and c != concept]
+            else:
+                neg_concepts = [c for c in self.concept_kb if c != concept]
+
+            # Sample the negative examples from the negative concepts
+            if sample_all_negatives:
+                neg_examples, neg_concept_names = self.sampler.get_all_examples(neg_concepts)
+            else:
+                neg_examples, neg_concept_names = self.sampler.sample_negative_examples(len(pos_examples), neg_concepts)
+
+        else:
+            neg_examples = []
+            neg_concept_names = []
+
+        # Merge positive and negative examples
+        all_samples = pos_examples + neg_examples
+        all_labels = pos_labels + neg_concept_names
+
+        # Assume features are already cached and get paths
+        all_feature_paths = [sample.image_features_path for sample in all_samples]
+        if any(feature_path is None for feature_path in all_feature_paths):
+            raise RuntimeError('All examples must have image_features_path set to train individual Concept')
+
+        # Construct train ds
+        # No need to restrict concepts to train via dataset since restrict via forward(concepts=[concept])
+        train_ds = FeatureDataset(all_feature_paths, all_labels, train_all_concepts_if_unspecified=True)
+
+        # Sample and add global negatives
+        global_negatives = self.concept_kb.global_negatives
+        global_negatives = self.rng.choice(global_negatives, min(n_global_negatives, len(global_negatives)), replace=False).tolist()
+
+        all_samples += global_negatives
+
+        extend_with_global_negatives(train_ds, global_negatives)
+
+        return all_samples, train_ds
+
+    def train_concept(
+        self,
+        concept: Concept,
+        *, # Force the use of kwargs after this point due to API changes
+        stopping_condition: Literal['n_epochs', 'validation'] = 'n_epochs',
+        n_epochs: int = 10,
+        post_sampling_hook: Callable[[list[ConceptExample]], Any] = None,
+        samples_and_dataset: tuple[list[ConceptExample], FeatureDataset] = None,
+        dataset_construction_kwargs: dict = {},
+        **train_kwargs
+    ) -> TrainOutput:
+        '''
+            Trains the given concept for n_epochs.
+
+            Arguments:
+                concept: Concept to train.
+
+                stopping_condition: One of 'n_epochs' or 'validation'.
+                    If 'n_epochs', training will stop after n_epochs.
+
+                n_epochs: Number of epochs to train for if stopping_condition is 'n_epochs'.
+
+                post_sampling_hook: Optional hook to run after sampling examples for training.
+
+                samples_and_dataset: Tuple of list of ConceptExamples and FeatureDataset to use for training.
+                    If provided, dataset_construction_kwargs will be ignored.
+
+                dataset_construction_kwargs: Keyword arguments to pass to construct_dataset_for_concept_training.
+
+                train_kwargs: Keyword arguments to pass to train method.
         '''
         if stopping_condition == 'validation':
             # Implement some way to perform validation as a stopping condition
@@ -231,113 +362,13 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
         # Train for a fixed number of epochs or until examples are predicted correctly
         else:
-            # Create examples and labels
-
-            # Construct positive examples
-            pos_examples = concept.examples
-            concept_names = [concept.name] * len(pos_examples)
-
-            if use_descendants_as_positives:
-                descendants = self.concept_kb.rooted_subtree(concept)
-                descendants = [c for c in descendants if c.name != concept.name] # Exclude self
-
-                descendant_pos_examples, descendant_concept_names = self.sampler.sample_examples(
-                    descendants,
-                    n_examples_per_concept=n_sampled_positives_per_descendant
-                )
-
-                pos_examples.extend(descendant_pos_examples)
-                concept_names.extend(descendant_concept_names)
-
-            if use_containing_concepts_for_positives and concept.containing_concepts:
-                # This is a component concept actively contained in another concept (not just a descendant of a component)
-                containing_concept_positives, containing_concept_names = self.sampler.sample_examples(
-                    concept.containing_concepts.values(),
-                    n_examples_per_concept=n_sampled_positives_per_containing_concept
-                )
-
-                pos_examples.extend(containing_concept_positives)
-                concept_names.extend(containing_concept_names)
-
-            pos_labels = [ # Handle concept-specific negatives
-                concept_name if not ex.is_negative else FeatureDataset.NEGATIVE_LABEL
-                for ex, concept_name in zip(pos_examples, concept_names)
-            ]
-
-            if not pos_examples:
-                logger.warning(f'No positive examples found for concept {concept.name}; skipping')
-                return
-
-            # Potentially sample negative concepts
-            if use_concepts_as_negatives:
-                if sample_only_siblings_for_negatives:
-
-                    if concept.parent_concepts: # Not a root node
-                        siblings = {} # Not including self
-                        for parent in concept.parent_concepts.values():
-                            for child in parent.child_concepts.values():
-                                if child.name not in siblings and child.name != concept.name:
-                                    siblings[child.name] = child
-
-                    else: # Root node; if this isn't a component concept, sample from other non-component concepts
-                        component_concepts = set(self.concept_kb.component_concepts)
-
-                        if concept not in component_concepts:
-                            non_component_root_siblings = {
-                                c.name : c
-                                for c in self.concept_kb.root_concepts
-                                if c.name != concept.name and c not in component_concepts
-                            }
-
-                            siblings = non_component_root_siblings
-
-                        else:
-                            siblings = {}
-
-                    neg_concepts = list(siblings.values())
-
-                elif sample_only_leaf_nodes_for_negatives:
-                    # Leaf nodes which aren't components
-                    component_concepts = set(self.concept_kb.component_concepts)
-                    neg_concepts = [c for c in self.concept_kb.leaf_concepts if c not in component_concepts and c != concept]
-                else:
-                    neg_concepts = [c for c in self.concept_kb if c != concept]
-
-                # Sample the negative examples from the negative concepts
-                if sample_all_negatives:
-                    neg_examples, neg_concept_names = self.sampler.get_all_examples(neg_concepts)
-                else:
-                    neg_examples, neg_concept_names = self.sampler.sample_negative_examples(len(pos_examples), neg_concepts)
-
-            else:
-                neg_examples = []
-                neg_concept_names = []
-
-            # Merge positive and negative examples
-            all_samples = pos_examples + neg_examples
-            all_labels = pos_labels + neg_concept_names
-
-            # Assume features are already cached and get paths
-            all_feature_paths = [sample.image_features_path for sample in all_samples]
-            if any(feature_path is None for feature_path in all_feature_paths):
-                # print("all_samples", all_samples)
-                # print("all_feature_paths", all_feature_paths)
-                # print("all_labels", all_labels)
-                
-                raise RuntimeError('All examples must have image_features_path set to train individual Concept')
-
-            # Construct train ds
-            # No need to restrict concepts to train via dataset since restrict via forward(concepts=[concept])
-            train_ds = FeatureDataset(all_feature_paths, all_labels, train_all_concepts_if_unspecified=True)
-
-            # Sample and add global negatives
-            global_negatives = self.concept_kb.global_negatives
-            global_negatives = self.rng.choice(global_negatives, min(n_global_negatives, len(global_negatives)), replace=False).tolist()
+            if samples_and_dataset: # Use provided samples and dataset
+                all_samples, train_ds = samples_and_dataset
+            else: # Construct
+                all_samples, train_ds = self.construct_dataset_for_concept_training(concept, **dataset_construction_kwargs)
 
             if post_sampling_hook:
-                post_sampling_hook(all_samples + global_negatives)
-
-            extend_with_global_negatives(train_ds, global_negatives)
+                post_sampling_hook(all_samples)
 
             # Train for fixed number of epochs
             train_kwargs = train_kwargs.copy()
