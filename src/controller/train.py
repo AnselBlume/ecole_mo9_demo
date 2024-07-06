@@ -182,8 +182,8 @@ class ConcurrentTrainingConceptSelector:
     def __init__(self, concepts_to_train: list[Concept]):
         self.concepts_to_train = concepts_to_train
 
-        self._leaf_concepts = self._get_initial_leaf_concepts(concepts_to_train)
         self._remaining_dependencies = self._get_initial_dependencies(concepts_to_train)
+        self._leaf_concepts = deque([c for c in self._remaining_dependencies if len(self._remaining_dependencies[c]) == 0])
 
         self._completed_concepts = {}
 
@@ -223,6 +223,3 @@ class ConcurrentTrainingConceptSelector:
             {component for component in concept.component_concepts.values() if component in concepts_to_train_set}
             for concept in concepts_to_train
         }
-
-    def _get_initial_leaf_concepts(self, concepts_to_train: list[Concept]) -> deque[Concept]:
-        return deque([concept for concept in concepts_to_train if len(concept.component_concepts) == 0])
