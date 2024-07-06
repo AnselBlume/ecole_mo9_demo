@@ -185,24 +185,41 @@ class ConcurrentTrainingConceptSelector:
         self._remaining_dependencies = self._get_initial_dependencies(concepts_to_train)
         self._leaf_concepts = deque([c for c in self._remaining_dependencies if len(self._remaining_dependencies[c]) == 0])
 
-        self._completed_concepts = {}
+        self._completed_concepts = []
+        self._popped_concepts = []
 
     @property
     def num_concepts_remaining(self) -> int:
-        return len(self.concepts_to_train) - len(self._completed_concepts)
+        return len(self.concepts_to_train) - len(self._popped_concepts)
+
+    @property
+    def num_concepts_completed(self) -> int:
+        return len(self._completed_concepts)
 
     def get_next_concept(self) -> Concept:
         '''
             Returns the next concept to train, based on the current state of the training process.
             Raises IndexError if there are currently no leaf concepts to train.
         '''
-        return self._leaf_concepts.popleft()
+        if not self.has_concept_available():
+            raise IndexError('No leaf concepts available to train')
+
+        next_concept = self._leaf_concepts.popleft()
+        self._popped_concepts.append(next_concept)
+
+        return next_concept
+
+    def has_concept_available(self) -> bool:
+        '''
+            Returns True if there are currently leaf concepts available to train, False otherwise.
+        '''
+        return len(self._leaf_concepts) > 0
 
     def mark_concept_completed(self, concept: Concept):
         '''
             Removes the concept from the list of remaining dependencies for all concepts that depend on it (containing concepts).
         '''
-        self._completed_concepts[concept] = None # Mark as completed
+        self._completed_concepts.append(concept) # Mark as completed
 
         # Update containing concepts
         for containing_concept in concept.containing_concepts.values():
