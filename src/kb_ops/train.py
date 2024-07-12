@@ -78,8 +78,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         imgs_per_optim_step: int = 4,
         ckpt_every_n_epochs: int = 1,
         ckpt_dir: str = 'checkpoints',
-        ckpt_fmt: str = 'concept_kb_epoch_{epoch}.pt',
-        set_score_to_zero_at_indices: list[int] = []
+        ckpt_fmt: str = 'concept_kb_epoch_{epoch}.pt'
     ) -> TrainOutput:
 
         if ckpt_dir:
@@ -105,7 +104,6 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         val_outputs: list[ValidationOutput] = []
 
         optimizer = torch.optim.Adam(self.concept_kb.parameters(), lr=lr)
-        set_score_to_zero_at_indices = set(set_score_to_zero_at_indices)
 
         for epoch in range(1, n_epochs + 1):
             logger.info(f'======== Starting Epoch {epoch}/{n_epochs} ========')
@@ -128,8 +126,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
                     text_label[0],
                     concepts=concepts_to_train,
                     do_backward=True,
-                    backward_every_n_concepts=backward_every_n_concepts,
-                    set_score_to_zero=set_score_to_zero_at_indices and index in set_score_to_zero_at_indices
+                    backward_every_n_concepts=backward_every_n_concepts
                 )
                 train_outputs.append(outputs)
 

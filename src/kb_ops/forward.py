@@ -84,8 +84,7 @@ class ConceptKBForwardBase:
         do_backward: bool = False,
         backward_every_n_concepts: int = None,
         return_segmentations: bool = False,
-        seg_kwargs: dict = {},
-        set_score_to_zero: bool = False
+        seg_kwargs: dict = {}
     ) -> ForwardOutput:
 
         # Check __name__ instead of isinstance to avoid pickle versioning issues
@@ -141,7 +140,7 @@ class ConceptKBForwardBase:
                 if concept.component_concepts:
                     component_concept_scores = torch.stack([concept_scores[component_name] for component_name in concept.component_concepts])[None,:] # (1, n_components)
                 else:
-                    component_concept_scores = torch.tensor([[]], device=features.image_features.device)
+                    component_concept_scores = torch.tensor([[]], device=features.image_features.device) # TODO change me
 
                 features.component_concept_scores = component_concept_scores
 
@@ -166,11 +165,6 @@ class ConceptKBForwardBase:
 
                 concept_labels.append(binary_label)
                 concept_predictions.append(binary_prediction)
-
-                # To prevent loss saturation due to sigmoid
-                if set_score_to_zero:
-                    score = output.cum_score - output.cum_score.detach()
-                    concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(concepts_for_loss)
 
                 curr_loss += concept_loss
                 total_loss += concept_loss.item()
