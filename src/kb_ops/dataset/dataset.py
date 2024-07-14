@@ -4,19 +4,14 @@ from torch.utils.data import Dataset
 from image_processing import LocalizerAndSegmenter
 from image_processing.localize_and_segment import LocalizeAndSegmentOutput
 from kb_ops.caching import CachedImageFeatures
+from kb_ops.train_test_split import split_from_paths
 from PIL import Image
 from tqdm import tqdm
 from model.concept import ConceptKB, ConceptExample
 from typing import Optional
-from .train_test_split import split_from_paths
 import logging
 
 logger = logging.getLogger(__file__)
-
-def list_collate(batch):
-    keys = batch[0].keys()
-
-    return {k : [d[k] for d in batch] for k in keys}
 
 NEGATIVE_LABEL = '[NEGATIVE_LABEL]'
 
