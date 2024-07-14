@@ -112,7 +112,6 @@ class LocalizerAndSegmenter:
                 return_crops (bool): If true, returns images of the cropped parts (possibly with background removed) under the key 'part_crops'.
                 use_bbox_for_crops (bool): If true, draws bounding boxes around the parts instead of using the part masks to crop the parts.
 
-
             Returns:
                 LocalizeAndSegmentOutput
                     'part_masks' (torch.BoolTensor): Boolean array of shape (n_detections, h, w) representing the segmentation masks of the parts
