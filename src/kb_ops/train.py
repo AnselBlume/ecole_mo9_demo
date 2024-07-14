@@ -77,7 +77,8 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         batch_size: int = 64,
         ckpt_every_n_epochs: int = 1,
         ckpt_dir: str = 'checkpoints',
-        ckpt_fmt: str = 'concept_kb_epoch_{epoch}.pt'
+        ckpt_fmt: str = 'concept_kb_epoch_{epoch}.pt',
+        persistent_workers: bool = True
     ) -> TrainOutput:
         # For each global concept, create a dataset with its examples (consider a dataloader?)
         def concepts_to_datasets(dataset: FeatureDataset):
@@ -115,6 +116,18 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
             return concepts_to_datasets
 
+        def concepts_to_dataloaders(concept_to_dataset: dict[Concept, FeatureDataset], is_train: bool, batch_size: int):
+            def get_dataloader(concept: Concept, dataset: FeatureDataset):
+                component_subtree_names = [c.name for c in self.concept_kb.rooted_subtree(concept, use_component_graph=True)]
+                collate_fn = BatchCachedFeaturesCollate(concept_names=component_subtree_names)
+                return self._get_dataloader(dataset, is_train=is_train, batch_size=batch_size, collate_fn=collate_fn,
+                                            num_workers=1, persistent_workers=persistent_workers)
+
+            return {
+                concept : get_dataloader(concept, dataset)
+                for concept, dataset in concept_to_dataset.items()
+            }
+
         concept_to_train_dataset = concepts_to_datasets(train_ds)
         concept_to_val_dataset = concepts_to_datasets(val_ds) if val_ds else None
         concepts = list(concept_to_train_dataset.keys())
@@ -122,20 +135,16 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         train_outputs = []
         val_outputs: list[ValidationOutput] = []
 
-        concepts_to_optimizer = {c.name : torch.optim.Adam(c.predictor.parameters(), lr=lr) for c in concepts}
+        concept_to_optimizer = {c.name : torch.optim.Adam(c.predictor.parameters(), lr=lr) for c in concepts}
+        concept_to_train_dl = concepts_to_dataloaders(concept_to_train_dataset, is_train=True, batch_size=batch_size)
 
         for epoch in range(1, n_epochs + 1):
             logger.info(f'======== Starting Epoch {epoch}/{n_epochs} ========')
             self.concept_kb.train()
 
             concepts_outputs = {}
-            for concept, dataset in tqdm(concept_to_train_dataset.items(), desc=f'Epoch {epoch}/{n_epochs}'):
-                # Construct DataLoader and Optimizer
-                component_subtree_names = [c.name for c in self.concept_kb.rooted_subtree(concept, use_component_graph=True)]
-                collate_fn = BatchCachedFeaturesCollate(concept_names=component_subtree_names)
-                train_dl = self._get_dataloader(dataset, is_train=True, batch_size=batch_size, collate_fn=collate_fn)
-
-                optimizer = concepts_to_optimizer[concept.name]
+            for concept, train_dl in tqdm(concept_to_train_dl.items(), desc=f'Epoch {epoch}/{n_epochs}'):
+                optimizer = concept_to_optimizer[concept.name]
 
                 # Train concept predictor
                 for batch in train_dl:
