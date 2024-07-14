@@ -218,6 +218,7 @@ class ConceptKBExampleSampler:
                         siblings.update(siblings_and_not_ancestors)
 
                 # Add component siblings only for the current concept, as it is more likely that multiple components can be in an image
+                # XXX Even this is a bit risky, and should perhaps be commented out
                 for container in concept.containing_concepts.values():
                     siblings.update(dict.fromkeys(container.component_concepts.keys()))
 
