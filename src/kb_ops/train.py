@@ -78,7 +78,7 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         ckpt_every_n_epochs: int = 1,
         ckpt_dir: str = 'checkpoints',
         ckpt_fmt: str = 'concept_kb_epoch_{epoch}.pt',
-        persistent_workers: bool = True
+        dataloader_kwargs: dict = {}
     ) -> TrainOutput:
         # For each global concept, create a dataset with its examples (consider a dataloader?)
         def concepts_to_datasets(dataset: FeatureDataset):
@@ -118,10 +118,15 @@ class ConceptKBTrainer(ConceptKBForwardBase):
 
         def concepts_to_dataloaders(concept_to_dataset: dict[Concept, FeatureDataset], is_train: bool, batch_size: int):
             def get_dataloader(concept: Concept, dataset: FeatureDataset):
+                default_kwargs = {
+                    'persistent_workers': True,
+                    'num_workers': 3
+                }
+                default_kwargs.update(dataloader_kwargs)
+
                 component_subtree_names = [c.name for c in self.concept_kb.rooted_subtree(concept, use_component_graph=True)]
                 collate_fn = BatchCachedFeaturesCollate(concept_names=component_subtree_names)
-                return self._get_dataloader(dataset, is_train=is_train, batch_size=batch_size, collate_fn=collate_fn,
-                                            num_workers=1, persistent_workers=persistent_workers)
+                return self._get_dataloader(dataset, is_train=is_train, batch_size=batch_size, collate_fn=collate_fn, **default_kwargs)
 
             return {
                 concept : get_dataloader(concept, dataset)
