@@ -4,15 +4,34 @@ from model.features import ImageFeatures
 from dataclasses import dataclass
 from model.dataclass_base import DeviceShiftable
 
-class BatchedPredictor:
-    pass
-
 @dataclass
 class ConceptPredictorFeatures(ImageFeatures):
     zs_attr_img_scores: torch.Tensor = None # (1, n_zs_attrs)
     zs_attr_region_scores: torch.Tensor = None # (n_regions, n_zs_attrs)
 
     component_concept_scores: torch.Tensor = None # (1, n_component_concepts)
+
+    def validate_dimensions(self):
+        super().validate_dimensions()
+
+        if self.is_batched:
+            bsize = len(self.image_features)
+
+            self._validate_leading_dimension('zs_attr_img_scores', bsize)
+            self._validate_leading_dimension('component_concept_scores', bsize)
+
+            if self.region_weights is not None:
+                n_total_regions = sum(self.n_regions_per_image)
+
+                self._validate_leading_dimension('zs_attr_region_scores', n_total_regions)
+        else:
+            self._validate_leading_dimension('zs_attr_img_scores', 1)
+            self._validate_leading_dimension('component_concept_scores', 1)
+
+            if self.region_weights is not None:
+                n_regions = self.region_weights.shape[0]
+
+                self._validate_leading_dimension('zs_attr_region_scores', n_regions)
 
 @dataclass
 class ConceptPredictorOutput(DeviceShiftable):
@@ -115,6 +134,7 @@ class ConceptPredictor(nn.Module):
 
     def forward(self, features: ConceptPredictorFeatures) -> ConceptPredictorOutput:
         if features.all_scores is None: # If scores are not provided for feature_group-weighting, calculate them
+            features.validate_dimensions()
             batch_dims = features.image_features.shape[:-2] # All dims before (1, d_img)
 
             region_weights = features.region_weights.unsqueeze(-1) # (..., n_regions, 1)
@@ -128,7 +148,7 @@ class ConceptPredictor(nn.Module):
             if self.use_regions and self.use_region_features:
                 region_scores = self.region_features_predictor(features.region_features) # (..., n_regions, 1)
                 region_scores = region_scores * region_weights # (..., n_regions, 1)
-                region_score = region_scores.sum(dim=-2, keepdim=True) # (..., 1, 1)
+                region_score = self._compute_region_scores(region_scores, features) # (..., 1, 1)
             else:
                 region_scores = torch.empty(*batch_dims, 1, 0, device=region_weights.device) # (..., 1, 0)
                 region_score = torch.empty(*batch_dims, 1, 0, device=region_weights.device) # (..., 1, 0)
@@ -142,7 +162,7 @@ class ConceptPredictor(nn.Module):
 
             if self.use_regions and features.trained_attr_region_scores.numel(): # Using regions and there are trained attributes
                 trained_attr_region_scores = features.trained_attr_region_scores * region_weights # (..., n_regions, n_trained_attrs); possibly (n_regions, 0)
-                trained_attr_region_score = trained_attr_region_scores.sum(dim=-2, keepdim=True) # (..., 1, n_trained_attrs)
+                trained_attr_region_score = self._compute_region_scores(trained_attr_region_scores, features) # (..., 1, n_trained_attrs)
             else:
                 trained_attr_region_scores = torch.empty(*batch_dims, 1, 0, device=region_weights.device) # (..., 1, 0)
                 trained_attr_region_score = torch.empty(*batch_dims, 1, 0, device=region_weights.device) # (..., 1, 0)
@@ -156,7 +176,7 @@ class ConceptPredictor(nn.Module):
 
             if self.use_regions and features.zs_attr_region_scores.numel(): # Using regions and there are zero-shot attributes
                 zs_attr_region_scores = features.zs_attr_region_scores * region_weights # (n_regions, n_zs_attrs); possibly (n_regions, 0)
-                zs_attr_region_score = zs_attr_region_scores.sum(dim=-2, keepdim=True) # (1, n_zs_attrs)
+                zs_attr_region_score = self._compute_region_scores(zs_attr_region_scores, features) # (..., 1, n_zs_attrs)
             else:
                 zs_attr_region_scores = torch.empty(*batch_dims, 1, 0, device=region_weights.device) # (..., 1, 0)
                 zs_attr_region_score = torch.empty(*batch_dims, 1, 0, device=region_weights.device) # (..., 1, 0)
@@ -232,7 +252,7 @@ class ConceptPredictor(nn.Module):
                 zs_attr_region_scores=zs_attr_region_scores.detach() if self.use_regions else None,
                 component_concept_scores=component_concept_scores.detach().squeeze(),
                 all_scores_weighted=all_scores.detach().squeeze(),
-                cum_score=all_scores.sum()
+                cum_score=all_scores.sum(dim=(-1, -2))
             )
 
         else: # Intermediate results computed externally;
@@ -242,6 +262,32 @@ class ConceptPredictor(nn.Module):
             )
 
         return output
+
+    def _compute_region_scores(self, region_scores: torch.Tensor, features: ConceptPredictorFeatures):
+        if features.is_batched:
+            region_score = self._split_and_sum_region_scores(region_scores, features.n_regions_per_image) # (..., bsize, 1, 1)
+        else:
+            region_score = region_scores.sum(dim=-2, keepdim=True) # (..., 1, 1)
+
+        return region_score
+
+    def _split_and_sum_region_scores(self, region_scores: torch.Tensor, n_regions_per_image: list[int]):
+        '''
+            Splits the concatenated region scores into the region scores for each image, sums them individually,
+            then stacks them into a single tensor.
+
+            Args:
+                region_scores: (..., n_regions_in_batch, 1)
+                n_regions_per_image: list[int] of the number of regions per image in the batch
+
+            Returns:
+                region_scores: (..., bsize, 1, 1)
+        '''
+        split_region_scores = list(torch.split(region_scores, n_regions_per_image, dim=-2))
+        for i, region_scores in enumerate(split_region_scores):
+            split_region_scores[i] = region_scores.sum(dim=-2, keepdim=True) # (..., 1, 1)
+
+        return torch.stack(split_region_scores, dim=-3) # (..., bsize, 1, 1)
 
     def add_zs_attr(self):
         # TODO better initialization from existing weights

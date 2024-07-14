@@ -112,11 +112,14 @@ class ConceptKB:
 
         return list(children.values())
 
-    def rooted_subtree(self, concept: Concept, reverse_edges: bool = False) -> list[Concept]:
+    def rooted_subtree(self, concept: Concept, reverse_edges: bool = False, use_component_graph: bool = False) -> list[Concept]:
         '''
             Returns the rooted subtree of a concept. This is the concept itself and all its descendants.
 
-            If reversed_edges is True, the rooted subtree is the concept itself and all its ancestors.
+            Arguments:
+                concept: The concept to root the subtree at.
+                reverse_edges: If True, the rooted subtree is the concept itself and all its ancestors.
+                use_component_graph: If True, uses the component graph to compute the subtree, instead of the instance (child) graph.
         '''
         subtree = {}
         queue = deque([concept])
@@ -127,10 +130,16 @@ class ConceptKB:
             if curr.name not in subtree:
                 subtree[curr.name] = curr
 
-                if reverse_edges:
-                    queue.extend(curr.parent_concepts.values())
+                if use_component_graph:
+                    if reverse_edges:
+                        queue.extend(curr.containing_concepts.values())
+                    else:
+                        queue.extend(curr.component_concepts.values())
                 else:
-                    queue.extend(curr.child_concepts.values())
+                    if reverse_edges:
+                        queue.extend(curr.parent_concepts.values())
+                    else:
+                        queue.extend(curr.child_concepts.values())
 
         return list(subtree.values())
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import torch
 import torch.nn as nn
+from torch import Tensor
 from dataclasses import dataclass, field
 from typing import Optional
 from model.dataclass_base import DeviceShiftable
@@ -16,22 +17,68 @@ class ImageFeatures(DeviceShiftable):
     #####################################
     # Features for internal calculation #
     #####################################
-    image_features: torch.Tensor = None # (..., 1, d_img)
-    clip_image_features: torch.Tensor = None # (..., 1, d_img)
+    image_features: Tensor = None # (..., 1, d_img)
+    clip_image_features: Tensor = None # (..., 1, d_img)
 
-    region_features: torch.Tensor = None # (..., n_regions, d_regions)
-    clip_region_features: torch.Tensor = None # (..., n_regions, d_regions)
-    region_weights: torch.Tensor = None # (..., n_regions,); how much to weight each region in all calculations
+    # NOTE if this ImageFeatures is batched, the n_regions dimension will enumerate regions for all
+    # images in the batch, and this must be handled separately by splitting via n_regions_per_image
+    region_features: Tensor = None # (..., n_regions, d_regions)
+    clip_region_features: Tensor = None # (..., n_regions, d_regions)
+    region_weights: Tensor = None # (..., n_regions,); how much to weight each region in all calculations
 
-    trained_attr_img_scores: torch.Tensor = None # (..., 1, n_trained_attrs)
-    trained_attr_region_scores: torch.Tensor = None # (..., n_regions, n_trained_attrs,)
+    trained_attr_img_scores: Tensor = None # (..., 1, n_trained_attrs)
+    trained_attr_region_scores: Tensor = None # (..., n_regions, n_trained_attrs)
+
+    # Whether features are batched
+    # If is_batched, all region tensors will be concatenated along the -2'nd dimension instead of stacked
+    # due to the variable number of regions per image. n_regions_per_images must be set in this case
+    # In this case, dimension -2 of region tensors will be the sum of the number of regions of each image in the batch
+    is_batched: bool = False # Whether the features are batched.
+    n_regions_per_image: list[int] = None # Number of regions per image in the batch
 
     #############################################
     # Features computed via batched calculation #
     #############################################
     # Tensor of shape (1 + 1 + 2*n_learned_attrs + 2*n_zs_attrs,) where the first and second elmts are
     # the image and region scores, respectively
-    all_scores: torch.Tensor = None
+    all_scores: Tensor = None
+
+    def validate_dimensions(self):
+        if self.is_batched:
+            bsize = len(self.image_features)
+
+            self._validate_leading_dimension('image_features', bsize)
+            self._validate_leading_dimension('clip_image_features', bsize)
+            self._validate_leading_dimension('trained_attr_img_scores', bsize)
+
+            if self.region_weights is not None:
+                assert self.n_regions_per_image is not None, 'n_regions_per_image must be set if is_batched is True'
+                n_total_regions = sum(self.n_regions_per_image)
+
+                self._validate_leading_dimension('region_features', n_total_regions)
+                self._validate_leading_dimension('clip_region_features', n_total_regions)
+                self._validate_leading_dimension('region_weights', n_total_regions)
+                self._validate_leading_dimension('trained_attr_region_scores', n_total_regions)
+
+        else:
+            self._validate_leading_dimension('image_features', 1)
+            self._validate_leading_dimension('clip_image_features', 1)
+            self._validate_leading_dimension('trained_attr_img_scores', 1)
+
+            if self.region_weights is not None:
+                n_regions = self.region_weights.shape[0]
+
+                self._validate_leading_dimension('region_features', n_regions)
+                self._validate_leading_dimension('clip_region_features', n_regions)
+                self._validate_leading_dimension('trained_attr_region_scores', n_regions)
+
+
+    def _validate_leading_dimension(self, tensor_attr_name: str, expected_shape: int):
+        tensor: Optional[Tensor] = getattr(self, tensor_attr_name)
+        assert (
+            tensor is None or tensor.shape[0] == expected_shape,
+            f'{tensor_attr_name} must have leading dimension of {expected_shape}'
+        )
 
     @classmethod
     def from_image_features(cls, image_features: ImageFeatures):
@@ -44,6 +91,8 @@ class ImageFeatures(DeviceShiftable):
         features.region_weights = image_features.region_weights
         features.trained_attr_img_scores = image_features.trained_attr_img_scores
         features.trained_attr_region_scores = image_features.trained_attr_region_scores
+        features.is_batched = image_features.is_batched
+        features.n_regions_per_image = image_features.n_regions_per_image
 
         return features
 
@@ -141,7 +190,7 @@ class FeatureGroup(nn.Module):
                 ])
             )
 
-    def forward(self, all_features: torch.Tensor):
+    def forward(self, all_features: Tensor):
         # Extract features
         if self.copy_input_features:
             all_features = all_features.clone()

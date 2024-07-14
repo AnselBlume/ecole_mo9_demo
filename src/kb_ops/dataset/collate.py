@@ -55,11 +55,11 @@ class BatchCachedFeaturesCollate:
         return batch
 
     def _merge_tensor_dicts(
-            self,
-            dict_attr_name: str,
-            features: list[CachedImageFeatures],
-            merge_fn: Callable[[list[Tensor]], Tensor] = torch.stack
-        ) -> dict[str, Tensor]:
+        self,
+        dict_attr_name: str,
+        features: list[CachedImageFeatures],
+        merge_fn: Callable[[list[Tensor]], Tensor] = torch.stack
+    ) -> dict[str, Tensor]:
 
         if self.concept_names:
             concept_names = self.concept_names
@@ -71,18 +71,39 @@ class BatchCachedFeaturesCollate:
 
             concept_names: list[str] = sorted(concept_names) # Determinism
 
-        return {
-            concept_name : merge_fn([getattr(f, dict_attr_name)[concept_name] for f in features])
-            for concept_name in concept_names
-        }
+        merged_dict = {}
+        for concept_name in concept_names:
+            all_tensors = []
+            exists_feature_without_concept = False
+            exists_feature_with_concept = False
+
+            for feature in features:
+                feature_dict = getattr(feature, dict_attr_name)
+
+                if concept_name not in feature_dict:
+                    exists_feature_without_concept = True
+                    break
+                else:
+                    exists_feature_with_concept = True
+                    all_tensors.append(feature_dict[concept_name])
+
+            # If some features have the concept and others don't, something went wrong
+            if exists_feature_without_concept and exists_feature_with_concept:
+                raise RuntimeError(f'Concept {concept_name} is missing in some features.')
+
+            # If there does not exist a feature without the concept (i.e. all features have the concept), merge tensors and store
+            if not exists_feature_without_concept:
+                merged_dict[concept_name] = merge_fn(all_tensors)
+
+        return merged_dict
 
     def _merge_and_set_attribute(
-            self,
-            attr_name: str,
-            features_list: list[CachedImageFeatures],
-            batched_features: CachedImageFeatures,
-            merge_fn: Callable[[list[Tensor]], Tensor] = torch.stack
-        ):
+        self,
+        attr_name: str,
+        features_list: list[CachedImageFeatures],
+        batched_features: CachedImageFeatures,
+        merge_fn: Callable[[list[Tensor]], Tensor] = torch.stack
+    ):
 
         attr = merge_fn([getattr(f, attr_name) for f in features_list])
         setattr(batched_features, attr_name, attr)
