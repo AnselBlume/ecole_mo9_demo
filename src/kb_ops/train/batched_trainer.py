@@ -37,67 +37,15 @@ class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
         dataloader_kwargs: dict = {}
     ) -> TrainOutput:
         # For each global concept, create a dataset with its examples (consider a dataloader?)
-        def concepts_to_datasets(dataset: FeatureDataset):
-            '''
-                For each concept in the intersection of the dataset's concepts_to_train and the global concepts,
-                creates a FeatureDataset with the examples corresponding to that concept.
-            '''
-            # Build mapping from intersected concepts to indices
-            global_concept_names = {c.name for c in concepts} if concepts else {c.name for c in self.concept_kb}
-            concept_name_to_indices: dict[str, list[int]] = {}
-
-            for i, concepts_to_train in enumerate(dataset.concepts_to_train_per_example):
-                if not concepts_to_train:
-                    concepts_to_train = global_concept_names
-
-                for concept_name in concepts_to_train:
-                    if not global_concept_names or concept_name in global_concept_names: # Intersect with global concepts
-                        concept_name_to_indices.setdefault(concept_name, []).append(i)
-
-            # Construct dataset for each concept in intersection
-            concepts_to_datasets: dict[Concept, FeatureDataset] = {}
-
-            for concept_name, indices in concept_name_to_indices.items():
-                feature_paths = [dataset.feature_paths[i] for i in indices]
-                labels = [dataset.labels[i] for i in indices]
-                concepts_to_train_per_example = [[concept_name] for _ in indices]
-
-                concept = self.concept_kb[concept_name]
-                concepts_to_datasets[concept] = FeatureDataset(feature_paths, labels, concepts_to_train_per_example)
-
-            concepts_to_datasets = { # Topological sort via component graph
-                concept : concepts_to_datasets[concept]
-                for concept in self.concept_kb.in_component_order(concepts_to_datasets.keys())
-            }
-
-            return concepts_to_datasets
-
-        def concepts_to_dataloaders(concept_to_dataset: dict[Concept, FeatureDataset], is_train: bool, batch_size: int):
-            def get_dataloader(concept: Concept, dataset: FeatureDataset):
-                default_kwargs = {
-                    'persistent_workers': True,
-                    'num_workers': 3
-                }
-                default_kwargs.update(dataloader_kwargs)
-
-                component_subtree_names = [c.name for c in self.concept_kb.rooted_subtree(concept, use_component_graph=True)]
-                collate_fn = BatchCachedFeaturesCollate(concept_names=component_subtree_names)
-                return self._get_dataloader(dataset, is_train=is_train, batch_size=batch_size, collate_fn=collate_fn, **default_kwargs)
-
-            return {
-                concept : get_dataloader(concept, dataset)
-                for concept, dataset in concept_to_dataset.items()
-            }
-
-        concept_to_train_dataset = concepts_to_datasets(train_ds)
-        concept_to_val_dataset = concepts_to_datasets(val_ds) if val_ds else None
+        concept_to_train_dataset = self._concepts_to_datasets(train_ds, concepts=concepts)
+        concept_to_val_dataset = self._concepts_to_datasets(val_ds, concepts=concepts) if val_ds else None
         concepts = list(concept_to_train_dataset.keys())
 
         train_outputs = []
         val_outputs: list[ValidationOutput] = []
 
         concept_to_optimizer = {c.name : torch.optim.Adam(c.predictor.parameters(), lr=lr) for c in concepts}
-        concept_to_train_dl = concepts_to_dataloaders(concept_to_train_dataset, is_train=True, batch_size=batch_size)
+        concept_to_train_dl = self._concepts_to_dataloaders(concept_to_train_dataset, is_train=True, batch_size=batch_size, **dataloader_kwargs)
 
         for epoch in range(1, n_epochs + 1):
             logger.info(f'======== Starting Epoch {epoch}/{n_epochs} ========')
@@ -170,3 +118,70 @@ class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
         )
 
         return train_output
+
+    def _concepts_to_datasets(self, dataset: FeatureDataset, concepts: list[Concept] = None) -> dict[Concept, FeatureDataset]:
+        '''
+            For each concept in the intersection of the dataset's concepts_to_train and the global concepts,
+            creates a FeatureDataset with the examples corresponding to that concept.
+        '''
+        # Build mapping from intersected concepts to indices
+        global_concept_names = {c.name for c in concepts} if concepts else {c.name for c in self.concept_kb}
+        concept_name_to_indices: dict[str, list[int]] = {}
+
+        for i, concepts_to_train in enumerate(dataset.concepts_to_train_per_example):
+            if not concepts_to_train:
+                concepts_to_train = global_concept_names
+
+            for concept_name in concepts_to_train:
+                if not global_concept_names or concept_name in global_concept_names: # Intersect with global concepts
+                    concept_name_to_indices.setdefault(concept_name, []).append(i)
+
+        # Construct dataset for each concept in intersection
+        concepts_to_datasets: dict[Concept, FeatureDataset] = {}
+
+        for concept_name, indices in concept_name_to_indices.items():
+            feature_paths = [dataset.feature_paths[i] for i in indices]
+            labels = [dataset.labels[i] for i in indices]
+            concepts_to_train_per_example = [[concept_name] for _ in indices]
+
+            concept = self.concept_kb[concept_name]
+            concepts_to_datasets[concept] = FeatureDataset(feature_paths, labels, concepts_to_train_per_example)
+
+        concepts_to_datasets = { # Topological sort via component graph
+            concept : concepts_to_datasets[concept]
+            for concept in self.concept_kb.in_component_order(concepts_to_datasets.keys())
+        }
+
+        return concepts_to_datasets
+
+    def _concepts_to_dataloaders(
+        self,
+        concept_to_dataset: dict[Concept, FeatureDataset],
+        is_train: bool,
+        batch_size: int,
+        **dataloader_kwargs
+    ):
+        return {
+            concept : self._get_dataloader(concept, dataset, is_train=is_train, batch_size=batch_size, **dataloader_kwargs)
+            for concept, dataset in concept_to_dataset.items()
+        }
+
+    def _get_dataloader(
+        self,
+        concept: Concept,
+        dataset: FeatureDataset,
+        is_train: bool,
+        batch_size: int,
+        **dataloader_kwargs
+    ):
+
+        default_kwargs = {
+            'persistent_workers': True,
+            'num_workers': 3
+        }
+
+        default_kwargs.update(dataloader_kwargs)
+
+        component_subtree_names = [c.name for c in self.concept_kb.rooted_subtree(concept, use_component_graph=True)]
+        collate_fn = BatchCachedFeaturesCollate(concept_names=component_subtree_names)
+        return super()._get_dataloader(dataset, is_train=is_train, batch_size=batch_size, collate_fn=collate_fn, **default_kwargs)
