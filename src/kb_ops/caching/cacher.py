@@ -27,6 +27,11 @@ class ConceptKBFeatureCacher:
         features_sub_dir = 'features',
         infer_localize_from_component: bool = True
     ):
+        '''
+            infer_localize_from_component: If True, will infer whether to localize based on whether the concept
+                is a component concept or not, localizing only if it is not a component concept.
+                If False, localization will default to the LocalizerAndSegmenter's Config's default do_localize value.
+        '''
         self.concept_kb = concept_kb
         self.feature_pipeline = feature_pipeline
         self.cache_dir = cache_dir

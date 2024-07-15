@@ -79,13 +79,12 @@ class ConceptKBForwardBase:
     def forward_pass(
         self,
         image_data: Union[Image, LocalizeAndSegmentOutput, CachedImageFeatures],
-        text_label: str = None,
+        text_label: Union[str, list[str]] = None,
         concepts: list[Concept] = None,
         do_backward: bool = False,
         backward_every_n_concepts: int = None,
         return_segmentations: bool = False,
-        seg_kwargs: dict = {},
-        set_score_to_zero: bool = False
+        seg_kwargs: dict = {}
     ) -> ForwardOutput:
 
         # Check __name__ instead of isinstance to avoid pickle versioning issues
@@ -139,15 +138,18 @@ class ConceptKBForwardBase:
             # If computing component concept scores from concept predictors, retrieve from stored values
             if self.compute_component_concept_scores_from_concept_predictors:
                 if concept.component_concepts:
-                    component_concept_scores = torch.stack([concept_scores[component_name] for component_name in concept.component_concepts])[None,:] # (1, n_components)
+                    component_concept_scores = torch.stack([
+                        concept_scores[component_name] for component_name in concept.component_concepts
+                    ], dim=-1).unsqueeze(-2) # (..., 1, n_components)
                 else:
-                    component_concept_scores = torch.tensor([[]], device=features.image_features.device)
+                    batch_dims = features.image_features.shape[:-2] # All dims before (1, d_img)
+                    component_concept_scores = torch.empty(*batch_dims, 1, 0, device=features.image_features.device)
 
                 features.component_concept_scores = component_concept_scores
 
-            all_concept_scores.update({ # Store component concept scores regardless of where they are computed
-                component_name : component_score.item()
-                for component_name, component_score in zip(concept.component_concepts, features.component_concept_scores[0])
+            all_concept_scores.update({ # Store component concept scores for output regardless of where they are computed
+                component_name : component_score.item() if component_score.numel() == 1 else component_score.tolist()
+                for component_name, component_score in zip(concept.component_concepts, features.component_concept_scores)
             })
 
             # Compute concept predictor outputs
@@ -155,22 +157,28 @@ class ConceptKBForwardBase:
             with torch.set_grad_enabled(torch.is_grad_enabled() and is_concept_for_loss):
                 output: ConceptPredictorOutput = concept.predictor(features)
 
-            score = output.cum_score
+            score = output.cum_score # (1,) or (batch_size,)
             concept_scores[concept.name] = score.detach()
 
             # Compute loss and potentially perform backward pass
             if text_label is not None and is_concept_for_loss:
-                binary_label = torch.tensor(int(text_label in self.concept_labels[concept.name]), dtype=score.dtype, device=score.device)
-                binary_prediction = (score > 0).to(binary_label.dtype)
-                concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(concepts_for_loss)
+                # This may be a list of text labels (if batched) or a single text label if not
+                text_labels = text_label if isinstance(text_label, list) else [text_label]
+                if score.dim() == 0:
+                    score = score.unsqueeze(0) # (,) -> (1,)
+                assert len(score) == len(text_labels), 'Number of text labels must match number of concept predictor outputs'
 
-                concept_labels.append(binary_label)
-                concept_predictions.append(binary_prediction)
+                binary_labels = torch.tensor([
+                    int(text_label in self.concept_labels[concept.name]) for text_label in text_labels],
+                    device=score.device,
+                    dtype=score.dtype
+                )
+                binary_predictions = (score > 0).to(binary_labels.dtype)
 
-                # To prevent loss saturation due to sigmoid
-                if set_score_to_zero:
-                    score = output.cum_score - output.cum_score.detach()
-                    concept_loss = F.binary_cross_entropy_with_logits(score, binary_label) / len(concepts_for_loss)
+                concept_loss = F.binary_cross_entropy_with_logits(score, binary_labels) / len(concepts_for_loss)
+
+                concept_labels.extend(binary_labels)
+                concept_predictions.extend(binary_predictions)
 
                 curr_loss += concept_loss
                 total_loss += concept_loss.item()
@@ -193,7 +201,10 @@ class ConceptKBForwardBase:
             curr_loss.backward()
 
         # Return results
-        all_concept_scores.update({concept.name : score.item() for concept.name, score in concept_scores.items()}) # Add scores computed here
+        all_concept_scores.update({
+            concept.name : score.item() if score.numel() == 1 else score.tolist()
+            for concept.name, score in concept_scores.items()
+        }) # Add scores computed here
 
         forward_output = ForwardOutput(
             loss=total_loss if text_label is not None else None,
@@ -209,6 +220,20 @@ class ConceptKBForwardBase:
             forward_output.segmentations = segmentations
 
         return forward_output
+
+    def batched_forward_pass(
+        self,
+        image_features: CachedImageFeatures,
+        concept: Concept,
+        text_labels: list[str] = None,
+        do_backward: bool = False
+    ):
+        return self.forward_pass(
+            image_features,
+            text_label=text_labels,
+            concepts=[concept],
+            do_backward=do_backward
+        )
 
     def _get_concepts_for_forward_pass(self, concepts: list[Concept]) -> list[Concept]:
         '''

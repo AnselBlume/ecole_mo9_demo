@@ -25,7 +25,9 @@ class CachedImageFeatures(ImageFeatures):
             trained_attr_region_scores=self.trained_attr_region_scores,
             zs_attr_img_scores=self.concept_to_zs_attr_img_scores[concept_name],
             zs_attr_region_scores=self.concept_to_zs_attr_region_scores[concept_name],
-            component_concept_scores=self.component_concept_scores.get(concept_name, None)
+            component_concept_scores=self.component_concept_scores.get(concept_name, None),
+            is_batched=self.is_batched,
+            n_regions_per_image=self.n_regions_per_image
         )
 
     def __getitem__(self, concept_name: str):

@@ -85,9 +85,10 @@ class FeatureExtractor(nn.Module):
         '''
         if len(zs_attrs):
             zs_features = self.clip_feature_extractor(texts=zs_attrs)
-            zs_scores = self.zs_attr_predictor.feature_score(clip_visual_features, zs_features) # (1 + n_regions, n_zs_attrs)
+            zs_scores = self.zs_attr_predictor.feature_score(clip_visual_features, zs_features) # (..., 1 + n_regions, n_zs_attrs)
         else:
-            zs_scores = torch.tensor([[]], device=self.clip_feature_extractor.device) # This will be a nop in the indexing below
+            batch_dims = clip_visual_features.shape[:-2]
+            zs_scores = torch.empty(*batch_dims, 1, 0, device=self.clip_feature_extractor.device) # (..., 1, 0); nop for concatenation
 
         return zs_scores
 
@@ -114,7 +115,6 @@ class FeatureExtractor(nn.Module):
                 scores.append(max_score)
 
         return torch.tensor(scores)
-        
 
     def _get_image_and_region_features(
         self,
@@ -198,6 +198,14 @@ class FeatureExtractor(nn.Module):
         return image_features, region_features
 
     def _get_clip_visual_features(self, image: Image, regions: list[Image], cached_features: ImageFeatures):
+        '''
+            Arguments:
+                image: PIL image
+                regions: List of PIL images
+                cached_features: ImageFeatures object with cached features
+
+            Returns tensor of shape (1 + n_regions, d_img) for the CLIP visual features of the image and regions.
+        '''
         if None in [cached_features.clip_image_features, cached_features.clip_region_features]:
             clip_visual_features = self.clip_feature_extractor(images=[image] + regions)
         else:
@@ -207,12 +215,20 @@ class FeatureExtractor(nn.Module):
         return clip_visual_features
 
     def _get_trained_attr_scores(self, visual_features: torch.Tensor, cached_features: ImageFeatures):
+        '''
+            Arguments:
+                visual_features: Tensor of shape (1 + n_regions, d_img) for the image and region features
+                cached_features: ImageFeatures object with cached features
+
+            Returns tensor of shape (1 + n_regions, n_learned_attrs) for the trained attribute scores of the image and regions
+        '''
         if None in [cached_features.trained_attr_img_scores, cached_features.trained_attr_region_scores]:
             if len(self.trained_attr_predictor.attr_names):
                 # NOTE We take the sigmoid for DINO as the feature, but not for CLIP since CLIP wasn't trained with BCELoss
-                trained_attr_scores = self.trained_attr_predictor.predict_from_features(visual_features).sigmoid() # (1 + n_regions, n_learned_attrs)
+                trained_attr_scores = self.trained_attr_predictor.predict_from_features(visual_features).sigmoid() # (..., 1 + n_regions, n_learned_attrs)
             else:
-                trained_attr_scores = torch.tensor([[]], device=self.dino_feature_extractor.device) # (1, 0); nop in the indexing below
+                batch_dims = visual_features.shape[:-2]
+                trained_attr_scores = torch.empty(*batch_dims, 1, 0, device=self.dino_feature_extractor.device) # (..., 1, 0); nop in the indexing below
         else:
             trained_attr_scores = torch.cat([cached_features.trained_attr_img_scores, cached_features.trained_attr_region_scores], dim=0)
 

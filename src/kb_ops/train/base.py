@@ -2,37 +2,21 @@ import os
 import torch
 from model.concept import ConceptKB, Concept, ConceptExample
 from wandb.sdk.wandb_run import Run
-from dataclasses import dataclass, field
-from .dataset import ImageDataset, PresegmentedDataset, FeatureDataset, extend_with_global_negatives
-from .feature_pipeline import ConceptKBFeaturePipeline
-from typing import Union, Optional, Any, Literal, Callable
+from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
+from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
+from typing import  Optional, Any, Literal, Callable
 from torch.utils.data import DataLoader
 from torchmetrics import Accuracy
 import numpy as np
 from tqdm import tqdm
+from kb_ops.forward import ConceptKBForwardBase
+from kb_ops.example_sampler import ConceptKBExampleSampler
+from .outputs import TrainOutput, ValidationOutput
 import logging
-from .forward import ConceptKBForwardBase, ForwardOutput, DictDataClass
-from .example_sampler import ConceptKBExampleSampler
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__file__)
 
-@dataclass
-class ValidationOutput(DictDataClass):
-    loss: float
-    component_accuracy: float
-    non_component_accuracy: float
-
-@dataclass
-class TrainOutput(DictDataClass):
-    best_ckpt_epoch: int = None
-    best_ckpt_path: str = None
-    train_outputs: list[ForwardOutput] = None
-    val_outputs: Optional[list[ValidationOutput]] = field(
-        default=None,
-        metadata={'description': 'List of outputs from validation dataloader if val_dl is provided'}
-    )
-
-class ConceptKBTrainer(ConceptKBForwardBase):
+class ConceptKBTrainerBase(ConceptKBForwardBase):
     def __init__(self, concept_kb: ConceptKB, feature_pipeline: ConceptKBFeaturePipeline = None, wandb_run: Run = None):
         '''
             feature_pipeline must be provided if not using a FeatureDataset.
@@ -65,119 +49,6 @@ class ConceptKBTrainer(ConceptKBForwardBase):
             concepts_to_train = list(global_concepts.values())
 
         return concepts_to_train
-
-    def train(
-        self,
-        train_ds: Union[ImageDataset, PresegmentedDataset, FeatureDataset],
-        val_ds: Optional[Union[ImageDataset, PresegmentedDataset, FeatureDataset]],
-        n_epochs: int,
-        lr: float,
-        concepts: list[Concept] = None,
-        leaf_nodes_only: bool = False,
-        backward_every_n_concepts: int = None,
-        imgs_per_optim_step: int = 4,
-        ckpt_every_n_epochs: int = 1,
-        ckpt_dir: str = 'checkpoints',
-        ckpt_fmt: str = 'concept_kb_epoch_{epoch}.pt',
-        set_score_to_zero_at_indices: list[int] = []
-    ) -> TrainOutput:
-
-        if ckpt_dir:
-            os.makedirs(ckpt_dir, exist_ok=True)
-
-        # Prepare concepts
-        if concepts is None:
-            if leaf_nodes_only:
-                logger.info('Training leaf concepts only')
-                concepts = self.concept_kb.leaf_concepts
-
-            else:
-                logger.info('Training all concepts in ConceptKB, including internal nodes')
-                concepts = self.concept_kb
-
-        concepts = {c.name : c for c in concepts}
-        data_key = self._determine_data_key(train_ds)
-
-        train_dl = self._get_dataloader(train_ds, is_train=True)
-        train_outputs = []
-
-        val_dl = self._get_dataloader(val_ds, is_train=False) if val_ds else None
-        val_outputs: list[ValidationOutput] = []
-
-        optimizer = torch.optim.Adam(self.concept_kb.parameters(), lr=lr)
-        set_score_to_zero_at_indices = set(set_score_to_zero_at_indices)
-
-        for epoch in range(1, n_epochs + 1):
-            logger.info(f'======== Starting Epoch {epoch}/{n_epochs} ========')
-            self.concept_kb.train()
-
-            for i, batch in enumerate(tqdm(train_dl, desc=f'Epoch {epoch}/{n_epochs}'), start=1):
-                image_data, text_label = batch[data_key], batch['label']
-                index = batch['index'][0] # To check whether to set score to zero
-
-                # Get the concepts to train, intersecting example's and global concepts
-                concepts_to_train = self._get_concepts_to_train(batch, concepts)
-
-                if not concepts_to_train:
-                    logger.warning(f'No concepts to train after intersection with global concepts for example {index}; skipping')
-                    continue
-
-                # Forward pass
-                outputs = self.forward_pass(
-                    image_data[0],
-                    text_label[0],
-                    concepts=concepts_to_train,
-                    do_backward=True,
-                    backward_every_n_concepts=backward_every_n_concepts,
-                    set_score_to_zero=set_score_to_zero_at_indices and index in set_score_to_zero_at_indices
-                )
-                train_outputs.append(outputs)
-
-                self.log({'train_loss': outputs['loss'], 'epoch': epoch})
-
-                if i % imgs_per_optim_step == 0:
-                    optimizer.step()
-                    optimizer.zero_grad()
-
-            optimizer.step()
-            optimizer.zero_grad()
-
-            if epoch % ckpt_every_n_epochs == 0 and ckpt_dir:
-                ckpt_path = self._get_ckpt_path(ckpt_dir, ckpt_fmt, epoch)
-                self.concept_kb.save(ckpt_path)
-                logger.info(f'Saved checkpoint at {ckpt_path}')
-
-            # Validate
-            if val_dl:
-                outputs = self.validate(val_dl)
-                val_outputs.append(outputs)
-
-                self.log({
-                    'val_loss': outputs.loss,
-                    'val_component_acc': outputs.component_accuracy,
-                    'val_non_component_acc': outputs.non_component_accuracy,
-                    'epoch': epoch
-                })
-
-                logger.info(
-                    f'Validation loss: {outputs.loss},'
-                    + f' Validation component accuracy: {outputs.component_accuracy:.4f},'
-                    + f' Validation non-component accuracy: {outputs.non_component_accuracy:.4f}'
-                )
-
-        # Construct return dictionary
-        val_losses = [output.loss for output in val_outputs] if val_dl else None
-        best_ckpt_epoch = np.argmin(val_losses) if val_losses else None
-        best_ckpt_path = self._get_ckpt_path(ckpt_dir, ckpt_fmt, best_ckpt_epoch) if val_losses else None
-
-        train_output = TrainOutput(
-            best_ckpt_epoch=best_ckpt_epoch,
-            best_ckpt_path=best_ckpt_path,
-            train_outputs=train_outputs,
-            val_outputs=val_outputs
-        )
-
-        return train_output
 
     def construct_dataset_for_concept_training(
         self,
@@ -324,67 +195,6 @@ class ConceptKBTrainer(ConceptKBForwardBase):
         extend_with_global_negatives(train_ds, global_negatives)
 
         return all_samples, train_ds
-
-    def train_concept(
-        self,
-        concept: Concept,
-        *, # Force the use of kwargs after this point due to API changes
-        stopping_condition: Literal['n_epochs', 'validation'] = 'n_epochs',
-        n_epochs: int = 10,
-        post_sampling_hook: Callable[[list[ConceptExample]], Any] = None,
-        samples_and_dataset: tuple[list[ConceptExample], FeatureDataset] = None,
-        dataset_construction_kwargs: dict = {},
-        **train_kwargs
-    ) -> TrainOutput:
-        '''
-            Trains the given concept for n_epochs.
-
-            Arguments:
-                concept: Concept to train.
-
-                stopping_condition: One of 'n_epochs' or 'validation'.
-                    If 'n_epochs', training will stop after n_epochs.
-
-                n_epochs: Number of epochs to train for if stopping_condition is 'n_epochs'.
-
-                post_sampling_hook: Optional hook to run after sampling examples for training.
-
-                samples_and_dataset: Tuple of list of ConceptExamples and FeatureDataset to use for training.
-                    If provided, dataset_construction_kwargs will be ignored.
-
-                dataset_construction_kwargs: Keyword arguments to pass to construct_dataset_for_concept_training.
-
-                train_kwargs: Keyword arguments to pass to train method.
-        '''
-        if stopping_condition == 'validation':
-            # Implement some way to perform validation as a stopping condition
-            raise NotImplementedError('Validation is not yet implemented')
-
-        # Train for a fixed number of epochs or until examples are predicted correctly
-        else:
-            if samples_and_dataset: # Use provided samples and dataset
-                all_samples, train_ds = samples_and_dataset
-            else: # Construct
-                all_samples, train_ds = self.construct_dataset_for_concept_training(concept, **dataset_construction_kwargs)
-
-            if post_sampling_hook:
-                post_sampling_hook(all_samples)
-
-            # Train for fixed number of epochs
-            train_kwargs = train_kwargs.copy()
-            train_kwargs.update({
-                'ckpt_dir': None,
-                'concepts': [concept],
-                'lr': train_kwargs.get('lr', 1e-2)
-            })
-
-            if stopping_condition == 'n_epochs':
-                results = self.train(train_ds, None, n_epochs=n_epochs, **train_kwargs)
-
-            else: # stopping_condition == 'until_correct'
-                raise ValueError('until_correct is disabled as images may not be linearly separable, resulting in an infinite loop')
-
-            return results
 
     @torch.inference_mode()
     def validate(self, val_dl: DataLoader, leaf_nodes_only_for_accuracy=True, **forward_kwargs):
