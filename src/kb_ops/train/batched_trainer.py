@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger(__file__)
 
 class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
-    def train_fast(
+    def train_minimal(
         self,
         train_ds: FeatureDataset,
         n_epochs: int,
@@ -21,7 +21,40 @@ class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
         batch_size: int = 64,
         dataloader_kwargs: dict = {}
     ):
-        pass
+        '''
+            Trains the concept predictors using the given dataset one-by-one for the specified number of epochs.
+            Does not perform checkpointing, validation, logging, or output collection to maximize speed.
+
+            This training algorithm is theoretically faster than epoch-by-epoch training of all concepts as training
+            concept-by-concept does not cycle between concepts' dataloaders.
+            Experiments show that it is marginally faster (.3 seconds per epoch faster for ≈ 1000 example, 29 concepts dataset) than
+            train_batched.
+
+            This method has a lower memory footprint than train_batched as this does not store outputs and does not maintain
+            worker processes for all concepts simultaneously.
+        '''
+
+        concept_to_train_dataset = self._concepts_to_datasets(train_ds, concepts=concepts)
+        self.concept_kb.train()
+
+        prog_bar = tqdm(concept_to_train_dataset.items())
+        for concept, dataset in prog_bar:
+            prog_bar.set_description(f'Training concept "{concept.name}"')
+
+            optimizer = torch.optim.Adam(concept.predictor.parameters(), lr=lr)
+            train_dl = self._get_dataloader(concept, dataset, is_train=True, batch_size=batch_size, **dataloader_kwargs)
+
+            for epoch in range(1, n_epochs + 1):
+                for batch in train_dl:
+                    _ = self.batched_forward_pass(
+                        batch['features'],
+                        concept,
+                        text_labels=batch['label'],
+                        do_backward=True
+                    )
+
+                    optimizer.step()
+                    optimizer.zero_grad()
 
     def train_batched(
         self,
