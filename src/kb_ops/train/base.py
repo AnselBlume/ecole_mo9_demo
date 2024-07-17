@@ -4,14 +4,14 @@ from model.concept import ConceptKB, Concept, ConceptExample
 from wandb.sdk.wandb_run import Run
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
 from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
-from typing import  Optional, Any, Literal, Callable
+from typing import  Optional
 from torch.utils.data import DataLoader
 from torchmetrics import Accuracy
 import numpy as np
 from tqdm import tqdm
 from kb_ops.forward import ConceptKBForwardBase
 from kb_ops.example_sampler import ConceptKBExampleSampler
-from .outputs import TrainOutput, ValidationOutput
+from .outputs import ValidationOutput
 import logging
 
 logger = logging.getLogger(__file__)

@@ -79,13 +79,16 @@ class FeatureExtractor(nn.Module):
             trained_attr_region_scores=trained_attr_scores[1:] # (n_regions, n_learned_attrs)
         )
 
-    def get_zero_shot_attr_scores(self, clip_visual_features: torch.Tensor, zs_attrs: list[str]):
+    def get_zero_shot_attr_scores(self, clip_visual_features: torch.Tensor, zs_attrs: list[str] = None, zs_attr_features: torch.Tensor = None):
         '''
             Returns a tensor of shape (1 + n_regions, n_zs_attrs) for the zero-shot attribute scores for each region.
         '''
-        if len(zs_attrs):
-            zs_features = self.clip_feature_extractor(texts=zs_attrs)
-            zs_scores = self.zs_attr_predictor.feature_score(clip_visual_features, zs_features) # (..., 1 + n_regions, n_zs_attrs)
+        if zs_attrs or zs_attr_features is not None: # Either zs_attrs or zs_attr_features provided
+            if zs_attr_features is None:
+                with torch.no_grad():
+                    zs_attr_features = self.clip_feature_extractor(texts=zs_attrs)
+
+            zs_scores = self.zs_attr_predictor.feature_score(clip_visual_features, zs_attr_features) # (..., 1 + n_regions, n_zs_attrs)
         else:
             batch_dims = clip_visual_features.shape[:-2]
             zs_scores = torch.empty(*batch_dims, 1, 0, device=self.clip_feature_extractor.device) # (..., 1, 0); nop for concatenation
