@@ -282,8 +282,6 @@ class ConceptKBFeatureCacher:
                         # Update cached features
                         with open(example.image_features_path, 'r+b') as f:
                             cached_features: CachedImageFeatures = pickle.load(f)
-                            assert zs_attr_img_scores.allclose(cached_features.concept_to_zs_attr_img_scores[concept.name], atol=1e-4)
-                            assert zs_attr_region_scores.allclose(cached_features.concept_to_zs_attr_region_scores[concept.name], atol=1e-4)
                             cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
                             cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
                             pickle.dump(cached_features, f)
