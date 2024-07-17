@@ -1,8 +1,9 @@
 import os
-import sys
 from tqdm import tqdm
+import torch
+from torch import Tensor
 from model.concept import ConceptKB, Concept
-from ..feature_pipeline import ConceptKBFeaturePipeline
+from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 from typing import Literal
 from model.concept import ConceptExample
 from PIL.Image import open as open_image
@@ -205,6 +206,92 @@ class ConceptKBFeatureCacher:
 
             example.image_features_path = cache_path
 
+    def recache_zs_attr_features_batched(
+        self,
+        concept: Concept,
+        examples: list[ConceptExample] = None,
+        only_not_present: bool = False,
+        batch_size: int = 128
+    ):
+        '''
+            Recaches zero-shot attribute features for the specified Concept across all Concepts' examples in the
+            ConceptKB.
+
+            If examples are provided, only recaches features for the specified examples (to save time instead of
+            recaching for all in the concept_kb).
+
+            If only_not_present is True, only recaches features for examples which do not have the specified
+            concept's zero-shot attribute features. So this will not overwrite existing zs attribute features.
+        '''
+        examples = examples if examples else self._get_examples([concept])
+
+        example_batch: list[ConceptExample] = []
+        visual_features_batch: list[Tensor] = []
+        n_features_per_example = []
+
+        # Precompute zs attribute features
+        with torch.no_grad():
+            zs_attr_features = self.feature_pipeline.feature_extractor.clip_feature_extractor(
+                texts=[attr.query for attr in concept.zs_attributes]
+            )
+
+        clip_device = self.feature_pipeline.feature_extractor.zs_attr_predictor.device
+
+        for i, example in enumerate(examples):
+            if example.image_features_path is None:
+                continue
+            else:
+                with open(example.image_features_path, 'rb') as f:
+                    cached_features: CachedImageFeatures = pickle.load(f)
+
+                if ( # Skip if only_not_present and already present
+                    only_not_present
+                    and (
+                        concept.name in cached_features.concept_to_zs_attr_img_scores
+                        or concept.name in cached_features.concept_to_zs_attr_region_scores
+                    )
+                ):
+                    continue
+
+                # Add to batch
+                example_visual_features = torch.cat([
+                    cached_features.clip_image_features,
+                    cached_features.clip_region_features,
+                ], dim=-2) # (n_regions + 1, d)
+
+                example_batch.append(example)
+                visual_features_batch.append(example_visual_features)
+                n_features_per_example.append(example_visual_features.shape[0])
+
+                # Compute batch
+                if len(example_batch) == batch_size or i == len(examples) - 1:
+                    batch_zs_scores = self.feature_pipeline.feature_extractor.get_zero_shot_attr_scores(
+                        torch.cat(visual_features_batch, dim=-2).to(clip_device),
+                        zs_attr_features=zs_attr_features
+                    ).cpu() # (sum_i (1 + n_regions_i), n_zs_attrs)
+
+                    # Split scores back into individual examples
+                    offset = 0
+                    for example, n_features in zip(example_batch, n_features_per_example):
+                        zs_attr_scores = batch_zs_scores[offset:offset+n_features]
+                        zs_attr_img_scores = zs_attr_scores[0:1] # (1, n_zs_attrs)
+                        zs_attr_region_scores = zs_attr_scores[1:] # (n_regions, n_zs_attrs)
+
+                        offset += n_features
+
+                        # Update cached features
+                        with open(example.image_features_path, 'r+b') as f:
+                            cached_features: CachedImageFeatures = pickle.load(f)
+                            assert zs_attr_img_scores.allclose(cached_features.concept_to_zs_attr_img_scores[concept.name], atol=1e-4)
+                            assert zs_attr_region_scores.allclose(cached_features.concept_to_zs_attr_region_scores[concept.name], atol=1e-4)
+                            cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
+                            cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
+                            pickle.dump(cached_features, f)
+
+                    example_batch.clear()
+                    visual_features_batch.clear()
+                    n_features_per_example.clear()
+
     def recache_zs_attr_features(self, concept: Concept, examples: list[ConceptExample] = None, only_not_present: bool = False):
         '''
             Recaches zero-shot attribute features for the specified Concept across all Concepts' examples in the
@@ -257,6 +344,7 @@ class ConceptKBFeatureCacher:
             If examples are provided, only recaches features for the specified examples (to save time instead of
             recaching for all in the concept_kb).
         '''
+        # TODO Batch this process
         if not self.feature_pipeline.config.compute_component_concept_scores:
             raise RuntimeError('Component concept scores are not being computed by the feature pipeline.')
 
