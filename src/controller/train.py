@@ -23,7 +23,7 @@ class ControllerTrainMixin(BaseController):
 
         # Recache all concepts' zero-shot features in case new concepts were added since last training
         for concept in self.concept_kb:
-            self.cacher.recache_zs_attr_features_batched(concept)
+            self.cacher.recache_zs_attr_features(concept)
 
             if not self.use_concept_predictors_for_concept_components: # Using fixed scores for concept-image pairs
                 self.cacher.recache_component_concept_scores(concept)
@@ -70,12 +70,12 @@ class ControllerTrainMixin(BaseController):
         # Hook to recache zs_attr_features after negative examples have been sampled
         # This is faster than calling recache_zs_attr_features on all examples in the concept_kb
         def cache_hook(examples):
-            self.cacher.recache_zs_attr_features_batched(concept, examples=examples)
+            self.cacher.recache_zs_attr_features(concept, examples=examples)
 
             # Handle component concepts
             if self.use_concept_predictors_for_concept_components:
                 for component in concept.component_concepts.values():
-                    self.cacher.recache_zs_attr_features_batched(component, examples=examples) # Needed to predict the componnt concept
+                    self.cacher.recache_zs_attr_features(component, examples=examples) # Needed to predict the componnt concept
 
             else: # Using fixed scores for concept-image pairs
                 self.cacher.recache_component_concept_scores(concept, examples=examples)
@@ -119,11 +119,11 @@ class ControllerTrainMixin(BaseController):
             examples, dataset = self.trainer.construct_dataset_for_concept_training(concept, use_concepts_as_negatives=use_concepts_as_negatives)
 
             # Recache zero-shot attributes for sampled examples
-            self.cacher.recache_zs_attr_features_batched(concept, examples=examples)
+            self.cacher.recache_zs_attr_features(concept, examples=examples)
 
             if self.use_concept_predictors_for_concept_components:
                 for component in concept.component_concepts.values():
-                    self.cacher.recache_zs_attr_features_batched(component, examples=examples) # Needed to predict the componnt concept
+                    self.cacher.recache_zs_attr_features(component, examples=examples) # Needed to predict the componnt concept
 
             else: # Using fixed scores for concept-image pairs
                 self.cacher.recache_component_concept_scores(concept, examples=examples)

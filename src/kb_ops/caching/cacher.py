@@ -206,7 +206,7 @@ class ConceptKBFeatureCacher:
 
             example.image_features_path = cache_path
 
-    def recache_zs_attr_features_batched(
+    def recache_zs_attr_features(
         self,
         concept: Concept,
         examples: list[ConceptExample] = None,
@@ -244,7 +244,7 @@ class ConceptKBFeatureCacher:
                 with open(example.image_features_path, 'rb') as f:
                     cached_features: CachedImageFeatures = pickle.load(f)
 
-                if ( # Skip if only_not_present and already present
+                if ( # Skip if only recaching scores where they are not present, and it is already present in this example
                     only_not_present
                     and (
                         concept.name in cached_features.concept_to_zs_attr_img_scores
@@ -291,46 +291,6 @@ class ConceptKBFeatureCacher:
                     example_batch.clear()
                     visual_features_batch.clear()
                     n_features_per_example.clear()
-
-    def recache_zs_attr_features(self, concept: Concept, examples: list[ConceptExample] = None, only_not_present: bool = False):
-        '''
-            Recaches zero-shot attribute features for the specified Concept across all Concepts' examples in the
-            ConceptKB.
-
-            If examples are provided, only recaches features for the specified examples (to save time instead of
-            recaching for all in the concept_kb).
-
-            If only_not_present is True, only recaches features for examples which do not have the specified
-            concept's zero-shot attribute features. So this will not overwrite existing zs attribute features.
-        '''
-        examples = examples if examples else self._get_examples([concept])
-
-        for example in examples:
-            if example.image_features_path is None:
-                continue
-
-            with open(example.image_features_path, 'rb') as f:
-                cached_features: CachedImageFeatures = pickle.load(f)
-
-            if (
-                not only_not_present
-                or concept.name not in cached_features.concept_to_zs_attr_img_scores
-                or concept.name not in cached_features.concept_to_zs_attr_region_scores
-            ):
-                cached_features.cuda()
-
-                zs_attr_img_scores, zs_attr_region_scores = self.feature_pipeline._get_zero_shot_attr_scores(concept, cached_features, recompute_scores=True)
-
-                cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
-                cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
-
-                cached_features.cpu() # Back to CPU for saving
-
-                # Update cached features
-                with open(example.image_features_path, 'wb') as f:
-                    pickle.dump(cached_features, f)
-
-                logger.debug(f'Added concept {concept.name} zero-shot attributes to cached features for example {example.image_path}')
 
     def recache_component_concept_scores(self, concept: Concept, examples: list[ConceptExample] = None):
         '''
