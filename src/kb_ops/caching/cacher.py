@@ -223,6 +223,9 @@ class ConceptKBFeatureCacher:
             If only_not_present is True, only recaches features for examples which do not have the specified
             concept's zero-shot attribute features. So this will not overwrite existing zs attribute features.
         '''
+        if not len(concept.zs_attributes):
+            return
+
         examples = examples if examples else self._get_examples([concept])
 
         example_batch: list[ConceptExample] = []
