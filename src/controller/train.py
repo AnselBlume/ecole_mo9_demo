@@ -101,6 +101,7 @@ class ControllerTrainMixin(BaseController):
         n_epochs: int = 5,
         use_concepts_as_negatives: bool = True,
         max_retrieval_distance=.01,
+        concepts_to_train_kwargs: dict = {},
         **train_concept_kwargs
     ):
         # Ensure features are prepared, only generating those which don't already exist or are dirty
@@ -111,7 +112,12 @@ class ControllerTrainMixin(BaseController):
         # TODO Add a variant that merges all of the datasets (merging duplicate examples using datasets' concepts_to_train field) and runs trainer.train()
 
         concepts = [self.retrieve_concept(c, max_retrieval_distance=max_retrieval_distance) for c in concept_names]
-        concept_selector = ConcurrentTrainingConceptSelector(concepts)
+
+        concepts_to_train = {}
+        for concept in concepts:
+            concepts_to_train.update(dict.fromkeys(self._get_concepts_to_train_to_update_concept(concept, **concepts_to_train_kwargs)))
+
+        concept_selector = ConcurrentTrainingConceptSelector(list(concepts_to_train))
 
         while concept_selector.num_concepts_remaining > 0:
             concept = concept_selector.get_next_concept()
