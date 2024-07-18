@@ -285,7 +285,10 @@ class ConceptKBFeatureCacher:
                             cached_features: CachedImageFeatures = pickle.load(f)
                             cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
                             cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
+
+                            f.seek(0) # Go back to start of file
                             pickle.dump(cached_features, f)
+                            f.truncate() # Truncate to new size
 
                     example_batch.clear()
                     visual_features_batch.clear()
