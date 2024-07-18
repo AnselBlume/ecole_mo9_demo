@@ -113,9 +113,10 @@ class ConceptKBFeatureCacher:
         image = self._image_from_example(example)
 
         if self.infer_localize_from_component:
-            # Perform localization only if the concept is not a component concept
+            # Don't perform localization if it is a component concept. Otherwise, use the LocalizerAndSegmenter's default
+            # If the concept has containing concepts, it is a component
             if example.concept_name and self.concept_kb[example.concept_name].containing_concepts:
-                loc_and_seg_kwargs['do_localize'] = True
+                loc_and_seg_kwargs['do_localize'] = False
 
         segmentations = self.feature_pipeline.get_segmentations(image, **loc_and_seg_kwargs).cpu()
         segmentations.input_image_path = example.image_path

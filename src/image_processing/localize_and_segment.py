@@ -66,7 +66,7 @@ class LocalizeAndSegmentOutput(DictDataClass, DeviceShiftable):
 
 @dataclass
 class LocalizerAndSegmenterConfig:
-    do_localize: bool = False
+    do_localize: bool = True
     remove_background: bool = True
     return_crops: bool = True
     use_bbox_for_crops: bool = False
