@@ -135,7 +135,7 @@ class ControllerTrainMixin(BaseController):
     def _get_concepts_to_train_to_update_concept(
         self,
         concept: Concept,
-        include_siblings: bool = False,
+        include_siblings: bool = True,
         include_ancestors: bool = False,
         include_ancestors_siblings: bool = False,
         include_component_roots_as_ancestor_siblings: bool = False,
@@ -156,8 +156,18 @@ class ControllerTrainMixin(BaseController):
         concepts_to_train = {concept : None}
 
         if include_siblings:
-            for parent in concept.parent_concepts.values():
-                concepts_to_train.update(dict.fromkeys(parent.child_concepts.values())) # Includes self, but that's fine
+            if not concept.parent_concepts: # Root node; other roots are siblings
+                root_nodes = dict.fromkeys(self.concept_kb.root_concepts)
+
+                if not include_component_roots_as_ancestor_siblings: # Exclude component root nodes
+                    component_concepts = set(self.concept_kb.component_concepts)
+                    root_nodes = {c : None for c in root_nodes if c not in component_concepts}
+
+                concepts_to_train.update(root_nodes)
+
+            else:
+                for parent in concept.parent_concepts.values():
+                    concepts_to_train.update(dict.fromkeys(parent.child_concepts.values())) # Includes self, but that's fine
 
         if include_ancestors:
             ancestors = self.concept_kb.rooted_subtree(concept, reverse_edges=True) # Includes self, but that's fine
