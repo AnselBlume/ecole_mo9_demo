@@ -231,12 +231,12 @@ class ConceptKBFeatureCacher:
         n_features_per_example = []
 
         # Precompute zs attribute features
+        clip_device = self.feature_pipeline.feature_extractor.zs_attr_predictor.device
+
         with torch.no_grad():
             zs_attr_features = self.feature_pipeline.feature_extractor.clip_feature_extractor(
                 texts=[attr.query for attr in concept.zs_attributes]
-            )
-
-        clip_device = self.feature_pipeline.feature_extractor.zs_attr_predictor.device
+            ).to(clip_device)
 
         for i, example in enumerate(examples):
             if example.image_features_path is None:
