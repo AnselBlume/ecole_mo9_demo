@@ -1,22 +1,27 @@
 # %%
-import os # Change DesCo CUDA device here
+import os  # Change DesCo CUDA device here
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 import sys
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from model.concept import ConceptKB
-from kb_ops.train_test_split import split_from_directory, split_from_paths
-from kb_ops.dataset import PresegmentedDataset, list_collate
-from kb_ops import ConceptKBFeaturePipeline
-import logging, coloredlogs
-from feature_extraction.trained_attrs import N_ATTRS_DINO
-from kb_ops.train import ConceptKBTrainer
-from .utils import set_feature_paths
-from torchmetrics import Accuracy
-import jsonargparse as argparse
+import logging
 from itertools import chain
+
+import coloredlogs
+import jsonargparse as argparse
+from feature_extraction.trained_attrs import N_ATTRS_DINO
+from kb_ops import ConceptKBFeaturePipeline
+from kb_ops.dataset import PresegmentedDataset, list_collate
+from kb_ops.train import ConceptKBTrainer
+from kb_ops.train_test_split import split_from_directory, split_from_paths
+from model.concept import ConceptKB
 from torch.utils.data import DataLoader
+from torchmetrics import Accuracy
+
+from .utils import set_feature_paths
 
 logger = logging.getLogger(__name__)
 coloredlogs.install(level=logging.INFO)
@@ -47,11 +52,8 @@ if __name__ == '__main__':
     concept_kb = ConceptKB.load(args.ckpt_path)
 
     # Import here so DesCo sees the CUDA device change
-    from feature_extraction import (
-        build_feature_extractor,
-        build_desco,
-        build_sam,
-    )
+    from feature_extraction import (build_desco, build_feature_extractor,
+                                    build_sam)
     from image_processing import build_localizer_and_segmenter
 
     loc_and_seg = build_localizer_and_segmenter(build_sam(), build_desco())

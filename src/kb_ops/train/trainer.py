@@ -1,9 +1,12 @@
-from typing import Literal, Callable, Any, Optional
+from typing import Any, Callable, Literal, Optional
+
 from kb_ops.dataset import FeatureDataset
 from model.concept import Concept, ConceptExample
-from .outputs import TrainOutput
+
 from .batched_trainer import ConceptKBBatchedTrainerMixin
+from .outputs import TrainOutput
 from .sgd_trainer import ConceptKBSGDTrainerMixin
+
 
 class ConceptKBTrainer(
     ConceptKBSGDTrainerMixin,
@@ -14,7 +17,7 @@ class ConceptKBTrainer(
         concept: Concept,
         *, # Force the use of kwargs after this point due to API changes
         stopping_condition: Literal['n_epochs', 'validation'] = 'n_epochs',
-        n_epochs: int = 10,
+        n_epochs: int = 50,
         post_sampling_hook: Callable[[list[ConceptExample]], Any] = None,
         samples_and_dataset: tuple[list[ConceptExample], FeatureDataset] = None,
         dataset_construction_kwargs: dict = {},

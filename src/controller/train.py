@@ -1,9 +1,11 @@
-from base import BaseController
+import logging
+from collections import deque
+from typing import Literal
+
 from kb_ops.dataset import split_from_concept_kb
 from model.concept import Concept, ConceptExample
-from typing import Literal
-from collections import deque
-import logging
+
+from .base import BaseController
 
 logger = logging.getLogger(__file__)
 

@@ -1,9 +1,10 @@
 # %%
-from train import ControllerTrainMixin
-from predict import ControllerPredictionMixin
-from heatmap import ControllerHeatmapMixin
-from interpretation import ControllerInterpretationMixin
 import logging
+
+from .heatmap import ControllerHeatmapMixin
+from .interpretation import ControllerInterpretationMixin
+from .predict import ControllerPredictionMixin
+from .train import ControllerTrainMixin
 
 logger = logging.getLogger(__name__)
 
@@ -22,16 +23,19 @@ class Controller(
 
 # %%
 if __name__ == '__main__':
+    import sys
+    sys.path.append("/shared/nas2/knguye71/ecole-june-demo/ecole_mo9_demo/src")
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = '4'
 
-    import PIL
-    from feature_extraction import build_feature_extractor, build_sam, build_desco
-    from image_processing import build_localizer_and_segmenter
-    from model.concept import ConceptKB, ConceptExample
-    import PIL.Image
     import coloredlogs
+    import PIL
+    import PIL.Image
+    from controller import Controller
+    from feature_extraction import build_feature_extractor, build_sam
+    from image_processing import build_localizer_and_segmenter
     from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
+    from model.concept import ConceptExample, ConceptKB
 
     coloredlogs.install(level=logging.INFO)
 

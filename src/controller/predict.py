@@ -1,9 +1,11 @@
-from base import BaseController
 from image_processing import LocalizeAndSegmentOutput
-from kb_ops import ConceptKBTrainer, ConceptKBPredictor
+from kb_ops import ConceptKBPredictor, ConceptKBTrainer
 from kb_ops.predict import PredictOutput
-from visualization.vis_utils import plot_predicted_classes
 from PIL.Image import Image
+from visualization.vis_utils import plot_predicted_classes
+
+from .base import BaseController
+
 
 class ControllerPredictionMixin(BaseController):
     ##############

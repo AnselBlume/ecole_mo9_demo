@@ -1,29 +1,34 @@
 # %%
-import os # Change DesCo CUDA device here
+import os  # Change DesCo CUDA device here
+
 if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 # Prepend to path so starts searching at src first
 import sys
+
 sys.path = [os.path.join(os.path.dirname(__file__), '..')] + sys.path
 
-from llm import LLMClient
-from kb_ops import kb_from_img_dir, add_global_negatives
-from kb_ops.build_kb import label_from_path, label_from_directory
-from model.concept import ConceptKBConfig
-from kb_ops.train_test_split import split
-from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
-from kb_ops import ConceptKBFeatureCacher, ConceptKBFeaturePipeline, ConceptKBFeaturePipelineConfig
-from kb_ops.example_sampler import ConceptKBExampleSampler, ConceptKBExampleSamplerConfig
-from image_processing import LocalizerAndSegmenterConfig
-from model.concept import ConceptKB
-import logging, coloredlogs
-from feature_extraction.trained_attrs import N_ATTRS_DINO
-from kb_ops.train import ConceptKBTrainer
-import wandb
-import jsonargparse as argparse
+import logging
 from itertools import chain
-from scripts.utils import set_feature_paths, get_timestr
+
+import coloredlogs
+import jsonargparse as argparse
+import wandb
+from feature_extraction.trained_attrs import N_ATTRS_DINO
+from image_processing import LocalizerAndSegmenterConfig
+from kb_ops import (ConceptKBFeatureCacher, ConceptKBFeaturePipeline,
+                    ConceptKBFeaturePipelineConfig, add_global_negatives,
+                    kb_from_img_dir)
+from kb_ops.build_kb import label_from_directory, label_from_path
+from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
+from kb_ops.example_sampler import (ConceptKBExampleSampler,
+                                    ConceptKBExampleSamplerConfig)
+from kb_ops.train import ConceptKBTrainer
+from kb_ops.train_test_split import split
+from llm import LLMClient
+from model.concept import ConceptKB, ConceptKBConfig
+from scripts.utils import get_timestr, set_feature_paths
 
 logger = logging.getLogger(__name__)
 
@@ -100,11 +105,8 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     # run = None # Comment me to use wandb
 
     # Import here so DesCo sees the CUDA device change
-    from feature_extraction import (
-        build_feature_extractor,
-        build_desco,
-        build_sam
-    )
+    from feature_extraction import (build_desco, build_feature_extractor,
+                                    build_sam)
     from image_processing import build_localizer_and_segmenter
 
     # %%
@@ -195,7 +197,7 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     # Consider splitting global negatives into train and val sets?
     extend_with_global_negatives(train_ds, concept_kb.global_negatives)
 
-    concept_kb.to('cuda')
+    # concept_kb.to('cuda')
 
     # Save arguments as yaml
     run_id = f'{get_timestr()}-{run.id}' if run else get_timestr()

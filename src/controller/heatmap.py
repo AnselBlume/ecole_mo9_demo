@@ -1,8 +1,10 @@
-from base import BaseController
-from kb_ops.predict import PredictOutput
 import PIL
-from PIL.Image import Image
+from kb_ops.predict import PredictOutput
 from model.concept import Concept
+from PIL.Image import Image
+
+from .base import BaseController
+
 
 class ControllerHeatmapMixin(BaseController):
     ######################

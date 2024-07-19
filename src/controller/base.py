@@ -1,16 +1,16 @@
 import json
-from model.concept import ConceptKB
-from kb_ops import ConceptKBTrainer, ConceptKBPredictor
+import logging
+from dataclasses import dataclass
+
+from kb_ops import ConceptKBPredictor, ConceptKBTrainer
+from kb_ops.build_kb import CONCEPT_TO_ATTRS_PATH
+from kb_ops.caching import ConceptKBFeatureCacher
+from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 from kb_ops.retrieve import CLIPConceptRetriever
 from llm import LLMClient
-from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
-from kb_ops.caching import ConceptKBFeatureCacher
-from model.concept import Concept, ConceptExample
+from model.concept import Concept, ConceptExample, ConceptKB
 from utils import ArticleDeterminer
 from visualization.heatmap import HeatmapVisualizer
-import logging
-from kb_ops.build_kb import CONCEPT_TO_ATTRS_PATH
-from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +201,10 @@ class BaseController:
         return concept
 
     def add_hyponym(self, child_name: str, parent_name: str, child_max_retrieval_distance: float = 0.2):
-        parent = self.retrieve_concept(parent_name)
+        try:
+            parent = self.retrieve_concept(parent_name, max_retrieval_distance=0.1)
+        except RuntimeError:
+            parent = self.add_concept(parent_name)
 
         try:
             child = self.retrieve_concept(child_name, max_retrieval_distance=child_max_retrieval_distance)
