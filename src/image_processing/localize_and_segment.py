@@ -185,7 +185,7 @@ class LocalizerAndSegmenter:
 
         else: # Non part-based segmentation of localized concept
             logger.info('Performing part segmentation with SAM')
-            part_masks = self.segmenter.segment(image, bboxes[0], remove_background=remove_background)
+            part_masks = self.segmenter.segment(image, bboxes[0], remove_background=False) # Don't remove background for part segmentation
 
         # Construct return dictionary
         output = LocalizeAndSegmentOutput(
