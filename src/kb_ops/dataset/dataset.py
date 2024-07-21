@@ -9,12 +9,10 @@ from PIL import Image
 from tqdm import tqdm
 from model.concept import ConceptKB, ConceptExample
 from typing import Optional
-from filelock import FileLock
 import logging
 
 logger = logging.getLogger(__file__)
 
-FILE_LOCK_TIMEOUT_S = 10
 NEGATIVE_LABEL = '[NEGATIVE_LABEL]'
 
 class BaseDataset(Dataset):
@@ -127,13 +125,8 @@ class PresegmentedDataset(BaseDataset):
         self.segmentation_paths = self.data
 
     def __getitem__(self, idx):
-        # Load segmentations
-        file_path = self.segmentation_paths[idx]
-        lock_path = file_path + '.lock'
-
-        with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
-            with open(file_path, 'rb') as f:
-                segmentations: LocalizeAndSegmentOutput = pickle.load(f)
+        with open(self.segmentation_paths[idx], 'rb') as f:
+            segmentations: LocalizeAndSegmentOutput = pickle.load(f)
 
         segmentations.input_image = Image.open(segmentations.input_image_path)
         label = self.labels[idx]
@@ -158,13 +151,8 @@ class FeatureDataset(BaseDataset):
         self.feature_paths = self.data
 
     def __getitem__(self, idx):
-        # Load features
-        file_path = self.feature_paths[idx]
-        lock_path = file_path + '.lock'
-
-        with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
-            with open(file_path, 'rb') as f:
-                features: CachedImageFeatures = pickle.load(f)
+        with open(self.feature_paths[idx], 'rb') as f:
+            features: CachedImageFeatures = pickle.load(f)
 
         label = self.labels[idx]
         concepts_to_train = self.concepts_to_train_per_example[idx]
