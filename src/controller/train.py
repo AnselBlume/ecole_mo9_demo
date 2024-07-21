@@ -220,7 +220,8 @@ class ConcurrentTrainingConceptSelector:
             Raises IndexError if there are currently no leaf concepts to train.
         '''
         if not self.has_concept_available():
-            raise IndexError('No leaf concepts available to train')
+            # raise IndexError('No leaf concepts available to train')
+            return None
 
         next_concept = self._leaf_concepts.popleft()
         self._popped_concepts.append(next_concept)
