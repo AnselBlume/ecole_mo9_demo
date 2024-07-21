@@ -1,13 +1,14 @@
-from .base import ConceptKBTrainerBase
-import torch
-from model.concept import Concept
-from kb_ops.dataset import FeatureDataset
-from typing import  Optional
-import numpy as np
-from tqdm import tqdm
-from kb_ops.dataset import BatchCachedFeaturesCollate
-from .outputs import TrainOutput, ValidationOutput
 import logging
+from typing import Optional
+
+import numpy as np
+import torch
+from kb_ops.dataset import BatchCachedFeaturesCollate, FeatureDataset
+from model.concept import Concept
+from tqdm import tqdm
+
+from .base import ConceptKBTrainerBase
+from .outputs import TrainOutput, ValidationOutput
 
 logger = logging.getLogger(__file__)
 
@@ -19,7 +20,8 @@ class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
         lr: float,
         concepts: list[Concept] = None,
         batch_size: int = 64,
-        dataloader_kwargs: dict = {}
+        dataloader_kwargs: dict = {},
+        **train_kwargs
     ):
         '''
             Trains the concept predictors using the given dataset one-by-one for the specified number of epochs.
