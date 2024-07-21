@@ -1,19 +1,16 @@
-import logging
 import os
 import pickle
-import time
-from typing import Optional
-
-import portalocker
+from torch.utils.data import Dataset
 from image_processing import LocalizerAndSegmenter
 from image_processing.localize_and_segment import LocalizeAndSegmentOutput
 from kb_ops.caching import CachedImageFeatures
 from kb_ops.train_test_split import split_from_paths
-from model.concept import ConceptExample, ConceptKB
 from PIL import Image
-from portalocker import Lock
-from torch.utils.data import Dataset
 from tqdm import tqdm
+from model.concept import ConceptKB, ConceptExample
+from typing import Optional
+from filelock import FileLock
+import logging
 
 logger = logging.getLogger(__file__)
 
@@ -130,20 +127,24 @@ class PresegmentedDataset(BaseDataset):
         self.segmentation_paths = self.data
 
     def __getitem__(self, idx):
-        with Lock(self.segmentation_paths[idx], 'rb+', timeout=FILE_LOCK_TIMEOUT_S) as f:
-            segmentations: LocalizeAndSegmentOutput = pickle.load(f)
+        # Load segmentations
+        file_path = self.segmentation_paths[idx]
+        lock_path = file_path + '.lock'
 
-            segmentations.input_image = Image.open(segmentations.input_image_path)
-            label = self.labels[idx]
-            concepts_to_train = self.concepts_to_train_per_example[idx]
+        with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
+            with open(file_path, 'rb') as f:
+                segmentations: LocalizeAndSegmentOutput = pickle.load(f)
 
-            return {
-                'index': idx,
-                'segmentations': segmentations,
-                'label': label,
-                'concepts_to_train': concepts_to_train
-            }
+        segmentations.input_image = Image.open(segmentations.input_image_path)
+        label = self.labels[idx]
+        concepts_to_train = self.concepts_to_train_per_example[idx]
 
+        return {
+            'index': idx,
+            'segmentations': segmentations,
+            'label': label,
+            'concepts_to_train': concepts_to_train
+        }
 
 class FeatureDataset(BaseDataset):
     def __init__(
@@ -157,8 +158,13 @@ class FeatureDataset(BaseDataset):
         self.feature_paths = self.data
 
     def __getitem__(self, idx):
-        with Lock(self.feature_paths[idx], 'rb+', timeout=FILE_LOCK_TIMEOUT_S) as f:
-            features: CachedImageFeatures = pickle.load(f)
+        # Load features
+        file_path = self.feature_paths[idx]
+        lock_path = file_path + '.lock'
+
+        with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
+            with open(file_path, 'rb') as f:
+                features: CachedImageFeatures = pickle.load(f)
 
         label = self.labels[idx]
         concepts_to_train = self.concepts_to_train_per_example[idx]
@@ -252,7 +258,10 @@ if __name__ == '__main__':
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
-    from feature_extraction import build_desco, build_sam
+    from feature_extraction import (
+        build_desco,
+        build_sam,
+    )
     from image_processing import build_localizer_and_segmenter
 
     in_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data'
