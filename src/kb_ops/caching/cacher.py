@@ -1,19 +1,24 @@
-import os
-from tqdm import tqdm
-import torch
-from torch import Tensor
-from model.concept import ConceptKB, Concept
-from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
-from typing import Literal
-from model.concept import ConceptExample
-from PIL.Image import open as open_image
-from PIL.Image import Image
-import pickle
-import logging
-from .cached_image_features import CachedImageFeatures
 import hashlib
+import logging
+import os
+import pickle
+from typing import Literal
+
+import torch
+from filelock import FileLock
+from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
+from model.concept import Concept, ConceptExample, ConceptKB
+from PIL.Image import Image
+from PIL.Image import open as open_image
+from torch import Tensor
+from tqdm import tqdm
+
+from .cached_image_features import CachedImageFeatures
 
 logger = logging.getLogger(__name__)
+
+FILE_LOCK_TIMEOUT_S = 10
+LOCK_DIR = "/shared/nas2/knguye71/ecole-june-demo/lock_dir/"
 
 class ConceptKBFeatureCacher:
     '''
@@ -126,8 +131,11 @@ class ConceptKBFeatureCacher:
         if prog_bar is not None:
             prog_bar.set_description(f'Caching segmentations {os.path.basename(example.image_path)}')
 
-        with open(cache_path, 'wb') as f:
-            pickle.dump(segmentations, f)
+        lock_path = LOCK_DIR + os.path.basename(cache_path) + ".lock"
+
+        with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
+            with open(cache_path, 'wb') as f:
+                pickle.dump(segmentations, f)
 
         example.image_segmentations_path = cache_path
 
@@ -178,9 +186,12 @@ class ConceptKBFeatureCacher:
             if example.image_segmentations_path is None:
                 raise RuntimeError('Segmentations must be cached before features can be cached.')
 
-            # Prepare segmentations
-            with open(example.image_segmentations_path, 'rb') as f:
-                segmentations = pickle.load(f)
+            lock_path = LOCK_DIR + os.path.basename(example.image_segmentations_path) + '.lock'
+
+            with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
+                # Prepare segmentations
+                with open(example.image_segmentations_path, 'rb') as f:
+                    segmentations = pickle.load(f)
 
             # Generate zero-shot attributes for each concept
             cached_features = None
@@ -203,8 +214,10 @@ class ConceptKBFeatureCacher:
 
             prog_bar.set_description(f'Caching features {os.path.basename(example.image_path)}')
 
-            with open(cache_path, 'wb') as f:
-                pickle.dump(cached_features, f)
+            lock_path = LOCK_DIR + os.path.basename(cache_path) + '.lock'
+            with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
+                with open(cache_path, 'wb') as f:
+                    pickle.dump(cached_features, f)
 
             example.image_features_path = cache_path
 
@@ -246,8 +259,10 @@ class ConceptKBFeatureCacher:
             if example.image_features_path is None:
                 continue
             else:
-                with open(example.image_features_path, 'rb') as f:
-                    cached_features: CachedImageFeatures = pickle.load(f)
+                lock_path = LOCK_DIR + os.path.basename(example.image_features_path) + '.lock'
+                with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
+                    with open(example.image_features_path, 'rb') as f:
+                        cached_features: CachedImageFeatures = pickle.load(f)
 
                 if ( # Skip if only recaching scores where they are not present, and it is already present in this example
                     only_not_present
@@ -283,16 +298,17 @@ class ConceptKBFeatureCacher:
                         zs_attr_region_scores = zs_attr_scores[1:] # (n_regions, n_zs_attrs)
 
                         offset += n_features
+                        lock_path = LOCK_DIR + os.path.basename(example.image_features_path) + '.lock'
+                        with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
+                            # Update cached features
+                            with open(example.image_features_path, 'r+b') as f:
+                                cached_features: CachedImageFeatures = pickle.load(f)
+                                cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
+                                cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
 
-                        # Update cached features
-                        with open(example.image_features_path, 'r+b') as f:
-                            cached_features: CachedImageFeatures = pickle.load(f)
-                            cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
-                            cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
-
-                            f.seek(0) # Go back to start of file
-                            pickle.dump(cached_features, f)
-                            f.truncate() # Truncate to new size
+                                f.seek(0) # Go back to start of file
+                                pickle.dump(cached_features, f)
+                                f.truncate() # Truncate to new size
 
                     example_batch.clear()
                     visual_features_batch.clear()
@@ -320,8 +336,10 @@ class ConceptKBFeatureCacher:
             if example.image_features_path is None:
                 continue
 
-            with open(example.image_features_path, 'rb') as f:
-                cached_features: CachedImageFeatures = pickle.load(f)
+            lock_path = LOCK_DIR + os.path.basename(example.image_features_path) + '.lock'
+            with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
+                with open(example.image_features_path, 'rb') as f:
+                    cached_features: CachedImageFeatures = pickle.load(f)
 
             # Need to update the cache if the score for any component concept of this concept is missing from the cache
             if any(cached_features.component_concept_scores.get(name, None) is None for name in concept.component_concepts):
@@ -334,9 +352,11 @@ class ConceptKBFeatureCacher:
                     cached_features.component_concept_scores[component_concept] = component_score
 
                 cached_features.cpu() # Back to CPU for saving
+                lock_path = LOCK_DIR + os.path.basename(example.image_features_path) + '.lock'
 
-                # Update cached features
-                with open(example.image_features_path, 'wb') as f:
-                    pickle.dump(cached_features, f)
+                with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
+                    # Update cached features
+                    with open(example.image_features_path, 'wb') as f:
+                        pickle.dump(cached_features, f)
 
                 logger.debug(f'Added concept {concept.name}\'s component concept scores to cached features for example {example.image_path}')

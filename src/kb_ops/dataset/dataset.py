@@ -1,20 +1,22 @@
+import logging
 import os
 import pickle
-from torch.utils.data import Dataset
+from typing import Optional
+
+from filelock import FileLock
 from image_processing import LocalizerAndSegmenter
 from image_processing.localize_and_segment import LocalizeAndSegmentOutput
 from kb_ops.caching import CachedImageFeatures
 from kb_ops.train_test_split import split_from_paths
+from model.concept import ConceptExample, ConceptKB
 from PIL import Image
+from torch.utils.data import Dataset
 from tqdm import tqdm
-from model.concept import ConceptKB, ConceptExample
-from typing import Optional
-from filelock import FileLock
-import logging
 
 logger = logging.getLogger(__file__)
 
 FILE_LOCK_TIMEOUT_S = 10
+LOCK_DIR = "/shared/nas2/knguye71/ecole-june-demo/lock_dir/"
 NEGATIVE_LABEL = '[NEGATIVE_LABEL]'
 
 class BaseDataset(Dataset):
@@ -129,7 +131,7 @@ class PresegmentedDataset(BaseDataset):
     def __getitem__(self, idx):
         # Load segmentations
         file_path = self.segmentation_paths[idx]
-        lock_path = file_path + '.lock'
+        lock_path = LOCK_DIR + os.path.basename(file_path) + '.lock'
 
         with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
             with open(file_path, 'rb') as f:
@@ -160,7 +162,7 @@ class FeatureDataset(BaseDataset):
     def __getitem__(self, idx):
         # Load features
         file_path = self.feature_paths[idx]
-        lock_path = file_path + '.lock'
+        lock_path = LOCK_DIR + os.path.basename(file_path) + '.lock'
 
         with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
             with open(file_path, 'rb') as f:
@@ -258,10 +260,7 @@ if __name__ == '__main__':
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
-    from feature_extraction import (
-        build_desco,
-        build_sam,
-    )
+    from feature_extraction import build_desco, build_sam
     from image_processing import build_localizer_and_segmenter
 
     in_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data'
