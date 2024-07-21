@@ -1,15 +1,18 @@
+import logging
 import os
 import pickle
-from torch.utils.data import Dataset
+import time
+from typing import Optional
+
+import portalocker
 from image_processing import LocalizerAndSegmenter
 from image_processing.localize_and_segment import LocalizeAndSegmentOutput
 from kb_ops.caching import CachedImageFeatures
 from kb_ops.train_test_split import split_from_paths
+from model.concept import ConceptExample, ConceptKB
 from PIL import Image
+from torch.utils.data import Dataset
 from tqdm import tqdm
-from model.concept import ConceptKB, ConceptExample
-from typing import Optional
-import logging
 
 logger = logging.getLogger(__file__)
 
@@ -125,19 +128,28 @@ class PresegmentedDataset(BaseDataset):
         self.segmentation_paths = self.data
 
     def __getitem__(self, idx):
-        with open(self.segmentation_paths[idx], 'rb') as f:
-            segmentations: LocalizeAndSegmentOutput = pickle.load(f)
+        while True:
+            try:
+                with open(self.segmentation_paths[idx], 'rb') as f:
+                    portalocker.lock(f, portalocker.LOCK_SH)  # Acquire a shared lock
+                    try:
+                        segmentations: LocalizeAndSegmentOutput = pickle.load(f)
+                    finally:
+                        portalocker.unlock(f)
 
-        segmentations.input_image = Image.open(segmentations.input_image_path)
-        label = self.labels[idx]
-        concepts_to_train = self.concepts_to_train_per_example[idx]
+                segmentations.input_image = Image.open(segmentations.input_image_path)
+                label = self.labels[idx]
+                concepts_to_train = self.concepts_to_train_per_example[idx]
 
-        return {
-            'index': idx,
-            'segmentations': segmentations,
-            'label': label,
-            'concepts_to_train': concepts_to_train
-        }
+                return {
+                    'index': idx,
+                    'segmentations': segmentations,
+                    'label': label,
+                    'concepts_to_train': concepts_to_train
+                }
+            except portalocker.exceptions.LockException:
+                time.sleep(0.1)  # Wait a short period before trying again
+
 
 class FeatureDataset(BaseDataset):
     def __init__(
@@ -246,10 +258,7 @@ if __name__ == '__main__':
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
-    from feature_extraction import (
-        build_desco,
-        build_sam,
-    )
+    from feature_extraction import build_desco, build_sam
     from image_processing import build_localizer_and_segmenter
 
     in_dir = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/assets/xiaomeng_augmented_data'
