@@ -11,12 +11,9 @@ from kb_ops.caching import CachedImageFeatures
 from kb_ops.train_test_split import split_from_paths
 from model.concept import ConceptExample, ConceptKB
 from PIL import Image
+from portalocker import Lock
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from model.concept import ConceptKB, ConceptExample
-from typing import Optional
-from portalocker import Lock
-import logging
 
 logger = logging.getLogger(__file__)
 
@@ -136,16 +133,16 @@ class PresegmentedDataset(BaseDataset):
         with Lock(self.segmentation_paths[idx], 'rb+', timeout=FILE_LOCK_TIMEOUT_S) as f:
             segmentations: LocalizeAndSegmentOutput = pickle.load(f)
 
-                segmentations.input_image = Image.open(segmentations.input_image_path)
-                label = self.labels[idx]
-                concepts_to_train = self.concepts_to_train_per_example[idx]
+            segmentations.input_image = Image.open(segmentations.input_image_path)
+            label = self.labels[idx]
+            concepts_to_train = self.concepts_to_train_per_example[idx]
 
-                return {
-                    'index': idx,
-                    'segmentations': segmentations,
-                    'label': label,
-                    'concepts_to_train': concepts_to_train
-                }
+            return {
+                'index': idx,
+                'segmentations': segmentations,
+                'label': label,
+                'concepts_to_train': concepts_to_train
+            }
 
 
 class FeatureDataset(BaseDataset):
