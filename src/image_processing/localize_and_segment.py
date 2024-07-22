@@ -67,7 +67,7 @@ class LocalizeAndSegmentOutput(DictDataClass, DeviceShiftable):
 
 @dataclass
 class LocalizerAndSegmenterConfig:
-    do_localize: bool = True
+    do_localize: bool = False
     remove_background: bool = True
     return_crops: bool = True
     use_bbox_for_crops: bool = False
@@ -185,7 +185,7 @@ class LocalizerAndSegmenter:
 
         else: # Non part-based segmentation of localized concept
             logger.info('Performing part segmentation with SAM')
-            part_masks = self.segmenter.segment(image, bboxes[0], remove_background=False) # Don't remove background for part segmentation
+            part_masks = self.segmenter.segment(image, bboxes[0], remove_background=remove_background)
 
         # Construct return dictionary
         output = LocalizeAndSegmentOutput(
