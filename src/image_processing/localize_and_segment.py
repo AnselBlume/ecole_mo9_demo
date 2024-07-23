@@ -1,14 +1,15 @@
-import torch
-from PIL.Image import Image
 import logging
-from image_processing.segment import Segmenter
-from image_processing.localize import Localizer, bbox_from_mask
+from dataclasses import dataclass, field
+
+import torch
 from feature_extraction import Sam
-from utils import ArticleDeterminer
+from image_processing.localize import Localizer, bbox_from_mask
+from image_processing.segment import Segmenter
+from model.dataclass_base import DeviceShiftable, DictDataClass
+from PIL.Image import Image
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from torchvision.utils import draw_bounding_boxes
-from model.dataclass_base import DictDataClass, DeviceShiftable
-from dataclasses import dataclass, field
+from utils import ArticleDeterminer
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ class LocalizeAndSegmentOutput(DictDataClass, DeviceShiftable):
 
 @dataclass
 class LocalizerAndSegmenterConfig:
-    do_localize: bool = False
+    do_localize: bool = True
     remove_background: bool = True
     return_crops: bool = True
     use_bbox_for_crops: bool = False
