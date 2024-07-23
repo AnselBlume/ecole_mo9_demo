@@ -93,17 +93,17 @@ class Segmenter:
         bbox: torch.Tensor,
         remove_background=False,
         pixel_threshold=100,
-        segment_before_crop=False
+        segment_before_crop=True
     ) -> torch.BoolTensor:
         '''
             Segments the region specified by bbox into parts.
 
             Arguments:
                 image (PIL.Image.Image): Image to segment
-                bbox (torch.Tensor): Bounding box of object to segment in XYXY
-                remove_background (bool): Whether to remove background from object after cropping
-                pixel_threshold (int): Minimum number of pixels for a mask to be considered a part
-                segment_before_crop (bool): Whether to segment the entire image before cropping results, instead
+                bbox (torch.Tensor): Bounding box of object to segment in XYXY; for cropping
+                remove_background (bool): Whether to intersect masks with foreground mask of cropped image
+                pixel_threshold (int): Minimum number of pixels for a mask to be output
+                segment_before_crop (bool): Whether to segment the entire image before cropping based on bbox, instead
                     of cropping the image first and then segmenting the cropped image.
 
             Returns:

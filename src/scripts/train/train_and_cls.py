@@ -63,11 +63,16 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument('--cache.root', default='/shared/nas2/blume5/fa23/ecole/cache/xiaomeng_augmented_data_v3', help='Directory to save example cache')
     parser.add_argument('--cache.segmentations', default='segmentations', help='Subdirectory of cache_dir to save segmentations')
     parser.add_argument('--cache.features', default='features', help='Subdirectory of cache_dir to save segmentations')
+    parser.add_argument('--cache.infer_localize_from_component', type=bool, default=True,
+                        help='If True, will infer whether to localize object based on whether the concept is a component concept or not,'
+                            + ' localizing only if it is not a component concept.'
+                            + ' If False, localization will default to the LocalizerAndSegmenter\'s Config\'s default do_localize value.')
 
     parser.add_argument('--cache.negatives.root', default='/shared/nas2/blume5/fa23/ecole/cache/imagenet_rand_1k', help='Directory to save negative example feature cache')
     parser.add_argument('--cache.negatives.features', default='features', help='Subdirectory of cache_dir to save negative example features')
     parser.add_argument('--cache.negatives.segmentations', default='segmentations', help='Subdirectory of cache_dir to save negative example segmentations')
 
+    parser.add_argument('--use_wandb', type=bool, default=True, help='Whether to create a WandB run for logging')
     parser.add_argument('--wandb_project', type=str, default='ecole_mo9_demo', help='WandB project name')
     parser.add_argument('--wandb_dir', default='/shared/nas2/blume5/fa23/ecole', help='WandB log directory')
 
@@ -86,8 +91,7 @@ def get_parser() -> argparse.ArgumentParser:
     # Training
     parser.add_argument('--train.n_epochs', type=int, default=15, help='Number of training epochs')
     parser.add_argument('--train.lr', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--train.backward_every_n_concepts', type=int, default=10, help='Number of concepts to add losses for between backward calls. Higher values are faster but consume more memory')
-    parser.add_argument('--train.imgs_per_optim_step', type=int, default=4, help='Number of images to accumulate gradients over before stepping optimizer')
+    parser.add_argument('--train.batch_size', type=int, default=32, help='Batch size of images for each concept')
     parser.add_argument('--train.ckpt_every_n_epochs', type=int, default=1, help='Number of epochs between checkpoints')
     parser.add_argument('--train.ckpt_dir', type=str, default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb', help='Directory to save model checkpoints')
 
@@ -101,8 +105,10 @@ def get_parser() -> argparse.ArgumentParser:
 
 def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: ConceptKB = None):
     # %%
-    run = wandb.init(project=args.wandb_project, config=args.as_flat(), dir=args.wandb_dir, reinit=True)
-    # run = None # Comment me to use wandb
+    if args.use_wandb:
+        run = wandb.init(project=args.wandb_project, config=args.as_flat(), dir=args.wandb_dir, reinit=True)
+    else:
+        run = None
 
     # Import here so DesCo sees the CUDA device change
     from feature_extraction import (build_desco, build_feature_extractor,
@@ -182,7 +188,8 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
         feature_pipeline=feature_pipeline,
         cache_dir=args.cache.root,
         segmentations_sub_dir=args.cache.segmentations,
-        features_sub_dir=args.cache.features
+        features_sub_dir=args.cache.features,
+        infer_localize_from_component=args.cache.infer_localize_from_component
     )
     cacher.cache_segmentations()
     cacher.cache_features()
@@ -208,18 +215,15 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     parser.save(args, os.path.join(checkpoint_dir, 'args.yaml'))
 
     # Train
-    trainer.train(
+    trainer.train_batched(
         train_ds=train_ds,
         val_ds=val_ds,
         n_epochs=args.train.n_epochs,
         lr=args.train.lr,
-        backward_every_n_concepts=args.train.backward_every_n_concepts,
-        imgs_per_optim_step=args.train.imgs_per_optim_step,
+        batch_size=args.train.batch_size,
         ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
         ckpt_dir=checkpoint_dir
     )
-
-# %%
 
 # %%
 if __name__ == '__main__':

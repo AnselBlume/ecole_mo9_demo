@@ -27,20 +27,23 @@ if __name__ == '__main__':
     parser = get_parser()
     args = parse_args(parser, config_str='''
         # ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_01-00:57:58-85pf2vzt-no_bp_no_cj_no_localize/concept_kb_epoch_50.pt
-        # cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v1/no_localize
 
-        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_and_guns_v2
+        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_and_guns_v3
 
         train:
             # limit_global_negatives: 5
-            split: [1., 0, 0]
-            n_epochs: 50
+            split: [1., 0., 0]
+            n_epochs: 500
+            lr: 1e-3
 
         extract_label_from: directory
 
-        # XXX This MUST be changed to a directory which we don't care about to not overwrite checkpoints
-        # cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_v3/pp_gun
-        cache.root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_and_guns_v2/change_me
+        cache:
+            # XXX This MUST be changed to a directory which we don't care about to not overwrite checkpoints
+            # root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_and_guns_v3/all_v1_no_infer_localize_use_containing_concepts
+            root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_and_guns_v3/change_me
+
+            infer_localize_from_component: false
 
         wandb_project: ecole_june_demo_2024
 
@@ -49,11 +52,11 @@ if __name__ == '__main__':
             compute_component_concept_scores: false
 
         loc_and_seg_config:
-            do_localize: false
+            do_localize: true
 
         example_sampler_config:
             use_descendants_as_positives: true
-            use_containing_concepts_for_positives: false
+            use_containing_concepts_for_positives: true
 
         hierarchy_config:
             concepts:
@@ -65,17 +68,17 @@ if __name__ == '__main__':
                 - fighter jet
 
                 - gun
-                # - assault rifle
                 - sniper rifle
                 - machine gun
                 - pistol
+                # - assault rifle
 
                 # Component concepts
                 - propulsion component
                 - wings
                 - wing-mounted engine
                 - bulky fuselage
-                # - openable nose
+                - openable nose
                 - row of windows
                 - double wings
                 - fixed landing gear
