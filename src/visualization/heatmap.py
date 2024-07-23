@@ -43,7 +43,7 @@ class HeatmapVisualizerConfig:
 
     # Clamp settings
     clamp_radius: int = 5
-    clamp_center: int = 6
+    clamp_center: int = 5
     clamp_discretize_bounds: tuple[float, float] =  (.2, .8) # Bounds for the central bucket when discretizing into -, 0, +
     discretize_clamp: bool = True
 
