@@ -51,28 +51,21 @@ class HeatmapWriter:
 if __name__ == '__main__':
     ckpt_paths = [
         # No component background removal
-        # '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-00:16:09/concept_kb_epoch_100.pt',
-        # '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-00:16:09/concept_kb_epoch_200.pt',
-        # '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-00:16:09/concept_kb_epoch_300.pt',
-        # '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-00:16:09/concept_kb_epoch_400.pt',
+        # '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-00:16:09-all_planes_and_guns_v3-rm_bg/concept_kb_epoch_300.pt'
+        # '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-00:16:09-all_planes_and_guns_v3-rm_bg/concept_kb_epoch_400.pt'
 
         # With component background removal
-        '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-02:04:37/concept_kb_epoch_100.pt',
-        '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-02:04:37/concept_kb_epoch_200.pt',
-        '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-02:04:37/concept_kb_epoch_300.pt',
-        '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-02:04:37/concept_kb_epoch_400.pt',
+        '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-02:04:37-all_planes_and_guns_v3-rm_bg_with_component_rem_bg/concept_kb_epoch_400.pt',
 
         # With component background removal and containing concept training
-        '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-02:35:55/concept_kb_epoch_100.pt',
-        '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-02:35:55/concept_kb_epoch_200.pt',
-        '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-02:35:55/concept_kb_epoch_300.pt',
-        '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-02:35:55/concept_kb_epoch_400.pt',
+        '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_07_23-02:35:55-all_planes_and_guns_v3-rm_bg_with_component_rm_bg_containing_positives/concept_kb_epoch_400.pt',
     ]
 
     test_img_paths = [
         '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/2024_july_demo/inference_examples/1-biplane.jpg',
-        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/2024_july_demo/inference_examples/1-biplane.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/2024_july_demo/inference_examples/1-biplane_2.jpg',
         '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/2024_july_demo/inference_examples/1-cargo_jet.jpg',
+        '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/2024_july_demo/inference_examples/1-cargo_jet_2.jpg',
         '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/2024_july_demo/inference_examples/2-fighter_jet.jpg',
         '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/2024_july_demo/inference_examples/3-machine_gun.jpeg',
     ]
@@ -80,6 +73,7 @@ if __name__ == '__main__':
     concepts_to_visualize = [
         'biplane',
         'biplane',
+        'cargo jet',
         'cargo jet',
         'fighter jet',
         'machine gun'
