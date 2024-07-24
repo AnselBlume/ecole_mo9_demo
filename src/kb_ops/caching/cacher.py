@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 from model.concept import ConceptKB, Concept
 from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
-from typing import Literal
+from typing import Literal, BinaryIO
 from model.concept import ConceptExample
 from PIL.Image import open as open_image
 from PIL.Image import Image
@@ -12,6 +12,8 @@ import pickle
 import logging
 from .cached_image_features import CachedImageFeatures
 import hashlib
+from readerwriterlock.rwlock import Lockable
+from kb_ops.concurrency import load_pickle, dump_pickle, exec_file_op
 
 logger = logging.getLogger(__name__)
 
@@ -212,17 +214,28 @@ class ConceptKBFeatureCacher:
         concept: Concept,
         examples: list[ConceptExample] = None,
         only_not_present: bool = False,
-        batch_size: int = 128
+        batch_size: int = 128,
+        path_to_reader_lock: dict[str, Lockable] = {},
+        path_to_writer_lock: dict[str, Lockable] = {}
     ):
         '''
             Recaches zero-shot attribute features for the specified Concept across all Concepts' examples in the
             ConceptKB.
 
-            If examples are provided, only recaches features for the specified examples (to save time instead of
-            recaching for all in the concept_kb).
+            Args:
+                concept (Concept): Concept for which to recache zs attribute features.
 
-            If only_not_present is True, only recaches features for examples which do not have the specified
-            concept's zero-shot attribute features. So this will not overwrite existing zs attribute features.
+                examples (list[ConceptExample]): List of examples to recache zs attribute features for. If not
+                    provided, recaches for all examples in the ConceptKB.
+
+                only_not_present (bool): If True, only recaches features for examples which do not have the specified
+                    concept's zero-shot attribute features. So this will not overwrite existing zs attribute features.
+
+                batch_size (int): Number of examples to process in a batch.
+
+                path_to_reader_lock (dict[str, Lockable]): Dictionary mapping paths to locks for reading files.
+
+                path_to_writer_lock (dict[str, Lockable]): Dictionary mapping paths to locks for writing files.
         '''
         if not len(concept.zs_attributes):
             return
@@ -241,12 +254,25 @@ class ConceptKBFeatureCacher:
                 texts=[attr.query for attr in concept.zs_attributes]
             ).to(clip_device)
 
+        # Function to update cached features with new scores
+        def get_feature_updater(zs_attr_img_scores: Tensor, zs_attr_region_scores: Tensor):
+            def feature_updater(file: BinaryIO):
+                # Assumes file was opened in r+b mode to allow loading and dumping
+                cached_features: CachedImageFeatures = pickle.load(file)
+                cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
+                cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
+
+                file.seek(0) # Go back to start of file
+                pickle.dump(cached_features, file)
+                file.truncate() # Truncate to new size
+
+            return feature_updater
+
         for i, example in enumerate(examples):
             if example.image_features_path is None:
                 continue
             else:
-                with open(example.image_features_path, 'rb') as f:
-                    cached_features: CachedImageFeatures = pickle.load(f)
+                cached_features: CachedImageFeatures = load_pickle(example.image_features_path, path_to_lock=path_to_reader_lock)
 
                 if ( # Skip if only recaching scores where they are not present, and it is already present in this example
                     only_not_present
@@ -284,20 +310,24 @@ class ConceptKBFeatureCacher:
                         offset += n_features
 
                         # Update cached features
-                        with open(example.image_features_path, 'r+b') as f:
-                            cached_features: CachedImageFeatures = pickle.load(f)
-                            cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
-                            cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
-
-                            f.seek(0) # Go back to start of file
-                            pickle.dump(cached_features, f)
-                            f.truncate() # Truncate to new size
+                        exec_file_op(
+                            path=example.image_features_path,
+                            file_open_mode='r+b',
+                            operation=get_feature_updater(zs_attr_img_scores, zs_attr_region_scores),
+                            path_to_lock=path_to_writer_lock
+                        )
 
                     example_batch.clear()
                     visual_features_batch.clear()
                     n_features_per_example.clear()
 
-    def recache_component_concept_scores(self, concept: Concept, examples: list[ConceptExample] = None):
+    def recache_component_concept_scores(
+        self,
+        concept: Concept,
+        examples: list[ConceptExample] = None,
+        path_to_reader_lock: dict[str, Lockable] = {},
+        path_to_writer_lock: dict[str, Lockable] = {}
+    ):
         '''
             Recaches component concept scores for the specified Concept across all Concepts' examples in the
             ConceptKB. Automatically computes scores only for concepts which are not already cached (handled in
@@ -306,8 +336,15 @@ class ConceptKBFeatureCacher:
             NOTE Should be called ONLY if the component concept scores are fixed for a given concept-image pair
             (e.g. when using a fixed model, like DesCo, to compute the scores).
 
-            If examples are provided, only recaches features for the specified examples (to save time instead of
-            recaching for all in the concept_kb).
+            Args:
+                concept (Concept): Concept for which to recache component concept scores.
+
+                examples (list[ConceptExample]): List of examples to recache component concept scores for. If not
+                    provided, recaches for all examples in the ConceptKB.
+
+                path_to_reader_lock (dict[str, Lockable]): Dictionary mapping paths to locks for reading files.
+
+                path_to_writer_lock (dict[str, Lockable]): Dictionary mapping paths to locks for writing files.
         '''
         # TODO Batch this process
         if not self.feature_pipeline.config.compute_component_concept_scores:
@@ -319,11 +356,10 @@ class ConceptKBFeatureCacher:
             if example.image_features_path is None:
                 continue
 
-            with open(example.image_features_path, 'rb') as f:
-                cached_features: CachedImageFeatures = pickle.load(f)
+            cached_features: CachedImageFeatures = load_pickle(example.image_features_path, path_to_lock=path_to_reader_lock)
 
             # Need to update the cache if the score for any component concept of this concept is missing from the cache
-            if any(cached_features.component_concept_scores.get(name, None) is None for name in concept.component_concepts):
+            if any(name not in cached_features.component_concept_scores for name in concept.component_concepts):
                 # While this looks like it is recomputing all component concept scores for the concept, the _get_component_concept_scores
                 # method actually only computes the scores for those which don't already exist
                 cached_features.cuda()
@@ -335,7 +371,6 @@ class ConceptKBFeatureCacher:
                 cached_features.cpu() # Back to CPU for saving
 
                 # Update cached features
-                with open(example.image_features_path, 'wb') as f:
-                    pickle.dump(cached_features, f)
+                dump_pickle(cached_features, example.image_features_path, path_to_lock=path_to_writer_lock)
 
                 logger.debug(f'Added concept {concept.name}\'s component concept scores to cached features for example {example.image_path}')
