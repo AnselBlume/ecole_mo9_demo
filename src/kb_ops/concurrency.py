@@ -10,7 +10,7 @@ def load_pickle(path: str, lock: Lockable = None, path_to_lock: dict[str, Lockab
     '''
     return exec_file_op(
         path,
-        file_options='rb',
+        file_open_mode='rb',
         operation=pickle.load,
         lock=lock,
         path_to_lock=path_to_lock
@@ -24,7 +24,7 @@ def dump_pickle(obj: Any, path: str, lock: Lockable = None, path_to_lock: dict[s
     '''
     return exec_file_op(
         path,
-        file_options='wb',
+        file_open_mode='wb',
         operation=lambda f: pickle.dump(obj, f),
         lock=lock,
         path_to_lock=path_to_lock
@@ -32,7 +32,7 @@ def dump_pickle(obj: Any, path: str, lock: Lockable = None, path_to_lock: dict[s
 
 def exec_file_op(
     path: str,
-    file_options: str = 'rb',
+    file_open_mode: str = 'rb',
     operation: Callable[[IO], Any] = pickle.load,
     lock: Lockable = None,
     path_to_lock: dict[str, Lockable] = {}
@@ -44,7 +44,7 @@ def exec_file_op(
 
         Args:
             path (str): Path to the file
-            file_options (str): Options to open the file with
+            file_open_mode (str): Mode to open the file with
             operation (Callable[[IO], Any]): Operation to perform on the file
             lock (Lockable): Lock to use. Takes precedence over path_to_lock
             path_to_lock (dict[str, Lockable]): Dictionary mapping paths to locks
@@ -69,7 +69,7 @@ def exec_file_op(
     if lock:
         lock.acquire()
 
-    with open(path, file_options) as f:
+    with open(path, file_open_mode) as f:
         result = operation(f)
 
     if lock:
