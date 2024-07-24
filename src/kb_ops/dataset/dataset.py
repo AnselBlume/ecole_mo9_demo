@@ -7,14 +7,12 @@ from filelock import FileLock
 from image_processing import LocalizerAndSegmenter
 from image_processing.localize_and_segment import LocalizeAndSegmentOutput
 from kb_ops.caching import CachedImageFeatures
+from kb_ops.caching.cacher import LOCK_DIR
 from kb_ops.train_test_split import split_from_paths
 from model.concept import ConceptExample, ConceptKB
 from PIL import Image
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from model.concept import ConceptKB, ConceptExample
-from typing import Optional
-import logging
 
 logger = logging.getLogger(__file__)
 
@@ -130,8 +128,10 @@ class PresegmentedDataset(BaseDataset):
         self.segmentation_paths = self.data
 
     def __getitem__(self, idx):
-        with open(self.segmentation_paths[idx], 'rb') as f:
-            segmentations: LocalizeAndSegmentOutput = pickle.load(f)
+        
+        with FileLock(os.path.join(LOCK_DIR, f'{self.feature_paths[idx]}.lock')):
+            with open(self.segmentation_paths[idx], 'rb') as f:
+                segmentations: LocalizeAndSegmentOutput = pickle.load(f)
 
         segmentations.input_image = Image.open(segmentations.input_image_path)
         label = self.labels[idx]
@@ -156,8 +156,9 @@ class FeatureDataset(BaseDataset):
         self.feature_paths = self.data
 
     def __getitem__(self, idx):
-        with open(self.feature_paths[idx], 'rb') as f:
-            features: CachedImageFeatures = pickle.load(f)
+        with FileLock(os.path.join(LOCK_DIR, f'{os.path.basename(self.feature_paths[idx])}.lock')):
+            with open(self.feature_paths[idx], 'rb') as f:
+                features: CachedImageFeatures = pickle.load(f)
 
         label = self.labels[idx]
         concepts_to_train = self.concepts_to_train_per_example[idx]
@@ -244,8 +245,9 @@ def preprocess_segmentations(img_dir: str, out_dir: str, loc_and_seg: LocalizerA
         segmentations = loc_and_seg.localize_and_segment(img)
         segmentations.input_image_path = in_path
 
-        with open(out_path, 'wb') as f:
-            pickle.dump(segmentations, f)
+        with FileLock(os.path.join(LOCK_DIR, f"{os.path.basename(out_path)}.lock")):
+            with open(out_path, 'wb') as f:
+                pickle.dump(segmentations, f)
 
 if __name__ == '__main__':
     import os
