@@ -11,6 +11,7 @@ from model.concept import ConceptKB, ConceptExample
 from typing import Optional
 import logging
 from readerwriterlock.rwlock import Lockable
+from kb_ops.concurrency import load_pickle
 
 logger = logging.getLogger(__file__)
 
@@ -52,7 +53,7 @@ class BaseDataset(Dataset):
         self.data = list(data)
         self.labels = list(labels)
         self.concepts_to_train_per_example = list(concepts_to_train_per_example)
-        self.path_to_reader_lock = path_to_lock
+        self.path_to_lock = path_to_lock
 
     def extend(self, data: list, labels: list[str], concepts_to_train_per_example: list[list[str]] = None, train_all_concepts_if_unspecified: bool = False):
         '''
@@ -67,27 +68,6 @@ class BaseDataset(Dataset):
         self.data.extend(data)
         self.labels.extend(labels)
         self.concepts_to_train_per_example.extend(concepts_to_train_per_example)
-
-    def _load_pickle(self, path: str):
-        '''
-            Loads a pickle file from a path, acquiring a reader lock if locks are provided.
-        '''
-        if self.path_to_reader_lock:
-            if path not in self.path_to_reader_lock:
-                raise RuntimeError(f'No reader lock found for path {path}.')
-
-            lock = self.path_to_reader_lock[path]
-            lock.acquire()
-        else:
-            lock = None
-
-        with open(path, 'rb') as f:
-            data = pickle.load(f)
-
-        if lock:
-            lock.release()
-
-        return data
 
     def __len__(self):
         return len(self.data)
@@ -170,8 +150,9 @@ class PresegmentedDataset(BaseDataset):
         self.segmentation_paths = self.data
 
     def __getitem__(self, idx):
-        segmentations: LocalizeAndSegmentOutput = self._load_pickle(self.segmentation_paths[idx])
+        segmentations: LocalizeAndSegmentOutput = load_pickle(self.segmentation_paths[idx], path_to_lock=self.path_to_lock)
         segmentations.input_image = Image.open(segmentations.input_image_path)
+
         label = self.labels[idx]
         concepts_to_train = self.concepts_to_train_per_example[idx]
 
@@ -201,7 +182,7 @@ class FeatureDataset(BaseDataset):
         self.feature_paths = self.data
 
     def __getitem__(self, idx):
-        features: CachedImageFeatures = self._load_pickle(self.feature_paths[idx])
+        features: CachedImageFeatures = load_pickle(self.feature_paths[idx], path_to_lock=self.path_to_lock)
 
         label = self.labels[idx]
         concepts_to_train = self.concepts_to_train_per_example[idx]
