@@ -1,17 +1,20 @@
 from __future__ import annotations
-from dataclasses import dataclass
-from torch.nn import Parameter
-from model.attribute import Attribute
-from itertools import chain
-from .concept_predictor import ConceptPredictor
-from collections import deque
-import pickle
-from tqdm import tqdm
+
 import logging
-from utils import ArticleDeterminer
-from typing import Iterable, Union, Any
-from .concept import Concept, ConceptExample
+import pickle
+from collections import deque
+from dataclasses import dataclass
+from itertools import chain
+from typing import Any, Iterable, Union
+
 from llm import LLMClient, retrieve_attributes
+from model.attribute import Attribute
+from torch.nn import Parameter
+from tqdm import tqdm
+from utils import ArticleDeterminer
+
+from .concept import Concept, ConceptExample
+from .concept_predictor import ConceptPredictor
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +172,15 @@ class ConceptKB:
             concept.predictor.eval()
 
         return self
+    
+    def eval(self) -> ConceptKB:
+        '''
+            Sets all concept predictors to eval mode.
+        '''
+        for concept in self.concepts:
+            concept.predictor.eval()
+            
+        return self
 
     def to(self, device) -> ConceptKB:
         '''
@@ -176,6 +188,7 @@ class ConceptKB:
         '''
         for concept in self.concepts:
             concept.predictor.to(device)
+        return self
 
     def device(self) -> str:
         '''
