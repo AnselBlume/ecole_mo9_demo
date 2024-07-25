@@ -76,6 +76,9 @@ class ConceptKB:
     def concepts(self) -> list[Concept]:
         return self.get_concepts()
 
+    def clear_concepts(self):
+        self._concepts = {}
+
     def markov_blanket(self, concept: Concept, include_component_concept_roots: bool = False) -> list[Concept]:
         '''
             Returns the set of concepts which influence the prediction of this concept when traversing the graph from
