@@ -7,6 +7,7 @@ from feature_extraction import Sam, GLIPDemo
 from utils import ArticleDeterminer
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from torchvision.utils import draw_bounding_boxes
+from typing import Union
 from model.dataclass_base import DictDataClass, DeviceShiftable
 from dataclasses import dataclass, field
 
@@ -88,6 +89,12 @@ class LocalizerAndSegmenter:
         self.config = config
 
         self.article_det = ArticleDeterminer()
+
+    def to(self, device: Union[str, torch.device]):
+        self.localizer.to(device)
+        self.segmenter.to(device)
+
+        return self
 
     @torch.inference_mode()
     def localize_and_segment(

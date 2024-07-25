@@ -23,6 +23,18 @@ class ConceptKBFeaturePipeline:
         self.feature_extractor = feature_extractor
         self.config = config
 
+    def cuda(self):
+        return self.to('cuda')
+
+    def cpu(self):
+        return self.to('cpu')
+
+    def to(self, device: Union[str, torch.device]):
+        self.loc_and_seg.to(device)
+        self.feature_extractor.to(device)
+
+        return self
+
     def get_segmentations(
         self,
         image: Image,
