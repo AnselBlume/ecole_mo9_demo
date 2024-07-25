@@ -12,7 +12,6 @@ from kb_ops.dataset import FeatureDataset
 import traceback
 import sys
 from kb_ops.concurrency import MultiprocessingToThreadingLockAdapter
-import multiprocessing as mp
 import logging
 
 logger = logging.getLogger(__file__)
@@ -22,6 +21,7 @@ tmp_dir = '/scratch/tmp'
 os.makedirs(tmp_dir, exist_ok=True)
 os.environ['TMPDIR'] = tmp_dir
 
+import multiprocessing as mp # Must be imported after setting TMPDIR to change default temp dir
 mp.set_start_method('spawn', force=True) # Necessary for CUDA to work in spawned processes
 
 def _launch_training(
@@ -136,7 +136,7 @@ class ControllerTrainParallelMixin(ControllerTrainMixinBase):
             return process_locks
 
         start_time = time.time()
-        while concept_selector.num_concepts_remaining > 0:
+        while not concept_selector.is_training_complete:
             if len(available_devices) == 0 or not concept_selector.has_concept_available():
                 # Wait for a process to complete
                 trained_concept, device = return_queue.get() # Blocks until a process completes
@@ -151,9 +151,9 @@ class ControllerTrainParallelMixin(ControllerTrainMixinBase):
                 available_devices.append(device)
                 concept_selector.mark_concept_completed(concept)
 
-                logger.info(f'Concept training complete: {concept.name}; {concept_selector.num_concepts_remaining} concepts remaining')
+                logger.info(f'Concept training complete: {concept.name}; {concept_selector.num_concepts_incomplete} concepts remaining')
 
-                if concept_selector.num_concepts_remaining == 0: # This was the last concept
+                if concept_selector.is_training_complete: # This was the last concept
                     break
 
                 # We may still be waiting on a dependency for the next concept

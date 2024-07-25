@@ -9,15 +9,18 @@ class ConcurrentTrainingConceptSelector:
         self._leaf_concepts = deque([c for c in self._remaining_dependencies if len(self._remaining_dependencies[c]) == 0])
 
         self._completed_concepts = []
-        self._popped_concepts = []
 
     @property
-    def num_concepts_remaining(self) -> int:
-        return len(self.concepts_to_train) - len(self._popped_concepts)
+    def num_concepts_incomplete(self):
+        return len(self.concepts_to_train) - self.num_concepts_completed
 
     @property
     def num_concepts_completed(self) -> int:
         return len(self._completed_concepts)
+
+    @property
+    def is_training_complete(self) -> bool:
+        return self.num_concepts_completed == len(self.concepts_to_train)
 
     def get_next_concept(self) -> Concept:
         '''
@@ -28,7 +31,6 @@ class ConcurrentTrainingConceptSelector:
             raise IndexError('No leaf concepts available to train')
 
         next_concept = self._leaf_concepts.popleft()
-        self._popped_concepts.append(next_concept)
 
         return next_concept
 
