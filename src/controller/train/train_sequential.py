@@ -120,7 +120,7 @@ class ControllerTrainSequentialMixin(ControllerTrainMixinBase):
 
         concept_selector = ConcurrentTrainingConceptSelector(list(concepts_to_train))
 
-        while concept_selector.num_concepts_remaining > 0:
+        while not concept_selector.is_training_complete:
             concept = concept_selector.get_next_concept()
 
             examples, dataset = self.trainer.construct_dataset_for_concept_training(concept, use_concepts_as_negatives=use_concepts_as_negatives)
