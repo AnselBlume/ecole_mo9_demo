@@ -46,7 +46,7 @@ def _launch_training(
 
         # Train for fixed number of epochs
         trainer.train_concept(
-            concept,
+            concept_name,
             samples_and_dataset=(examples, dataset),
             n_epochs=n_epochs,
             **train_concept_kwargs,

@@ -164,7 +164,7 @@ class ConceptKB:
 
         return self
 
-    def train(self) -> ConceptKB:
+    def eval(self) -> ConceptKB:
         '''
             Sets all concept predictors to eval mode.
         '''
