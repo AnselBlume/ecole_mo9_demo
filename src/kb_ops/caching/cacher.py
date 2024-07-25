@@ -1,24 +1,24 @@
-import os
-from tqdm import tqdm
-import torch
-from torch import Tensor
-from model.concept import ConceptKB, Concept
-from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
-from typing import Literal, BinaryIO
-from model.concept import ConceptExample
-from PIL.Image import open as open_image
-from PIL.Image import Image
-import pickle
-import logging
-from .cached_image_features import CachedImageFeatures
 import hashlib
+import logging
+import os
+import pickle
+from typing import BinaryIO, Literal
+
+import torch
+from kb_ops.concurrency import dump_pickle, exec_file_op, load_pickle
+from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
+from model.concept import Concept, ConceptExample, ConceptKB
+from PIL.Image import Image
+from PIL.Image import open as open_image
 from readerwriterlock.rwlock import Lockable
-from kb_ops.concurrency import load_pickle, dump_pickle, exec_file_op
+from torch import Tensor
+from tqdm import tqdm
+
+from .cached_image_features import CachedImageFeatures
 
 logger = logging.getLogger(__name__)
 
 FILE_LOCK_TIMEOUT_S = 10
-LOCK_DIR = "/shared/nas2/knguye71/ecole-june-demo/lock_dir/"
 
 class ConceptKBFeatureCacher:
     '''
@@ -131,11 +131,9 @@ class ConceptKBFeatureCacher:
         if prog_bar is not None:
             prog_bar.set_description(f'Caching segmentations {os.path.basename(example.image_path)}')
 
-        lock_path = LOCK_DIR + os.path.basename(cache_path) + ".lock"
 
-        with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
-            with open(cache_path, 'wb') as f:
-                pickle.dump(segmentations, f)
+        with open(cache_path, 'wb') as f:
+            pickle.dump(segmentations, f)
 
         example.image_segmentations_path = cache_path
 
@@ -186,12 +184,9 @@ class ConceptKBFeatureCacher:
             if example.image_segmentations_path is None:
                 raise RuntimeError('Segmentations must be cached before features can be cached.')
 
-            lock_path = LOCK_DIR + os.path.basename(example.image_segmentations_path) + '.lock'
-
-            with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
-                # Prepare segmentations
-                with open(example.image_segmentations_path, 'rb') as f:
-                    segmentations = pickle.load(f)
+            # Prepare segmentations
+            with open(example.image_segmentations_path, 'rb') as f:
+                segmentations = pickle.load(f)
 
             # Generate zero-shot attributes for each concept
             cached_features = None
@@ -214,10 +209,8 @@ class ConceptKBFeatureCacher:
 
             prog_bar.set_description(f'Caching features {os.path.basename(example.image_path)}')
 
-            lock_path = LOCK_DIR + os.path.basename(cache_path) + '.lock'
-            with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
-                with open(cache_path, 'wb') as f:
-                    pickle.dump(cached_features, f)
+            with open(cache_path, 'wb') as f:
+                pickle.dump(cached_features, f)
 
             example.image_features_path = cache_path
 
@@ -320,13 +313,11 @@ class ConceptKBFeatureCacher:
                         zs_attr_region_scores = zs_attr_scores[1:] # (n_regions, n_zs_attrs)
 
                         offset += n_features
-                        lock_path = LOCK_DIR + os.path.basename(example.image_features_path) + '.lock'
-                        with FileLock(lock_path, timeout=FILE_LOCK_TIMEOUT_S):
-                            # Update cached features
-                            with open(example.image_features_path, 'r+b') as f:
-                                cached_features: CachedImageFeatures = pickle.load(f)
-                                cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
-                                cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
+                        # Update cached features
+                        with open(example.image_features_path, 'r+b') as f:
+                            cached_features: CachedImageFeatures = pickle.load(f)
+                            cached_features.concept_to_zs_attr_img_scores[concept.name] = zs_attr_img_scores
+                            cached_features.concept_to_zs_attr_region_scores[concept.name] = zs_attr_region_scores
 
                         # Update cached features
                         exec_file_op(
@@ -388,7 +379,6 @@ class ConceptKBFeatureCacher:
                     cached_features.component_concept_scores[component_concept] = component_score
 
                 cached_features.cpu() # Back to CPU for saving
-                lock_path = LOCK_DIR + os.path.basename(example.image_features_path) + '.lock'
 
                 # Update cached features
                 dump_pickle(cached_features, example.image_features_path, path_to_lock=path_to_writer_lock)

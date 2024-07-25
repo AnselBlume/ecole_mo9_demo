@@ -7,17 +7,13 @@ from filelock import FileLock
 from image_processing import LocalizerAndSegmenter
 from image_processing.localize_and_segment import LocalizeAndSegmentOutput
 from kb_ops.caching import CachedImageFeatures
-from kb_ops.caching.cacher import LOCK_DIR
+from kb_ops.concurrency import load_pickle
 from kb_ops.train_test_split import split_from_paths
 from model.concept import ConceptExample, ConceptKB
 from PIL import Image
+from readerwriterlock.rwlock import Lockable
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from model.concept import ConceptKB, ConceptExample
-from typing import Optional
-import logging
-from readerwriterlock.rwlock import Lockable
-from kb_ops.concurrency import load_pickle
 
 logger = logging.getLogger(__file__)
 
@@ -274,10 +270,9 @@ def preprocess_segmentations(img_dir: str, out_dir: str, loc_and_seg: LocalizerA
         img = Image.open(in_path).convert('RGB')
         segmentations = loc_and_seg.localize_and_segment(img)
         segmentations.input_image_path = in_path
-
-        with FileLock(os.path.join(LOCK_DIR, f"{os.path.basename(out_path)}.lock")):
-            with open(out_path, 'wb') as f:
-                pickle.dump(segmentations, f)
+        
+        with open(out_path, 'wb') as f:
+            pickle.dump(segmentations, f)
 
 if __name__ == '__main__':
     import os
