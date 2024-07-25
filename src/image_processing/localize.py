@@ -92,6 +92,16 @@ class Localizer:
         self.desco = desco
         self.sam = build_sam_predictor(model=sam)
 
+    def to(self, device: Union[str, torch.device]):
+        '''
+            Moves the localizer to the specified device.
+        '''
+        if desco:
+            self.desco.model.to(device)
+        self.sam.model.to(device)
+
+        return self
+
     def rembg_ground(self, img: Image, return_mask: bool = False) -> torch.IntTensor:
         '''
             Returns tensor of shape (1, 4), where the last dim specifies (x1, y1, x2, y2),

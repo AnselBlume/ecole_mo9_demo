@@ -1,3 +1,4 @@
+from .base import BaseController
 import PIL
 from kb_ops.predict import PredictOutput
 from model.concept import Concept

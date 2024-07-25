@@ -14,6 +14,7 @@ from rembg import remove, new_session
 from torchvision.transforms.functional import crop, to_pil_image, pil_to_tensor
 from torchvision.ops import box_convert
 import numpy as np
+from typing import Union
 from image_processing.localize import bbox_from_mask
 import logging
 logger = logging.getLogger(__name__)
@@ -22,6 +23,16 @@ class Segmenter:
     def __init__(self, sam: Sam, rembg_model_name: str = 'isnet-general-use'):
         self.sam_amg = build_sam_amg(sam, part_based=True)
         self.rembg_session = new_session(model_name=rembg_model_name)
+
+    def to(self, device: Union[str, torch.device]):
+        '''
+            Moves the segmenter to the specified device.
+
+            Arguments:
+                device (Union[str, torch.device]): Device to move segmenter to
+        '''
+        self.sam_amg.predictor.model.to(device)
+        return self
 
     def remove_background(self, image: Image)-> Image:
         '''

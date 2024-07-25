@@ -1,12 +1,9 @@
-from typing import Literal, Union
-
+from .base import BaseController
 import torch
 from PIL.Image import Image
 from visualization.vis_utils import (plot_concept_differences,
                                      plot_image_differences,
                                      plot_zs_attr_differences)
-
-from .base import BaseController
 
 
 class ControllerInterpretationMixin(BaseController):

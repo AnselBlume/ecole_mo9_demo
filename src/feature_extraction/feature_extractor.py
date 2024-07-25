@@ -8,6 +8,7 @@ from feature_extraction import (
     DINOFeatureExtractor,
     DINOTrainedAttributePredictor
 )
+from typing import Union
 from PIL.Image import Image
 from model.features import ImageFeatures
 from feature_extraction.dino_features import get_rescaled_features, region_pool, interpolate_masks
@@ -41,6 +42,17 @@ class FeatureExtractor(nn.Module):
         self.clip_feature_extractor = CLIPFeatureExtractor(clip, processor)
         self.trained_attr_predictor = DINOTrainedAttributePredictor(self.dino_feature_extractor, device=self.dino_feature_extractor.device)
         self.zs_attr_predictor = CLIPAttributePredictor(clip, processor)
+
+    def to(self, device: Union[str, torch.device]):
+        self.dino_feature_extractor.to(device)
+        self.clip_feature_extractor.to(device)
+        self.trained_attr_predictor.to(device)
+        self.zs_attr_predictor.clip.to(device)
+
+        if self.desco:
+            self.desco.model.to(device)
+
+        return self
 
     def forward(
         self,

@@ -2,7 +2,8 @@ from typing import Any, Callable, Literal, Optional
 
 from kb_ops.dataset import FeatureDataset
 from model.concept import Concept, ConceptExample
-
+from typing import Union
+from .outputs import TrainOutput
 from .batched_trainer import ConceptKBBatchedTrainerMixin
 from .outputs import TrainOutput
 from .sgd_trainer import ConceptKBSGDTrainerMixin
@@ -14,7 +15,7 @@ class ConceptKBTrainer(
 ):
     def train_concept(
         self,
-        concept: Concept,
+        concept: Union[str, Concept],
         *, # Force the use of kwargs after this point due to API changes
         stopping_condition: Literal['n_epochs', 'validation'] = 'n_epochs',
         n_epochs: int = 50,
@@ -46,6 +47,12 @@ class ConceptKBTrainer(
 
                 train_kwargs: Keyword arguments to pass to train method.
         '''
+        if isinstance(concept, str):
+            concept = self.concept_kb[concept]
+
+        if id(concept) != id(self.concept_kb[concept.name]): # We train the concept from the ConceptKB, not in isolation
+            raise ValueError('Concept must be from the same ConceptKB')
+
         if stopping_condition == 'validation':
             # Implement some way to perform validation as a stopping condition
             raise NotImplementedError('Validation is not yet implemented')

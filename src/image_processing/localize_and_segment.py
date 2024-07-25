@@ -10,6 +10,9 @@ from PIL.Image import Image
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from torchvision.utils import draw_bounding_boxes
 from utils import ArticleDeterminer
+from typing import Union
+from model.dataclass_base import DictDataClass, DeviceShiftable
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +93,12 @@ class LocalizerAndSegmenter:
         self.config = config
 
         self.article_det = ArticleDeterminer()
+
+    def to(self, device: Union[str, torch.device]):
+        self.localizer.to(device)
+        self.segmenter.to(device)
+
+        return self
 
     @torch.inference_mode()
     def localize_and_segment(

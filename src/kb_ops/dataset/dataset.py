@@ -13,6 +13,11 @@ from model.concept import ConceptExample, ConceptKB
 from PIL import Image
 from torch.utils.data import Dataset
 from tqdm import tqdm
+from model.concept import ConceptKB, ConceptExample
+from typing import Optional
+import logging
+from readerwriterlock.rwlock import Lockable
+from kb_ops.concurrency import load_pickle
 
 logger = logging.getLogger(__file__)
 
@@ -26,7 +31,8 @@ class BaseDataset(Dataset):
         data: list,
         labels: list[str],
         concepts_to_train_per_example: list[list[Optional[str]]] = None,
-        train_all_concepts_if_unspecified: bool = False
+        train_all_concepts_if_unspecified: bool = False,
+        path_to_lock: dict[str, Lockable] = {}
     ):
         '''
             concepts_to_train_per_example: List of length n_examples of lists of concept names to train for each example.
@@ -38,19 +44,27 @@ class BaseDataset(Dataset):
 
             train_all_concepts_if_unspecified: If True, all concepts will be trained for all examples if concepts_to_train_per_example is None.
                 Otherwise, only the positive concept will be trained for each example if concepts_to_train_per_example is None.
+
+            path_to_lock: A dictionary mapping paths to (ideally reader) locks. Used to acquire locks when loading data from paths.
         '''
         if not concepts_to_train_per_example:
             logger.debug('concepts_to_train_per_example not provided for dataset; constructing')
             concepts_to_train_per_example = self.get_concepts_to_train_per_example(labels, train_all_concepts_if_unspecified)
 
         assert len(data) == len(labels) == len(concepts_to_train_per_example)
+        if path_to_lock:
+            assert len(data) == len(path_to_lock)
 
         # Make a copy of the lists, as these may be modified by extension
         self.data = list(data)
         self.labels = list(labels)
         self.concepts_to_train_per_example = list(concepts_to_train_per_example)
+        self.path_to_lock = path_to_lock
 
     def extend(self, data: list, labels: list[str], concepts_to_train_per_example: list[list[str]] = None, train_all_concepts_if_unspecified: bool = False):
+        '''
+            Extends the dataset with new data, labels, and concepts_to_train_per_example.
+        '''
         if not concepts_to_train_per_example:
             logger.debug('concepts_to_train_per_example not provided for dataset; constructing')
             concepts_to_train_per_example = self.get_concepts_to_train_per_example(labels, train_all_concepts=train_all_concepts_if_unspecified)
@@ -91,9 +105,16 @@ class ImageDataset(BaseDataset):
         img_paths: list[str],
         labels: list[str],
         concepts_to_train_per_example: list[list[str]] = None,
-        train_all_concepts_if_unspecified: bool = False
+        train_all_concepts_if_unspecified: bool = False,
+        path_to_lock: dict[str, Lockable] = {}
     ):
-        super().__init__(img_paths, labels, concepts_to_train_per_example, train_all_concepts_if_unspecified)
+        super().__init__(
+            data=img_paths,
+            labels=labels,
+            concepts_to_train_per_example=concepts_to_train_per_example,
+            train_all_concepts_if_unspecified=train_all_concepts_if_unspecified,
+            path_to_lock=path_to_lock
+        )
         self.img_paths = self.data
 
     def __getitem__(self, idx):
@@ -122,18 +143,22 @@ class PresegmentedDataset(BaseDataset):
         segmentation_paths: list[str],
         labels: list[str],
         concepts_to_train_per_example: list[list[str]] = None,
-        train_all_concepts_if_unspecified: bool = False
+        train_all_concepts_if_unspecified: bool = False,
+        path_to_lock: dict[str, Lockable] = {}
     ):
-        super().__init__(segmentation_paths, labels, concepts_to_train_per_example, train_all_concepts_if_unspecified)
+        super().__init__(
+            data=segmentation_paths,
+            labels=labels,
+            concepts_to_train_per_example=concepts_to_train_per_example,
+            train_all_concepts_if_unspecified=train_all_concepts_if_unspecified,
+            path_to_lock=path_to_lock
+        )
         self.segmentation_paths = self.data
 
     def __getitem__(self, idx):
-        
-        with FileLock(os.path.join(LOCK_DIR, f'{self.feature_paths[idx]}.lock')):
-            with open(self.segmentation_paths[idx], 'rb') as f:
-                segmentations: LocalizeAndSegmentOutput = pickle.load(f)
-
+        segmentations: LocalizeAndSegmentOutput = load_pickle(self.segmentation_paths[idx], path_to_lock=self.path_to_lock)
         segmentations.input_image = Image.open(segmentations.input_image_path)
+
         label = self.labels[idx]
         concepts_to_train = self.concepts_to_train_per_example[idx]
 
@@ -150,15 +175,20 @@ class FeatureDataset(BaseDataset):
         feature_paths: list[str],
         labels: list[str],
         concepts_to_train_per_example: list[list[str]] = None,
-        train_all_concepts_if_unspecified: bool = False
+        train_all_concepts_if_unspecified: bool = False,
+        path_to_lock: dict[str, Lockable] = {}
     ):
-        super().__init__(feature_paths, labels, concepts_to_train_per_example, train_all_concepts_if_unspecified)
+        super().__init__(
+            data=feature_paths,
+            labels=labels,
+            concepts_to_train_per_example=concepts_to_train_per_example,
+            train_all_concepts_if_unspecified=train_all_concepts_if_unspecified,
+            path_to_lock=path_to_lock
+        )
         self.feature_paths = self.data
 
     def __getitem__(self, idx):
-        with FileLock(os.path.join(LOCK_DIR, f'{os.path.basename(self.feature_paths[idx])}.lock')):
-            with open(self.feature_paths[idx], 'rb') as f:
-                features: CachedImageFeatures = pickle.load(f)
+        features: CachedImageFeatures = load_pickle(self.feature_paths[idx], path_to_lock=self.path_to_lock)
 
         label = self.labels[idx]
         concepts_to_train = self.concepts_to_train_per_example[idx]
