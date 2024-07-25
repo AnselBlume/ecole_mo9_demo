@@ -1,4 +1,4 @@
-from base import BaseController
+from .base import BaseController
 from kb_ops.predict import PredictOutput
 import PIL
 from PIL.Image import Image

@@ -1,4 +1,4 @@
-from base import BaseController
+from .base import BaseController
 from image_processing import LocalizeAndSegmentOutput
 from kb_ops import ConceptKBTrainer, ConceptKBPredictor
 from kb_ops.predict import PredictOutput

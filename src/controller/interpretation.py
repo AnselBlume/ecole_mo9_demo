@@ -1,4 +1,4 @@
-from base import BaseController
+from .base import BaseController
 import torch
 from typing import Union, Literal
 from PIL.Image import Image
