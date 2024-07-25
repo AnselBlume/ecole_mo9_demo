@@ -149,26 +149,44 @@ class ConceptKB:
         '''
         return chain.from_iterable(concept.predictor.parameters() for concept in self.concepts)
 
-    def train(self):
+    def train(self) -> ConceptKB:
         '''
             Sets all concept predictors to train mode.
         '''
         for concept in self.concepts:
             concept.predictor.train()
 
-    def eval(self):
+        return self
+
+    def train(self) -> ConceptKB:
         '''
             Sets all concept predictors to eval mode.
         '''
         for concept in self.concepts:
             concept.predictor.eval()
 
-    def to(self, device):
+        return self
+
+    def to(self, device) -> ConceptKB:
         '''
             Calls the to method on all concept predictors.
         '''
         for concept in self.concepts:
             concept.predictor.to(device)
+
+        return self
+
+    def cpu(self) -> ConceptKB:
+        '''
+            Calls the cpu method on all concept predictors.
+        '''
+        return self.to('cpu')
+
+    def cuda(self) -> ConceptKB:
+        '''
+            Calls the cuda method on all concept predictors.
+        '''
+        return self.to('cuda')
 
     def save(self, path):
         '''
