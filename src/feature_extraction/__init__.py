@@ -1,4 +1,5 @@
 import logging
+
 logger = logging.getLogger(__name__)
 
 ##########################
@@ -12,13 +13,15 @@ DEFAULT_SAM_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/sam/sam_vit_
 DEFAULT_MOBILE_SAM_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/sam/mobile_sam/mobile_sam.pt'
 
 if USE_MOBILE_SAM:
-    from mobile_sam import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+    from mobile_sam import (SamAutomaticMaskGenerator, SamPredictor,
+                            sam_model_registry)
     SAM_CKPT_PATH = DEFAULT_MOBILE_SAM_CKPT_PATH
     SAM_MODEL_TYPE = 'vit_t'
     logger.info('Using Mobile-SAM model')
 
 else:
-    from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+    from segment_anything import (SamAutomaticMaskGenerator, SamPredictor,
+                                  sam_model_registry)
     SAM_CKPT_PATH = DEFAULT_SAM_CKPT_PATH
     SAM_MODEL_TYPE = 'vit_h'
     logger.info('Using standard SAM model')
@@ -57,30 +60,30 @@ def build_sam_amg(model: Sam = None, part_based: bool = False):
 # DesCo #
 #########
 # from maskrcnn_benchmark.engine.predictor_FIBER import GLIPDemo
-from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
-from maskrcnn_benchmark.config import cfg as BASE_DESCO_CONFIG
+# from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
+# from maskrcnn_benchmark.config import cfg as BASE_DESCO_CONFIG
 
-DEFAULT_DESCO_CFG_PATH = '/shared/nas2/blume5/fa23/ecole/src/patch_mining/DesCo/configs/pretrain_new/desco_glip.yaml'
-DEFAULT_DESCO_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/desco/part_desco_glip_tiny.pth'
+# DEFAULT_DESCO_CFG_PATH = '/shared/nas2/blume5/fa23/ecole/src/patch_mining/DesCo/configs/pretrain_new/desco_glip.yaml'
+# DEFAULT_DESCO_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/desco/part_desco_glip_tiny.pth'
 
-def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT_DESCO_CKPT_PATH, device: str = 'cuda'):
-    if 'fiber' in (cfg_path + ckpt_path).lower():
-        raise NotImplementedError('FIBER GLIPDemo not supported')
+# def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT_DESCO_CKPT_PATH, device: str = 'cuda'):
+#     if 'fiber' in (cfg_path + ckpt_path).lower():
+#         raise NotImplementedError('FIBER GLIPDemo not supported')
 
-    if 'cuda' not in device:
-        raise NotImplementedError('DesCo requires GPU')
+#     if 'cuda' not in device:
+#         raise NotImplementedError('DesCo requires GPU')
 
-    cfg = BASE_DESCO_CONFIG.clone()
+#     cfg = BASE_DESCO_CONFIG.clone()
 
-    cfg.merge_from_file(cfg_path)
-    cfg.merge_from_list(['MODEL.WEIGHT', ckpt_path])
+#     cfg.merge_from_file(cfg_path)
+#     cfg.merge_from_list(['MODEL.WEIGHT', ckpt_path])
 
-    cfg.local_rank = 0 if device == 'cuda' else int(device.split(':')[-1])
-    cfg.num_gpus = 1
+#     cfg.local_rank = 0 if device == 'cuda' else int(device.split(':')[-1])
+#     cfg.num_gpus = 1
 
-    desco = GLIPDemo(cfg, min_image_size=800)
+#     desco = GLIPDemo(cfg, min_image_size=800)
 
-    return desco
+#     return desco
 
 ########
 # CLIP #
@@ -95,12 +98,14 @@ def build_clip(model_name: str = DEFAULT_CLIP_MODEL, device: str = 'cuda') -> tu
 
     return model, processor
 
+from feature_extraction.clip_features import CLIPFeatureExtractor
 #########################
 # Attribute Classifiers #
 #########################
-from feature_extraction.trained_attrs import CLIPTrainedAttributePredictor, DINOTrainedAttributePredictor
-from feature_extraction.clip_features import CLIPFeatureExtractor
+from feature_extraction.trained_attrs import (CLIPTrainedAttributePredictor,
+                                              DINOTrainedAttributePredictor)
 from feature_extraction.zero_shot_attrs import CLIPAttributePredictor
+
 
 def build_trained_attr_predictor(clip_model: CLIPModel, processor: CLIPProcessor, device: str = 'cuda'):
     feature_extractor = CLIPFeatureExtractor(clip_model, processor)
@@ -113,6 +118,7 @@ def build_zero_shot_attr_predictor(clip_model: CLIPModel, processor: CLIPProcess
 # DiNOv2 #
 ##########
 import torch
+
 from .dino_features import DINOFeatureExtractor
 
 DEFAULT_DINO_MODEL = 'dinov2_vitl14'
@@ -120,11 +126,13 @@ DEFAULT_DINO_MODEL = 'dinov2_vitl14'
 def build_dino(model_name: str = DEFAULT_DINO_MODEL, device: str = 'cuda'):
     return torch.hub.load('facebookresearch/dinov2', model_name).to(device)
 
+import torch.nn as nn
+
 #####################
 # Feature Extractor #
 #####################
 from .feature_extractor import FeatureExtractor
-import torch.nn as nn
+
 
 def build_feature_extractor(
     dino_model: nn.Module = None,

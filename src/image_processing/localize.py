@@ -2,16 +2,17 @@
 '''
     Functions to localize the object region in an image.
 '''
+import logging
+from typing import Union
+
 import numpy as np
 import torch
-from rembg import remove, new_session
-from PIL.Image import Image
-from maskrcnn_benchmark.structures.bounding_box import BoxList
-from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
-from segment_anything.modeling import Sam
 from feature_extraction import build_sam_predictor
-from typing import Union
-import logging
+from PIL.Image import Image
+from rembg import new_session, remove
+# from maskrcnn_benchmark.structures.bounding_box import BoxList
+# from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
+from segment_anything.modeling import Sam
 
 logger = logging.getLogger(__file__)
 
@@ -87,7 +88,7 @@ def bbox_from_mask(masks: Union[torch.Tensor, np.ndarray], use_dim_order: bool =
     return boxes
 
 class Localizer:
-    def __init__(self, sam: Sam, desco: GLIPDemo, rembg_model_name: str = 'isnet-general-use'):
+    def __init__(self, sam: Sam, desco, rembg_model_name: str = 'isnet-general-use'):
         self.rembg_session = new_session(model_name=rembg_model_name)
         self.desco = desco
         self.sam = build_sam_predictor(model=sam)
@@ -250,12 +251,12 @@ class Localizer:
 # %%
 if __name__ == '__main__':
     # Imports
-    import PIL
-    from visualization.vis_utils import show, image_from_masks
-    from torchvision.utils import draw_bounding_boxes
-    from torchvision.transforms.functional import pil_to_tensor
-    from feature_extraction import build_sam_predictor, build_desco
     import coloredlogs
+    import PIL
+    from feature_extraction import build_desco, build_sam_predictor
+    from torchvision.transforms.functional import pil_to_tensor
+    from torchvision.utils import draw_bounding_boxes
+    from visualization.vis_utils import image_from_masks, show
 
     coloredlogs.install(level=logging.INFO, logger=logger)
 

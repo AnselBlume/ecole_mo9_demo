@@ -1,19 +1,19 @@
+# from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
+import logging
+from typing import Union
+
 import torch
 import torch.nn as nn
-from transformers import CLIPModel, CLIPProcessor
-from feature_extraction import (
-    CLIPFeatureExtractor,
-    CLIPTrainedAttributePredictor,
-    CLIPAttributePredictor,
-    DINOFeatureExtractor,
-    DINOTrainedAttributePredictor
-)
-from typing import Union
-from PIL.Image import Image
+from feature_extraction import (CLIPAttributePredictor, CLIPFeatureExtractor,
+                                CLIPTrainedAttributePredictor,
+                                DINOFeatureExtractor,
+                                DINOTrainedAttributePredictor)
+from feature_extraction.dino_features import (get_rescaled_features,
+                                              interpolate_masks, region_pool)
 from model.features import ImageFeatures
-from feature_extraction.dino_features import get_rescaled_features, region_pool, interpolate_masks
-from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
-import logging
+from PIL.Image import Image
+from transformers import CLIPModel, CLIPProcessor
+
 logger = logging.getLogger(__file__)
 
 class FeatureExtractor(nn.Module):
@@ -23,7 +23,7 @@ class FeatureExtractor(nn.Module):
         dino: nn.Module,
         clip: CLIPModel,
         processor: CLIPProcessor,
-        desco: GLIPDemo = None,
+        desco = None,
         use_cls_features: bool = False,
     ):
         '''

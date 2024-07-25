@@ -1,15 +1,16 @@
-import torch
-from PIL.Image import Image
 import logging
-from image_processing.segment import Segmenter
+from dataclasses import dataclass, field
+from typing import Union
+
+import torch
+from feature_extraction import Sam
 from image_processing.localize import Localizer, bbox_from_mask
-from feature_extraction import Sam, GLIPDemo
-from utils import ArticleDeterminer
+from image_processing.segment import Segmenter
+from model.dataclass_base import DeviceShiftable, DictDataClass
+from PIL.Image import Image
 from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 from torchvision.utils import draw_bounding_boxes
-from typing import Union
-from model.dataclass_base import DictDataClass, DeviceShiftable
-from dataclasses import dataclass, field
+from utils import ArticleDeterminer
 
 logger = logging.getLogger(__name__)
 
@@ -252,5 +253,5 @@ class LocalizerAndSegmenter:
 
         return prompt
 
-def build_localizer_and_segmenter(sam: Sam, desco: GLIPDemo, config: LocalizerAndSegmenterConfig = LocalizerAndSegmenterConfig()):
+def build_localizer_and_segmenter(sam: Sam, desco, config: LocalizerAndSegmenterConfig = LocalizerAndSegmenterConfig()):
     return LocalizerAndSegmenter(Localizer(sam, desco), Segmenter(sam), config=config)
