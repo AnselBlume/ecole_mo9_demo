@@ -16,10 +16,11 @@ import logging
 
 logger = logging.getLogger(__file__)
 
-# Cannot use NFS with mp as otherwise get "device or resource busy" errors
-tmp_dir = '/scratch/tmp'
-os.makedirs(tmp_dir, exist_ok=True)
-os.environ['TMPDIR'] = tmp_dir
+# NOTE Cannot use NFS with mp as otherwise get "device or resource busy" errors
+# This code should be set in the main file before any other imports, or in the shell
+# tmp_dir = '/scratch/tmp'
+# os.makedirs(tmp_dir, exist_ok=True)
+# os.environ['TMPDIR'] = tmp_dir
 
 import multiprocessing as mp # Must be imported after setting TMPDIR to change default temp dir
 mp.set_start_method('spawn', force=True) # Necessary for CUDA to work in spawned processes
