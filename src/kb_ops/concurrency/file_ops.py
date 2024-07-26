@@ -1,5 +1,4 @@
-from .lockable import Lockable
-from .path_to_lock import PathToLockMapping
+from .locking import Lockable, PathToLockMapping
 from typing import Callable, Any, IO
 import pickle
 

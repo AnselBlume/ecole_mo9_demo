@@ -1,4 +1,6 @@
-class Lockable:
+from abc import ABC
+
+class Lockable(ABC):
     def acquire(self, *args, **kwargs) -> None:
         '''
             Acquire the lock

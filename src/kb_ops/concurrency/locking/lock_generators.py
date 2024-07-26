@@ -1,10 +1,11 @@
 from __future__ import annotations
-from abc import ABC
 from .lockable import Lockable
-from readerwriterlock.rwlock import RWLockFair, RWLockable
 from .multiprocessing_lock_adapter import MultiprocessingToThreadingLockAdapter
+from .path_to_lock import PathToLockMapping
+from .path_to_lock_wrappers import DictWrapper, LockFileLockGeneratorWrapper
+from .lock_generator import LockGenerator
 from filelock import FileLock
-from typing import Any
+from readerwriterlock.rwlock import RWLockFair, RWLockable
 from enum import Enum
 
 class LockType(Enum):
@@ -24,27 +25,6 @@ def get_lock_generator(lock_type: LockType, **path_to_lock_map_init_kwargs) -> L
         return FileLockGenerator(**path_to_lock_map_init_kwargs)
     else:
         raise ValueError(f'Invalid lock type: {lock_type}')
-
-class LockGenerator(ABC):
-    def __init__(self, **lock_init_kwargs):
-        self.lock_init_kwargs = lock_init_kwargs
-
-    def get_lock(self, path: str, is_reader: bool = None, **lock_init_kwargs_override) -> Lockable:
-        raise NotImplementedError('get_lock must be implemented by subclasses')
-
-    def _consolidate_lock_init_kwargs(self, lock_init_kwargs_override: dict) -> dict[str, Any]:
-        lock_init_kwargs = self.lock_init_kwargs.copy()
-        lock_init_kwargs.update(lock_init_kwargs_override)
-        return lock_init_kwargs
-
-class FileLockGenerator(LockGenerator):
-    def get_lock(self, path: str, is_reader: bool = None, **lock_init_kwargs_override) -> Lockable:
-        if is_reader is not None:
-            raise ValueError('is_reader must be None for file locks')
-
-        lock_init_kwargs = self._consolidate_lock_init_kwargs(lock_init_kwargs_override)
-
-        return FileLock(path, **lock_init_kwargs)
 
 class ReadersWritersLockGenerator(LockGenerator):
     def __init__(self, rw_lockable_class: RWLockable = RWLockFair, lock_factory=MultiprocessingToThreadingLockAdapter, **lock_init_kwargs):
@@ -66,3 +46,17 @@ class ReadersWritersLockGenerator(LockGenerator):
         file_lock = self.path_to_file_lock[path]
 
         return file_lock.gen_rlock() if is_reader else file_lock.gen_wlock()
+
+    def get_path_to_lock_mapping(self, paths: list[str], is_reader: bool = None) -> PathToLockMapping:
+        return DictWrapper({
+            path : self.get_lock(path, is_reader=is_reader)
+            for path in paths
+        })
+
+class FileLockGenerator(LockGenerator):
+    def get_lock(self, path: str, is_reader: bool = None, **lock_init_kwargs_override) -> Lockable:
+        lock_init_kwargs = self._consolidate_lock_init_kwargs(lock_init_kwargs_override)
+        return FileLock(path, **lock_init_kwargs)
+
+    def get_path_to_lock_mapping(self, paths: list[str], is_reader: bool = None) -> PathToLockMapping:
+        return LockFileLockGeneratorWrapper(self)

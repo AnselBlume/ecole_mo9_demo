@@ -9,8 +9,7 @@ from kb_ops.dataset import FeatureDataset
 from kb_ops.concurrency import (
     ConcurrentTrainingConceptSelector,
     LockType,
-    get_lock_generator,
-    get_path_to_lock_mapping
+    get_lock_generator
 )
 import traceback
 import sys
@@ -164,8 +163,8 @@ class ControllerTrainParallelMixin(ControllerTrainMixinBase):
 
             # Create reader and writer locks for this new process
             paths = [example.image_features_path for example in examples]
-            path_to_reader_lock = get_path_to_lock_mapping(paths, lock_generator, is_reader=True)
-            path_to_writer_lock = get_path_to_lock_mapping(paths, lock_generator, is_reader=False)
+            path_to_reader_lock = lock_generator.get_path_to_lock_mapping(paths, is_reader=True)
+            path_to_writer_lock = lock_generator.get_path_to_lock_mapping(paths, is_reader=False)
 
             dataset.path_to_lock = path_to_reader_lock # Dataset only reads
 
