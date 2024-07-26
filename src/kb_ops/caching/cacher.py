@@ -12,8 +12,7 @@ import pickle
 import logging
 from .cached_image_features import CachedImageFeatures
 import hashlib
-from readerwriterlock.rwlock import Lockable
-from kb_ops.concurrency import load_pickle, dump_pickle, exec_file_op
+from kb_ops.concurrency import load_pickle, dump_pickle, exec_file_op, PathToLockMapping
 
 logger = logging.getLogger(__name__)
 
@@ -215,8 +214,8 @@ class ConceptKBFeatureCacher:
         examples: list[ConceptExample] = None,
         only_not_present: bool = False,
         batch_size: int = 128,
-        path_to_reader_lock: dict[str, Lockable] = {},
-        path_to_writer_lock: dict[str, Lockable] = {}
+        path_to_reader_lock: PathToLockMapping = None,
+        path_to_writer_lock: PathToLockMapping = None
     ):
         '''
             Recaches zero-shot attribute features for the specified Concept across all Concepts' examples in the
@@ -233,9 +232,9 @@ class ConceptKBFeatureCacher:
 
                 batch_size (int): Number of examples to process in a batch.
 
-                path_to_reader_lock (dict[str, Lockable]): Dictionary mapping paths to locks for reading files.
+                path_to_reader_lock (PathToLockMapping): Mapping from paths to locks for reading files.
 
-                path_to_writer_lock (dict[str, Lockable]): Dictionary mapping paths to locks for writing files.
+                path_to_writer_lock (PathToLockMapping): Mapping from paths to locks for writing files.
         '''
         if not len(concept.zs_attributes):
             return
@@ -325,8 +324,8 @@ class ConceptKBFeatureCacher:
         self,
         concept: Concept,
         examples: list[ConceptExample] = None,
-        path_to_reader_lock: dict[str, Lockable] = {},
-        path_to_writer_lock: dict[str, Lockable] = {}
+        path_to_reader_lock: PathToLockMapping = None,
+        path_to_writer_lock: PathToLockMapping = None
     ):
         '''
             Recaches component concept scores for the specified Concept across all Concepts' examples in the
@@ -342,9 +341,9 @@ class ConceptKBFeatureCacher:
                 examples (list[ConceptExample]): List of examples to recache component concept scores for. If not
                     provided, recaches for all examples in the ConceptKB.
 
-                path_to_reader_lock (dict[str, Lockable]): Dictionary mapping paths to locks for reading files.
+                path_to_reader_lock (PathToLockMapping): Mapping from paths to locks for reading files.
 
-                path_to_writer_lock (dict[str, Lockable]): Dictionary mapping paths to locks for writing files.
+                path_to_writer_lock (PathToLockMapping): Mapping from paths to locks for writing files.
         '''
         # TODO Batch this process
         if not self.feature_pipeline.config.compute_component_concept_scores:

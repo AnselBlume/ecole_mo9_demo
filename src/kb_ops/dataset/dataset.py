@@ -10,8 +10,7 @@ from tqdm import tqdm
 from model.concept import ConceptKB, ConceptExample
 from typing import Optional
 import logging
-from readerwriterlock.rwlock import Lockable
-from kb_ops.concurrency import load_pickle
+from kb_ops.concurrency import load_pickle, PathToLockMapping
 
 logger = logging.getLogger(__file__)
 
@@ -26,7 +25,7 @@ class BaseDataset(Dataset):
         labels: list[str],
         concepts_to_train_per_example: list[list[Optional[str]]] = None,
         train_all_concepts_if_unspecified: bool = False,
-        path_to_lock: dict[str, Lockable] = {}
+        path_to_lock: PathToLockMapping = None
     ):
         '''
             concepts_to_train_per_example: List of length n_examples of lists of concept names to train for each example.
@@ -39,7 +38,7 @@ class BaseDataset(Dataset):
             train_all_concepts_if_unspecified: If True, all concepts will be trained for all examples if concepts_to_train_per_example is None.
                 Otherwise, only the positive concept will be trained for each example if concepts_to_train_per_example is None.
 
-            path_to_lock: A dictionary mapping paths to (ideally reader) locks. Used to acquire locks when loading data from paths.
+            path_to_lock: Mapping from paths to locks for the data. If provided, the lock will be acquired before loading the data and released after.
         '''
         if not concepts_to_train_per_example:
             logger.debug('concepts_to_train_per_example not provided for dataset; constructing')
@@ -100,7 +99,7 @@ class ImageDataset(BaseDataset):
         labels: list[str],
         concepts_to_train_per_example: list[list[str]] = None,
         train_all_concepts_if_unspecified: bool = False,
-        path_to_lock: dict[str, Lockable] = {}
+        path_to_lock: PathToLockMapping = None
     ):
         super().__init__(
             data=img_paths,
@@ -138,7 +137,7 @@ class PresegmentedDataset(BaseDataset):
         labels: list[str],
         concepts_to_train_per_example: list[list[str]] = None,
         train_all_concepts_if_unspecified: bool = False,
-        path_to_lock: dict[str, Lockable] = {}
+        path_to_lock: PathToLockMapping = None
     ):
         super().__init__(
             data=segmentation_paths,
@@ -170,7 +169,7 @@ class FeatureDataset(BaseDataset):
         labels: list[str],
         concepts_to_train_per_example: list[list[str]] = None,
         train_all_concepts_if_unspecified: bool = False,
-        path_to_lock: dict[str, Lockable] = {}
+        path_to_lock: PathToLockMapping = None
     ):
         super().__init__(
             data=feature_paths,

@@ -1,17 +1,18 @@
-import os
 import torch
 from .base import ControllerTrainMixinBase
 from model.concept import Concept, ConceptExample
-from kb_ops.concurrency import ConcurrentTrainingConceptSelector
-from readerwriterlock.rwlock import RWLockFair
 from kb_ops.train import ConceptKBTrainer
 from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 import time
 from typing import Union
 from kb_ops.dataset import FeatureDataset
+from kb_ops.concurrency import (
+    ConcurrentTrainingConceptSelector,
+    LockType,
+    get_lock_generator
+)
 import traceback
 import sys
-from kb_ops.concurrency import MultiprocessingToThreadingLockAdapter
 import logging
 
 logger = logging.getLogger(__file__)
@@ -77,6 +78,7 @@ class ControllerTrainParallelMixin(ControllerTrainMixinBase):
         max_retrieval_distance=.01,
         concepts_to_train_kwargs: dict = {},
         devices: Union[list[str], list[int], list[torch.device]] = None, # None: use all
+        lock_type: LockType = LockType.FILE_LOCK,
         **train_concept_kwargs
     ):
         if devices:
@@ -126,15 +128,7 @@ class ControllerTrainParallelMixin(ControllerTrainMixinBase):
         manager = mp.Manager()
         return_queue = manager.Queue()
 
-        path_to_file_lock: dict[str, RWLockFair] = {}
-
-        def gen_process_locks(examples: list[ConceptExample], path_to_file_lock: dict[str, RWLockFair], is_reader: bool):
-            process_locks = {}
-            for example in examples:
-                file_lock = path_to_file_lock[example.image_features_path]
-                process_locks[example.image_features_path] = file_lock.gen_rlock() if is_reader else file_lock.gen_wlock()
-
-            return process_locks
+        lock_generator = get_lock_generator(lock_type)
 
         start_time = time.time()
         while not concept_selector.is_training_complete:
@@ -152,7 +146,7 @@ class ControllerTrainParallelMixin(ControllerTrainMixinBase):
                 available_devices.append(device)
                 concept_selector.mark_concept_completed(concept)
 
-                logger.info(f'Concept training complete: {concept.name}; {concept_selector.num_concepts_incomplete} concepts remaining')
+                logger.info(f'Concept training complete: {concept.name}; {concept_selector.num_concepts_incomplete} concept(s) remaining')
 
                 if concept_selector.is_training_complete: # This was the last concept
                     break
@@ -167,14 +161,10 @@ class ControllerTrainParallelMixin(ControllerTrainMixinBase):
                 concept, use_concepts_as_negatives=use_concepts_as_negatives
             )
 
-            # Update file locks
-            for example in examples:
-                if example.image_features_path not in path_to_file_lock:
-                    path_to_file_lock[example.image_features_path] = RWLockFair(lock_factory=MultiprocessingToThreadingLockAdapter)
-
             # Create reader and writer locks for this new process
-            path_to_reader_lock = gen_process_locks(examples, path_to_file_lock, is_reader=True)
-            path_to_writer_lock = gen_process_locks(examples, path_to_file_lock, is_reader=False)
+            paths = [example.image_features_path for example in examples]
+            path_to_reader_lock = lock_generator.get_path_to_lock_mapping(paths, is_reader=True)
+            path_to_writer_lock = lock_generator.get_path_to_lock_mapping(paths, is_reader=False)
 
             dataset.path_to_lock = path_to_reader_lock # Dataset only reads
 
