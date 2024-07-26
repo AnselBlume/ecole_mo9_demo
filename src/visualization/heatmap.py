@@ -11,7 +11,6 @@ if __name__ == '__main__':
     sys.path.append('/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src')
 
 import logging
-from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 
@@ -26,9 +25,9 @@ from feature_extraction.dino_features import (DINOFeatureExtractor,
                                               rescale_features)
 from matplotlib import colormaps
 from matplotlib.gridspec import GridSpec
-from model.concept import Concept, ConceptKB
-from PIL import Image
-from rembg import new_session, remove
+from copy import deepcopy
+import cv2
+import logging
 
 logger = logging.getLogger(__file__)
 
