@@ -10,21 +10,24 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = '4'
     sys.path.append('/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src')
 
-import rembg.sessions
-from model.concept import ConceptKB, Concept
+import logging
 from dataclasses import dataclass
-from PIL import Image
 from enum import Enum
+
+import cv2
+import numpy as np
+import rembg
+import rembg.sessions
 import torch
 import torch.nn as nn
-import rembg
-from rembg import remove, new_session
-from feature_extraction.dino_features import DINOFeatureExtractor, get_rescaled_features, rescale_features
+from feature_extraction.dino_features import (DINOFeatureExtractor,
+                                              get_rescaled_features,
+                                              rescale_features)
 from matplotlib import colormaps
-import numpy as np
 from matplotlib.gridspec import GridSpec
-import cv2
-import logging
+from model.concept import Concept, ConceptKB
+from PIL import Image
+from rembg import new_session, remove
 
 logger = logging.getLogger(__file__)
 
@@ -154,7 +157,7 @@ class HeatmapVisualizer:
             heatmap_vis = self.config.opacity * heatmap_vis + (1 - self.config.opacity) * img / 255 # Blend with original image
 
         elif self.config.strategy == HeatmapStrategy.CLAMP:
-            heatmap_vis: np.ndarray = colormaps['viridis'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
+            heatmap_vis: np.ndarray = colormaps['cividis'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
             # heatmap_vis = colormaps['bwr'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
             heatmap_vis = self.config.opacity * heatmap_vis + (1 - self.config.opacity) * img / 255
 
@@ -267,9 +270,10 @@ class HeatmapVisualizer:
 
 # %%
 if __name__ == '__main__':
-    from feature_extraction import build_feature_extractor, build_sam, build_clip, build_dino
-    from image_processing import build_localizer_and_segmenter
     import coloredlogs
+    from feature_extraction import (build_clip, build_dino,
+                                    build_feature_extractor, build_sam)
+    from image_processing import build_localizer_and_segmenter
 
     coloredlogs.install(level='DEBUG', logger=logger)
 
