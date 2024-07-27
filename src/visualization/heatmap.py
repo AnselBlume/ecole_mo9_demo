@@ -25,9 +25,9 @@ from feature_extraction.dino_features import (DINOFeatureExtractor,
                                               rescale_features)
 from matplotlib import colormaps
 from matplotlib.gridspec import GridSpec
-from model.concept import Concept, ConceptKB
-from PIL import Image
-from rembg import new_session, remove
+from copy import deepcopy
+import cv2
+import logging
 
 logger = logging.getLogger(__file__)
 
@@ -189,10 +189,11 @@ class HeatmapVisualizer:
 
         return heatmap
 
+    @torch.no_grad()
     def _get_concept_heatmap(self, concept: Concept, img: Image.Image):
-        feature_predictor = nn.Sequential(
-            concept.predictor.img_features_predictor,
-            concept.predictor.img_features_weight
+        feature_predictor = nn.Sequential( # Deepcopy to avoid modifying the original model
+            deepcopy(concept.predictor.img_features_predictor),
+            deepcopy(concept.predictor.img_features_weight)
         ).eval().cpu()
 
         img = img.convert('RGB')
@@ -203,12 +204,8 @@ class HeatmapVisualizer:
         patch_feats = rescale_features(patch_feats, img) # (h, w, d)
 
         # Get heatmap
-        with torch.no_grad():
-            # Need to move to CPU otherwise runs out of GPU mem on big images
-            heatmap = feature_predictor(patch_feats.cpu()).squeeze() # (h, w)
-
-        # Move img_features_predictor back to correct device (train is called by train method)
-        feature_predictor.cuda()
+        # Need to move to CPU otherwise runs out of GPU mem on big images
+        heatmap = feature_predictor(patch_feats.cpu()).squeeze() # (h, w)
 
         return heatmap
 
