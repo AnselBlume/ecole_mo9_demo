@@ -178,7 +178,8 @@ class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
             concepts_to_train_per_example = [[concept_name] for _ in indices]
 
             concept = self.concept_kb[concept_name]
-            concepts_to_datasets[concept] = FeatureDataset(feature_paths, labels, concepts_to_train_per_example)
+            concept_ds = FeatureDataset(feature_paths, labels, concepts_to_train_per_example, path_to_lock=dataset.path_to_lock)
+            concepts_to_datasets[concept] = concept_ds
 
         concepts_to_datasets = { # Topological sort via component graph
             concept : concepts_to_datasets[concept]
