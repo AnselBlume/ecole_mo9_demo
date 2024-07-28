@@ -2,7 +2,7 @@ from __future__ import annotations
 from .lockable import Lockable
 from .multiprocessing_lock_adapter import MultiprocessingToThreadingLockAdapter
 from .path_to_lock import PathToLockMapping
-from .path_to_lock_wrappers import DictWrapper, LockFileLockGeneratorWrapper
+from .path_to_lock_wrappers import DictWrapper, LockGeneratorWrapper
 from .lock_generator import LockGenerator
 from filelock import FileLock
 from readerwriterlock.rwlock import RWLockFair, RWLockable
@@ -55,8 +55,9 @@ class ReadersWritersLockGenerator(LockGenerator):
 
 class FileLockGenerator(LockGenerator):
     def get_lock(self, path: str, is_reader: bool = None, **lock_init_kwargs_override) -> Lockable:
+        lock_file_path = path + '.lock' # Lock file path is the path with '.lock' appended to it.
         lock_init_kwargs = self._consolidate_lock_init_kwargs(lock_init_kwargs_override)
-        return FileLock(path, **lock_init_kwargs)
+        return FileLock(lock_file_path, **lock_init_kwargs)
 
     def get_path_to_lock_mapping(self, paths: list[str], is_reader: bool = None) -> PathToLockMapping:
-        return LockFileLockGeneratorWrapper(self)
+        return LockGeneratorWrapper(self)

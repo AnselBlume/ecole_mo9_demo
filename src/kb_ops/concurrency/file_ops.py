@@ -69,10 +69,11 @@ def exec_file_op(
     if lock:
         lock.acquire()
 
-    with open(path, file_open_mode) as f:
-        result = operation(f)
-
-    if lock:
-        lock.release()
+    try:
+        with open(path, file_open_mode) as f:
+            result = operation(f)
+    finally: # Always release lock, even if exception occurs
+        if lock:
+            lock.release()
 
     return result
