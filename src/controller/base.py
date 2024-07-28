@@ -129,6 +129,9 @@ class BaseController:
                 child_concept = self.retrieve_concept(child_name)
                 concept.add_child_concept(child_concept)
 
+            if containing_concept_names:
+                logger.warning(f'Containing concepts "{containing_concept_names}" must be retrained after adding component "{concept.name}".')
+
             for containing_name in containing_concept_names:
                 containing_concept = self.retrieve_concept(containing_name)
                 concept.add_containing_concept(containing_concept)
@@ -136,6 +139,10 @@ class BaseController:
             for component_name in component_concept_names:
                 component_concept = self.retrieve_concept(component_name)
                 concept.add_component_concept(component_concept)
+
+        else:
+            if parent_concept_names or child_concept_names or containing_concept_names or component_concept_names:
+                raise ValueError('Relations can only be added if concept_name is provided instead of a Concept object.')
 
         # Get zero shot attributes (query LLM)
         self.concept_kb.init_zs_attrs(

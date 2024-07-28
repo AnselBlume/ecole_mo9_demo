@@ -300,5 +300,6 @@ class ConceptPredictor(nn.Module):
         self.zs_attr_predictor = nn.Linear(self.n_zs_attrs, self.n_zs_attrs, bias=self.use_bias)
 
     def set_num_component_concepts(self, n_component_concepts: int):
+        # TODO better initialization from existing weights
         self.n_component_concepts = n_component_concepts
         self.component_concept_weights = Hadamard(n_component_concepts, bias=self.use_bias) if n_component_concepts else nn.Identity()
