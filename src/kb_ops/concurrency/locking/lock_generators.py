@@ -1,6 +1,6 @@
 from __future__ import annotations
 from .lockable import Lockable
-from .multiprocessing_lock_adapter import MultiprocessingToThreadingLockAdapter
+from .multiprocessing_lock_adapter import ThreadingToMultiprocessingLockAdapter
 from .path_to_lock import PathToLockMapping
 from .path_to_lock_wrappers import DictWrapper, LockGeneratorWrapper
 from .lock_generator import LockGenerator
@@ -27,7 +27,7 @@ def get_lock_generator(lock_type: LockType, **path_to_lock_map_init_kwargs) -> L
         raise ValueError(f'Invalid lock type: {lock_type}')
 
 class ReadersWritersLockGenerator(LockGenerator):
-    def __init__(self, rw_lockable_class: RWLockable = RWLockFair, lock_factory=MultiprocessingToThreadingLockAdapter, **lock_init_kwargs):
+    def __init__(self, rw_lockable_class: RWLockable = RWLockFair, lock_factory=ThreadingToMultiprocessingLockAdapter, **lock_init_kwargs):
         lock_init_kwargs['lock_factory'] = lock_factory
         super().__init__(**lock_init_kwargs)
 

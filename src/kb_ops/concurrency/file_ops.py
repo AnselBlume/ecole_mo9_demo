@@ -67,7 +67,9 @@ def exec_file_op(
         lock = None
 
     if lock:
-        lock.acquire()
+        was_lock_successful = lock.acquire()
+        if not was_lock_successful: # Falsey; may not be actual boolean
+            raise RuntimeError(f'Failed to acquire lock for path {path}')
 
     try:
         with open(path, file_open_mode) as f:

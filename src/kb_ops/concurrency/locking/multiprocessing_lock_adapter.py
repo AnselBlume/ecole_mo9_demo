@@ -1,7 +1,7 @@
 import multiprocessing as mp
 from typing import Any
 
-class MultiprocessingToThreadingLockAdapter:
+class ThreadingToMultiprocessingLockAdapter:
     '''
         Wrapper for multiprocessing.Lock to make its acquire method's "block" kwarg compatible with
         the threading.Lock acquire's method interface with its "blocking" kwarg.
@@ -17,6 +17,11 @@ class MultiprocessingToThreadingLockAdapter:
         '''
             Maps the "blocking" kwarg to the "block" kwarg of multiprocessing.Lock.acquire.
         '''
+
+        # threading's acquire expects timeout=-1 for blocking but multiprocessing expects timeout=None
+        if timeout and timeout < 0:
+            timeout = None
+
         return self._name_mangled_lock.acquire(block=blocking, timeout=timeout)
 
     def __getattr__(self, name):
