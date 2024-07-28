@@ -45,8 +45,6 @@ class BaseDataset(Dataset):
             concepts_to_train_per_example = self.get_concepts_to_train_per_example(labels, train_all_concepts_if_unspecified)
 
         assert len(data) == len(labels) == len(concepts_to_train_per_example)
-        if path_to_lock:
-            assert len(data) == len(path_to_lock)
 
         # Make a copy of the lists, as these may be modified by extension
         self.data = list(data)
