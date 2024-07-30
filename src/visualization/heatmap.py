@@ -57,6 +57,9 @@ class HeatmapVisualizerConfig:
     clamp_negative_radius: int = 5 # Negative side radius
     clamp_negative_maximum: int = .3 # Below this is considered negative; in [0, 1]
 
+    # Intersection heatmap
+    intersection_min: float = .5 # Minimum value in [0, 1] each heatmap must have to be in intersection
+
 class HeatmapVisualizer:
     def __init__(
         self,
@@ -69,6 +72,19 @@ class HeatmapVisualizer:
         self.dino_fe = dino_fe
         self.config = config
         self.rembg_session = rembg_session
+
+    def get_intersection_heatmap_visualization(self, concept1: Concept, concept2: Concept, img: Image.Image) -> Image.Image:
+        img_mask = self._get_foreground_mask(img)
+
+        concept1_heatmap = self._get_heatmap(concept1, img)
+        concept2_heatmap = self._get_heatmap(concept2, img)
+
+        intersection_mask = (concept1_heatmap > self.config.intersection_min) & (concept2_heatmap > self.config.intersection_min)
+        intersection_heatmap = intersection_mask.float() * (concept1_heatmap + concept2_heatmap)
+
+        intersection_vis = Image.fromarray(self._get_heatmap_visualization(img, intersection_heatmap, img_mask))
+
+        return intersection_vis
 
     def get_difference_heatmap_visualizations(self, concept1: Concept, concept2: Concept, img: Image.Image) -> tuple[Image.Image, Image.Image]:
         img_mask = self._get_foreground_mask(img)

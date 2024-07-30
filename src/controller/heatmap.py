@@ -100,3 +100,22 @@ class ControllerHeatmapMixin(BaseController):
                 'concept1_minus_concept2': concept1_minus_concept2, # PIL.Image.Image
                 'concept2_minus_concept1': concept2_minus_concept1  # PIL.Image.Image
             }
+
+    def heatmap_class_intersection(self, concept1_name: str, concept2_name: str, image: Image = None):
+        '''
+            If image is not provided, implements:
+                "What is in common between <class x> and <class y> on this image?"
+
+            Not yet implemented: If image is provided, implements:
+                "What is in common between <class x> and <class y>?"
+        '''
+        concept1 = self.retrieve_concept(concept1_name)
+        concept2 = self.retrieve_concept(concept2_name)
+
+        if image is None:
+            # TODO concatenate two images from concepts side by side as image
+            raise NotImplementedError('This functionality is not yet implemented.')
+
+        heatmap = self.heatmap_visualizer.get_intersection_heatmap_visualization(concept1, concept2, image)
+
+        return heatmap
