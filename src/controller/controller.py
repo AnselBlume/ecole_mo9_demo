@@ -1,8 +1,8 @@
 # %%
-from train import ControllerTrainMixin
-from predict import ControllerPredictionMixin
-from heatmap import ControllerHeatmapMixin
-from interpretation import ControllerInterpretationMixin
+from .train import ControllerTrainMixin
+from .predict import ControllerPredictionMixin
+from .heatmap import ControllerHeatmapMixin
+from .interpretation import ControllerInterpretationMixin
 import logging
 
 logger = logging.getLogger(__name__)
