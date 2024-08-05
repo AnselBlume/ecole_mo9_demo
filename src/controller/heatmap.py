@@ -80,6 +80,13 @@ class ControllerHeatmapMixin(BaseController):
                     if not example.is_negative:
                         return PIL.Image.open(example.image_path)
 
+                for descendant in self.concept_kb.rooted_subtree(concept, reverse_edges=False):
+                    for example in descendant.examples:
+                        if not example.is_negative:
+                            return PIL.Image.open(example.image_path)
+
+                raise RuntimeError("No examples found for concept or descendants.")
+
             concept1_image = load_positive_image(concept1)
             concept2_image = load_positive_image(concept2)
 
