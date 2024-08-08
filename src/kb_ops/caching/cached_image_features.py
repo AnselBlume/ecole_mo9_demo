@@ -38,7 +38,7 @@ class CachedImageFeatures(ImageFeatures):
         self.concept_to_zs_attr_region_scores[concept.name] = features.zs_attr_region_scores.cpu()
 
         if store_component_concept_scores:
-            if not features.component_concept_scores:
+            if features.component_concept_scores is None:
                 return
 
             component_concept_scores = features.component_concept_scores.cpu()
