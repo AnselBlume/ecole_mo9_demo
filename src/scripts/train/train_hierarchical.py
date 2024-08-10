@@ -1,6 +1,6 @@
 # %%
 import os # Change DesCo CUDA device here
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '4'
 
 # Prepend to path so starts searching at src first
 import sys
@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
         feature_pipeline_config:
             # Change this to true in order to run component detection with DesCo
-            compute_component_concept_scores: false
+            compute_component_concept_scores: true
 
         loc_and_seg_config:
             do_localize: true

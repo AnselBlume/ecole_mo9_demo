@@ -16,7 +16,6 @@ class LLMClient:
     ):
         self.model = model
         self.client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY', api_key))
-        #self.client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY', "abcd"))
 
     def query(self, prompt: str, sys_prompt=DEFAULT_SYS_PROMPT, stream=False) -> Union[str, Iterable[str]]:
         '''
@@ -24,6 +23,7 @@ class LLMClient:
             a single string if stream is False, otherwise returns an iterable of strings.
 
             See https://cookbook.openai.com/examples/how_to_stream_completions for more info on streaming.
+
         '''
         response = self.client.chat.completions.create(
             model=self.model,

@@ -60,7 +60,7 @@ def build_sam_amg(model: Sam = None, part_based: bool = False):
 from maskrcnn_benchmark.engine.predictor_glip import GLIPDemo
 from maskrcnn_benchmark.config import cfg as BASE_DESCO_CONFIG
 
-DEFAULT_DESCO_CFG_PATH = '/shared/nas2/blume5/fa23/ecole/src/patch_mining/DesCo/configs/pretrain_new/desco_glip.yaml'
+DEFAULT_DESCO_CFG_PATH = '/shared/nas2/rc33/DesCo/configs/pretrain_new/desco_glip.yaml'
 DEFAULT_DESCO_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/desco/part_desco_glip_tiny.pth'
 
 def build_desco(cfg_path: str = DEFAULT_DESCO_CFG_PATH, ckpt_path: str = DEFAULT_DESCO_CKPT_PATH, device: str = 'cuda'):
