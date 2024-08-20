@@ -22,7 +22,7 @@ from rembg import remove, new_session
 from feature_extraction.dino_features import DINOFeatureExtractor, get_rescaled_features, rescale_features
 from matplotlib import colormaps
 import numpy as np
-from matplotlib.gridspec import GridSpec
+from typing import Union
 from copy import deepcopy
 import cv2
 import logging
@@ -59,6 +59,9 @@ class HeatmapVisualizerConfig:
 
     # Intersection heatmap
     intersection_min: float = .5 # Minimum value in [0, 1] each heatmap must have to be in intersection
+
+    # Detection configuration
+    min_pixels_for_detection: int = 100 # Minimum number of pixels in a heatmap for detection to be considered
 
 class HeatmapVisualizer:
     def __init__(
@@ -142,10 +145,33 @@ class HeatmapVisualizer:
 
         return heatmap_vis
 
-    def get_heatmap_visualization(self, concept: Concept, img: Image.Image) -> Image.Image:
+    def get_heatmap_visualization(
+        self,
+        concept: Concept,
+        img: Image.Image,
+        return_detection_score: bool = False
+    ) -> Union[Image.Image, tuple[Image.Image, float]]:
+        '''
+            Returns the heatmap visualization for the concept applied to the image.
+            If return_detection_score is True, also returns the detection score (0, .5, 1).
+        '''
         heatmap = self._get_heatmap(concept, img)
         img_mask = self._get_foreground_mask(img)
         heatmap_vis = Image.fromarray(self._get_heatmap_visualization(img, heatmap, img_mask))
+
+        if return_detection_score:
+            if self.config.strategy != HeatmapStrategy.CLAMP:
+                raise NotImplementedError('Detection score not supported for strategies other than HeatmapStrategy.CLAMP')
+
+            heatmap = heatmap * img_mask
+            if (heatmap == 1).sum() >= self.config.min_pixels_for_detection:
+                detection_score = 1
+            elif (heatmap == .5).sum() >= self.config.min_pixels_for_detection:
+                detection_score = .5
+            else:
+                detection_score = 0
+
+            return heatmap_vis, detection_score
 
         return heatmap_vis
 
@@ -171,8 +197,7 @@ class HeatmapVisualizer:
             heatmap_vis = self.config.opacity * heatmap_vis + (1 - self.config.opacity) * img / 255 # Blend with original image
 
         elif self.config.strategy == HeatmapStrategy.CLAMP:
-            heatmap_vis: np.ndarray = colormaps['viridis'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
-            # heatmap_vis = colormaps['bwr'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
+            heatmap_vis: np.ndarray = colormaps['cividis'](heatmap)[..., :3] # (h, w) --> (h, w, 4) --> (h, w, 3)
             heatmap_vis = self.config.opacity * heatmap_vis + (1 - self.config.opacity) * img / 255
 
         else:
