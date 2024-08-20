@@ -193,7 +193,7 @@ class ConceptKBFeaturePipeline:
         else:
             concept_scores_to_compute = [concept_name for concept_name in concept.component_concepts if concept_name not in concept_to_scores]
 
-        new_concept_scores = self.feature_extractor.get_component_scores(image, concept.component_concepts.keys())
+        new_concept_scores = self.feature_extractor.get_component_scores(image, concept_scores_to_compute)
 
         concept_to_scores.update({concept_name : score for concept_name, score in zip(concept_scores_to_compute, new_concept_scores)})
 

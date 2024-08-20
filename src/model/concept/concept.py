@@ -144,9 +144,13 @@ class Concept:
     def add_component_concept(self, component: Concept):
         self.component_concepts[component.name] = component
         component.containing_concepts[self.name] = self
-        self.predictor.set_num_component_concepts(len(self.component_concepts))
+
+        if self.predictor:
+            self.predictor.set_num_component_concepts(len(self.component_concepts))
 
     def remove_component_concept(self, component: Concept):
         del self.component_concepts[component.name]
         del component.containing_concepts[self.name]
-        self.predictor.set_num_component_concepts(len(self.component_concepts))
+
+        if self.predictor:
+            self.predictor.set_num_component_concepts(len(self.component_concepts))

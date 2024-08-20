@@ -39,7 +39,13 @@ class ControllerHeatmapMixin(BaseController):
             'concept2_minus_concept1_on_image2': c2_minus_c1_image2  # PIL.Image.Image
         }
 
-    def heatmap(self, image: Image, concept_name: str, only_score_increasing_regions: bool = False, only_score_decreasing_regions: bool = False) -> Image:
+    def heatmap(
+        self, image: Image,
+        concept_name: str,
+        only_score_increasing_regions: bool = False,
+        only_score_decreasing_regions: bool = False,
+        return_detection_score: bool = False
+    ) -> Image:
         '''
             If only_score_increasing_regions is True, implements:
                 "Why is this a <class x>"
@@ -48,9 +54,14 @@ class ControllerHeatmapMixin(BaseController):
                 "What are the differences between this and <class x>"
 
             If neither is true, shows the full heatmap (both increasing and decreasing regions).
+
+            If return_detection_score is True, returns the detection score along with the heatmap.
         '''
         if only_score_increasing_regions and only_score_decreasing_regions:
             raise ValueError('At most one of only_score_increasing_regions and only_score_decreasing_regions can be True.')
+
+        if return_detection_score and (only_score_increasing_regions or only_score_decreasing_regions):
+            raise NotImplementedError('return_detection_score is not yet implemented for only_score_increasing_regions or only_score_decreasing_regions.')
 
         concept = self.retrieve_concept(concept_name)
 
@@ -59,7 +70,11 @@ class ControllerHeatmapMixin(BaseController):
         elif only_score_decreasing_regions:
             heatmap = self.heatmap_visualizer.get_negative_heatmap_visualization(concept, image)
         else: # Visualize all regions
-            heatmap = self.heatmap_visualizer.get_heatmap_visualization(concept, image)
+            heatmap = self.heatmap_visualizer.get_heatmap_visualization(concept, image, return_detection_score=return_detection_score)
+
+            if return_detection_score:
+                heatmap, detection_score = heatmap
+                return heatmap, detection_score
 
         return heatmap
 
@@ -100,3 +115,22 @@ class ControllerHeatmapMixin(BaseController):
                 'concept1_minus_concept2': concept1_minus_concept2, # PIL.Image.Image
                 'concept2_minus_concept1': concept2_minus_concept1  # PIL.Image.Image
             }
+
+    def heatmap_class_intersection(self, concept1_name: str, concept2_name: str, image: Image = None):
+        '''
+            If image is not provided, implements:
+                "What is in common between <class x> and <class y> on this image?"
+
+            Not yet implemented: If image is provided, implements:
+                "What is in common between <class x> and <class y>?"
+        '''
+        concept1 = self.retrieve_concept(concept1_name)
+        concept2 = self.retrieve_concept(concept2_name)
+
+        if image is None:
+            # TODO concatenate two images from concepts side by side as image
+            raise NotImplementedError('This functionality is not yet implemented.')
+
+        heatmap = self.heatmap_visualizer.get_intersection_heatmap_visualization(concept1, concept2, image)
+
+        return heatmap
