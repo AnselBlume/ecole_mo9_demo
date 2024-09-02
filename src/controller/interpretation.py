@@ -1,4 +1,5 @@
 from .base import BaseController
+from model.concept import Concept
 import torch
 from typing import Union, Literal
 from PIL.Image import Image
@@ -21,6 +22,46 @@ class ControllerInterpretationMixin(BaseController):
             take_abs_of_weights=self.concept_kb.cfg.use_ln,
             return_img=True
         )
+
+    def compare_component_concepts(self, concept_name1: str, concept_name2: str) -> tuple[list[str], list[str]]:
+        '''
+            Returns the names of the component concepts exclusive to each of the two concepts.
+
+            Reasoning:
+            If you have concepts A, B, you don't do Parts(A) \ Parts(B) for the parts exclusive to A; instead, you do Parts(A) \ Parts(B) U Ancestors(Parts(B)).
+
+            So if concept A == Biplane and B == Airplane, then Propeller is a difference between a Biplane and an Airplane because biplanes have propellers
+            but Airplanes don't necessarily (they just have generic propulsion components).
+
+            However, a propulsion component is not a difference between an Airplane and a Biplane, because Airplanes have propulsion components and so do Biplanes
+            (since a propeller is a type—descendant—of propulsion component)
+        '''
+
+
+        concept1 = self.retrieve_concept(concept_name1)
+        concept2 = self.retrieve_concept(concept_name2)
+
+        # Get all ancestors of a concept's parts (including the parts themselves)
+        def get_part_ancestor_union(concept: Concept) -> set[Concept]:
+            part_ancestor_union = set()
+
+            for part in concept.component_concepts.values():
+                ancestors = self.concept_kb.rooted_subtree(part, reverse_edges=True)
+                part_ancestor_union.update(ancestors)
+
+            return part_ancestor_union
+
+        concept1_part_union = get_part_ancestor_union(concept1)
+        concept2_part_union = get_part_ancestor_union(concept2)
+
+        # Take difference of part unions to get parts exclusive to each concept
+        concept1_parts = concept1_part_union - concept2_part_union
+        concept2_parts = concept2_part_union - concept1_part_union
+
+        concept1_part_names = sorted([p.name for p in concept1_parts])
+        concept2_part_names = sorted([p.name for p in concept2_parts])
+
+        return concept1_part_names, concept2_part_names
 
     def compare_predictions(
         self,
