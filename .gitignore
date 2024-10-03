@@ -4,3 +4,6 @@ __pycache__
 assets
 checkpoints
 /data
+build/*
+/dist/*
+/*.egg-info/*
