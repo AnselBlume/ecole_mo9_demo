@@ -1,28 +1,26 @@
 clip==0.2.0
 coloredlogs==15.0.1
 einops==0.8.0
-faiss==1.8.0
 filelock==3.16.1
 h5py==3.12.1
 inflect==7.2.0
 jsonargparse==4.29.0
-matplotlib==3.8.3
-mobile_sam @ git+https://github.com/ChaoningZhang/MobileSAM.git@v1.0#egg=mobile_sam
-numpy==2.1.1
+matplotlib==3.9.2
+mobile_sam @ git+https://github.com/ChaoningZhang/MobileSAM.git#egg=mobile_sam
+numpy
 opencv_python_headless==4.9.0.80
 pandas==2.2.3
 Pillow==10.4.0
 pycocotools==2.0.7
-PyYAML==6.0.1
 PyYAML==6.0.2
 readerwriterlock==1.0.9
 rembg==2.0.56
 scikit_learn==1.5.2
-segment-anything @ git+https://github.com/facebookresearch/segment-anything.git@v1.0#egg=segment_anything
-skimage==0.0
-torch==2.2.2
-torchmetrics==1.3.2
-torchvision==0.17.2
+segment-anything @ git+https://github.com/facebookresearch/segment-anything.git#egg=segment_anything
+scikit_image
+numba==0.59.1
+timm
 tqdm==4.66.2
+torchmetrics
 transformers==4.39.3
 wandb==0.16.5
