@@ -1,18 +1,25 @@
 # %%
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
+if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import sys
+
 sys.path.append(os.path.realpath(os.path.join(__file__, '../../../src')))
-from model.concept import ConceptKB, ConceptExample
-from feature_extraction import build_feature_extractor, build_sam, build_desco, build_clip, build_dino
-from image_processing import build_localizer_and_segmenter
-from kb_ops import ConceptKBFeaturePipeline, ConceptKBFeatureCacher
+import logging
+
+import coloredlogs
 from controller import Controller
-from kb_ops import CLIPConceptRetriever
-from scripts.utils import set_feature_paths
+from feature_extraction import (build_clip, build_desco, build_dino,
+                                build_feature_extractor, build_sam)
+from image_processing import build_localizer_and_segmenter
+from kb_ops import (CLIPConceptRetriever, ConceptKBFeatureCacher,
+                    ConceptKBFeaturePipeline)
 from kb_ops.build_kb import list_paths
+from model.concept import ConceptExample, ConceptKB
 from PIL import Image
-import logging, coloredlogs
+from scripts.utils import set_feature_paths
+
 logger = logging.getLogger(__file__)
 
 coloredlogs.install(level='DEBUG')

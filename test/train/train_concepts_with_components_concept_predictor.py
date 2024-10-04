@@ -1,25 +1,33 @@
 # %%
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
+if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import sys
+
 sys.path.append(os.path.realpath(os.path.join(__file__, '../../../src')))
-from model.concept import ConceptKB, ConceptKBConfig
-from feature_extraction import build_feature_extractor, build_sam, build_desco, build_clip, build_dino
-from image_processing import build_localizer_and_segmenter
-from kb_ops import ConceptKBFeaturePipeline, ConceptKBFeatureCacher
-from feature_extraction.trained_attrs import N_ATTRS_DINO
-from kb_ops.build_kb import label_from_directory, kb_from_img_dir, add_global_negatives
-from scripts.utils import set_feature_paths
-from controller import Controller
-from kb_ops import CLIPConceptRetriever
+import logging
 import shutil
-import logging, coloredlogs
+
+import coloredlogs
+from controller import Controller
+from feature_extraction import (build_clip, build_desco, build_dino,
+                                build_feature_extractor, build_sam)
+from feature_extraction.trained_attrs import N_ATTRS_DINO
+from image_processing import build_localizer_and_segmenter
+from kb_ops import (CLIPConceptRetriever, ConceptKBFeatureCacher,
+                    ConceptKBFeaturePipeline)
+from kb_ops.build_kb import (add_global_negatives, kb_from_img_dir,
+                             label_from_directory)
+from model.concept import ConceptKB, ConceptKBConfig
+from scripts.utils import set_feature_paths
+
 logger = logging.getLogger(__file__)
 
 coloredlogs.install(level='DEBUG')
 
 def train_in_tandem():
-    from scripts.train.train_and_cls import parse_args, main
+    from scripts.train.train_and_cls import main, parse_args
 
     cache_root = 'temp_cache_delete_me'
     args, parser = parse_args(config_str=f'''

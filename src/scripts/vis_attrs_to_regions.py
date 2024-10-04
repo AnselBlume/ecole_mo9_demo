@@ -1,21 +1,25 @@
 # %%
-import os # Change DesCo CUDA device here
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+import os  # Change DesCo CUDA device here
+
+if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 import sys
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from controller import Controller
-from model.concept import ConceptKB
-from torchvision.utils import draw_segmentation_masks
-from matplotlib import colormaps
-import PIL
-from llm.attr_retrieval import retrieve_attributes
-from torchvision.transforms.functional import pil_to_tensor, to_pil_image
-from visualization.vis_utils import image_from_masks, show
-from utils import ArticleDeterminer
-import math
-from tqdm import tqdm
 import logging
+import math
+
+import PIL
+from controller import Controller
+from llm.attr_retrieval import retrieve_attributes
+from matplotlib import colormaps
+from model.concept import ConceptKB
+from torchvision.transforms.functional import pil_to_tensor, to_pil_image
+from torchvision.utils import draw_segmentation_masks
+from tqdm import tqdm
+from utils import ArticleDeterminer
+from visualization.vis_utils import image_from_masks, show
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +43,8 @@ def get_all_classes(in_dir: str):
 # %%
 if __name__ == '__main__':
     # Import here so DesCo sees the CUDA device change
-    from feature_extraction import (
-        build_clip,
-        build_zero_shot_attr_predictor,
-        build_desco,
-        build_sam,
-    )
+    from feature_extraction import (build_clip, build_desco, build_sam,
+                                    build_zero_shot_attr_predictor)
     from image_processing import build_localizer_and_segmenter
 
     controller = Controller(

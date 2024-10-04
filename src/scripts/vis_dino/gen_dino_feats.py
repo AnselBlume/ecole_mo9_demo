@@ -4,17 +4,21 @@
     features at the full image resolution.
 '''
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
-
 import sys
+
+if __name__ == '__main__':
+    os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+
 sys.path.append('/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src')
 
 import os
 import pickle
-from feature_extraction import build_dino, DINOFeatureExtractor
+
 import jsonargparse as argparse
-from PIL import Image
+from feature_extraction import DINOFeatureExtractor, build_dino
 from feature_extraction.dino_features import get_rescaled_features
+from PIL import Image
+
 
 def parse_args(cl_args = None):
     parser = argparse.ArgumentParser()

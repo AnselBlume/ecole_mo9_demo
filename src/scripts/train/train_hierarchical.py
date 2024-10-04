@@ -1,16 +1,21 @@
 # %%
-import os # Change DesCo CUDA device here
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
-
+import os  # Change DesCo CUDA device here
 # Prepend to path so starts searching at src first
 import sys
+
+if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 sys.path = [os.path.join(os.path.dirname(__file__), '../..')] + sys.path
 
-from kb_ops.build_kb import label_from_path, label_from_directory
+import logging
+
+import coloredlogs
 from kb_ops import kb_from_img_dir
-import logging, coloredlogs
-from scripts.train.train_and_cls import main, parse_args, get_parser as get_base_parser
+from kb_ops.build_kb import label_from_directory, label_from_path
 from scripts.train.parse_hierarchy import ConceptGraphParser
+from scripts.train.train_and_cls import get_parser as get_base_parser
+from scripts.train.train_and_cls import main, parse_args
 
 logger = logging.getLogger(__name__)
 

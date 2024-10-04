@@ -1,25 +1,29 @@
 # %%
 import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
-import torch
+
+if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import json
-from tqdm import tqdm
-from model.concept import ConceptKB
-from kb_ops import ConceptKBPredictor, ConceptKBFeaturePipeline
+from itertools import chain
+
+import jsonargparse as argparse
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
 from feature_extraction import build_feature_extractor
-from model.concept.concept_predictor import ConceptPredictorOutput
+from kb_ops import ConceptKBFeaturePipeline, ConceptKBPredictor
 from kb_ops.dataset import PresegmentedDataset, list_collate
 from kb_ops.train_test_split import split_from_paths
-from torch.utils.data import DataLoader
-import numpy as np
-import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+from model.concept import ConceptKB
+from model.concept.concept_predictor import ConceptPredictorOutput
 from PIL.Image import Image
-from visualization.vis_utils import image_from_masks
-from torchvision.transforms.functional import to_pil_image, pil_to_tensor
-import jsonargparse as argparse
+from torch.utils.data import DataLoader
 from torchmetrics import Accuracy
-from itertools import chain
+from torchvision.transforms.functional import pil_to_tensor, to_pil_image
+from tqdm import tqdm
+from visualization.vis_utils import image_from_masks
+
 
 def get_parser():
     parser = argparse.ArgumentParser()

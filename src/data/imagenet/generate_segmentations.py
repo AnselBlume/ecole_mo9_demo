@@ -1,13 +1,18 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+
+if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import sys
+
 sys.path = ['/shared/nas2/blume5/fa23/ecole/src/mo9_demo/src'] + sys.path
 
-from PIL import Image
-from feature_extraction import  build_sam
-from image_processing import build_localizer_and_segmenter
-import coloredlogs, logging
+import logging
 import pickle
+
+import coloredlogs
+from feature_extraction import build_sam
+from image_processing import build_localizer_and_segmenter
+from PIL import Image
 from tqdm import tqdm
 
 logger = logging.getLogger(__file__)
