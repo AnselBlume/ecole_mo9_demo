@@ -7,7 +7,7 @@ from model.concept import Concept, ConceptExample, ConceptKB
 # Path to data file mapping concepts to required and likely attributes in the same format as returned
 # by the LLM in attr_retrieval.retrieve_attributes method
 INITIAL_DATA_DIR = os.environ.get("INITIAL_DATA_DIR", '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/')
-CONCEPT_TO_ATTRS_PATH = os.path.join(INITIAL_DATA_DIR, 'data/jx_jsons')
+CONCEPT_TO_ATTRS_PATH = os.path.join(INITIAL_DATA_DIR, 'data/jx_jsons/union.json')
 
 def label_from_path(path):
     return os.path.basename(path).split('_')[0].lower()
