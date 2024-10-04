@@ -1,11 +1,13 @@
 import os
-from model.concept import Concept, ConceptKB, ConceptExample
 from typing import Callable
+
 import numpy as np
+from model.concept import Concept, ConceptExample, ConceptKB
 
 # Path to data file mapping concepts to required and likely attributes in the same format as returned
 # by the LLM in attr_retrieval.retrieve_attributes method
-CONCEPT_TO_ATTRS_PATH = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/jx_jsons/union.json'
+INITIAL_DATA_DIR = os.environ.get("INITIAL_DATA_DIR", '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/')
+CONCEPT_TO_ATTRS_PATH = os.path.join(INITIAL_DATA_DIR, 'data/jx_jsons')
 
 def label_from_path(path):
     return os.path.basename(path).split('_')[0].lower()
