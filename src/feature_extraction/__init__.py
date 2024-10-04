@@ -1,4 +1,5 @@
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -9,8 +10,11 @@ logger = logging.getLogger(__name__)
 from segment_anything.modeling import Sam
 
 USE_MOBILE_SAM = True
-DEFAULT_SAM_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/sam/sam_vit_h_4b8939.pth'
-DEFAULT_MOBILE_SAM_CKPT_PATH = '/shared/nas2/blume5/fa23/ecole/checkpoints/sam/mobile_sam/mobile_sam.pt'
+DEFAULT_SAM_CKPT_DIR = os.environ.get(
+    "DEFAULT_SAM_CKPT_DIR", "/shared/nas2/blume5/fa23/ecole/checkpoints"
+)
+DEFAULT_SAM_CKPT_PATH = os.path.join(DEFAULT_SAM_CKPT_DIR, "sam/sam_vit_h_4b8939.pth")
+DEFAULT_MOBILE_SAM_CKPT_PATH = os.path.join(DEFAULT_SAM_CKPT_DIR, 'sam/mobile_sam/mobile_sam.pt')
 
 if USE_MOBILE_SAM:
     from mobile_sam import (SamAutomaticMaskGenerator, SamPredictor,
