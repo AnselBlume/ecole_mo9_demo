@@ -38,6 +38,9 @@ def get_packages_and_modules():
 
 packages, py_modules = get_packages_and_modules()
 
+print("Packages:", packages)
+print("Py modules:", py_modules)
+
 setup(
     name="ecole_mo9_demo",
     version="0.1.0",
