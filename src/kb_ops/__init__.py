@@ -1,4 +1,4 @@
-from .build_kb import kb_from_img_dir, add_global_negatives
+from .build_kb import kb_from_img_dir, add_global_negatives, kb_from_img_and_mask_dirs
 from .caching import ConceptKBFeatureCacher
 from .train import ConceptKBTrainer
 from .predict import ConceptKBPredictor

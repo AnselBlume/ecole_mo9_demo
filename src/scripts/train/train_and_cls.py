@@ -8,8 +8,8 @@ import sys
 sys.path = [os.path.join(os.path.dirname(__file__), '..')] + sys.path
 
 from llm import LLMClient
-from kb_ops import kb_from_img_dir, add_global_negatives
-from kb_ops.build_kb import label_from_path, label_from_directory
+from kb_ops import kb_from_img_dir, add_global_negatives, kb_from_img_and_mask_dirs
+from kb_ops.build_kb import label_from_path, label_from_directory, add_object_masks
 from model.concept import ConceptKBConfig
 from kb_ops.train_test_split import split
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
@@ -44,11 +44,19 @@ def get_parser() -> argparse.ArgumentParser:
                         default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/xiaomeng_augmented_data_v3',
                         help='Path to directory of images or preprocessed segmentations')
 
+    parser.add_argument('--object_mask_rle_dir', type=str,
+                        help='Path to directory of object masks in pycocotools RLE format. '
+                             +'Each file should have the same relative path as its corresponding image file')
+
     parser.add_argument('--extract_label_from', choices=['path', 'directory'], default='path',
                         help='Whether to extract concept labels from image paths or containing directories')
 
     parser.add_argument('--negatives_img_dir', type=str, default='/shared/nas2/blume5/fa23/ecole/data/imagenet/negatives_rand_1k',
                         help='Path to directory of negative example images')
+
+    parser.add_argument('--negatives_object_mask_rle_dir', type=str,
+                        help='Path to directory of negative example object masks in pycocotools RLE format. '
+                             +'Each file should have the same relative path as its corresponding image file')
 
     parser.add_argument('--ckpt_path', help='If provided, loads the ConceptKB from this pickle file instead of creating a new one.')
     parser.add_argument('--use_cached_features_on_ckpt_load', default=True, type=bool,
@@ -132,10 +140,18 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
 
     else:
         label_extractor = label_from_path if args.extract_label_from == 'path' else label_from_directory
-        concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor) if concept_kb is None else concept_kb
+
+        if concept_kb is None: # Didn't load from checkpoint or pass as argument
+            if args.object_mask_rle_dir:
+                concept_kb = kb_from_img_and_mask_dirs(args.img_dir, args.object_mask_rle_dir, label_from_path_fn=label_extractor)
+            else: # No masks
+                concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor)
 
         if args.train.use_global_negatives:
             add_global_negatives(concept_kb, args.negatives_img_dir, limit=args.train.limit_global_negatives)
+
+        if args.negatives_object_mask_rle_dir:
+            add_object_masks(concept_kb.global_negatives, args.negatives_img_dir, args.negatives_object_mask_rle_dir)
 
         concept_kb.initialize(ConceptKBConfig(
             encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,

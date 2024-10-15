@@ -41,7 +41,9 @@ class ConceptKBFeaturePipeline:
         concept_name: str = '',
         concept_parts: list[str] = [],
         do_localize: bool = None,
+        do_segment: bool = None,
         remove_background: bool = None,
+        object_mask: torch.BoolTensor = None,
         return_crops: bool = None,
         use_bbox_for_crops: bool = None
     ) -> LocalizeAndSegmentOutput:
@@ -60,7 +62,9 @@ class ConceptKBFeaturePipeline:
             concept_name=concept_name,
             concept_parts=concept_parts,
             do_localize=do_localize,
+            do_segment=do_segment,
             remove_background=remove_background,
+            object_mask=object_mask,
             return_crops=return_crops,
             use_bbox_for_crops=use_bbox_for_crops
         )
