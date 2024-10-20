@@ -28,7 +28,7 @@ if __name__ == '__main__':
     args = parse_args(parser, config_str='''
         # ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_01-00:57:58-85pf2vzt-no_bp_no_cj_no_localize/concept_kb_epoch_50.pt
 
-        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_and_guns_v3
+        img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_and_guns_v4
 
         train:
             # limit_global_negatives: 5
@@ -40,8 +40,8 @@ if __name__ == '__main__':
 
         cache:
             # XXX This MUST be changed to a directory which we don't care about to not overwrite checkpoints
-            # root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_and_guns_v3/all_v1_no_infer_localize_use_containing_concepts
-            root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_and_guns_v3/change_me
+            root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_and_guns_v4/all_v1_localize_use_containing_concepts
+            # root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_and_guns_v3/change_me
 
             infer_localize_from_component: false
 
