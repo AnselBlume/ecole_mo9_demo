@@ -167,14 +167,14 @@ class LocalizerAndSegmenter:
         if do_segment:
             if concept_parts:
             # if concept_name in self.concepts: # Use DesCo if we can retrieve the concept parts
-                logger.info(f'Localizing concept parts {concept_parts} with DesCo')
+                logger.debug(f'Localizing concept parts {concept_parts} with DesCo')
                 # concept = self.concepts.get_concept(concept_name)
                 # component_parts = list(concept.component_concepts.keys())
                 # TODO consider setting areas not in the bbox to zero instead of cropping the image to maintain scale
                 cropped_image = self.segmenter.crop(image, bboxes[0], remove_background=remove_background) # Crop around localized concept
                 part_masks = self.localizer.desco_mask(cropped_image, caption=caption, tokens_to_ground=concept_parts) # (n_detections, h, w)
 
-                logger.info(f'Obtained {len(part_masks)} part masks with DesCo')
+                logger.debug(f'Obtained {len(part_masks)} part masks with DesCo')
 
                 if len(part_masks) == 0:
                     raise RuntimeError('Failed to localize concept parts with DesCo')
@@ -202,7 +202,7 @@ class LocalizerAndSegmenter:
                 part_masks = torch.stack(full_part_masks)
 
             else: # Non part-based segmentation of localized concept
-                logger.info('Performing part segmentation with SAM')
+                logger.debug('Performing part segmentation with SAM')
                 # Don't attempt to remove background if object mask is provided
                 remove_background_for_segmentation = remove_background if object_mask is None else False
                 part_masks = self.segmenter.segment(image, bboxes[0], remove_background=remove_background_for_segmentation)
@@ -229,7 +229,7 @@ class LocalizerAndSegmenter:
             else:
                 part_crops = self.segmenter.crops_from_masks(image, part_masks, only_mask=remove_background)
 
-            logger.info(f'Generated {len(part_crops)} part crops from part masks')
+            logger.debug(f'Generated {len(part_crops)} part crops from part masks')
 
             # Ignore part masks where the crop has a zero-dimension (caused by part mask being one-dimensional, e.g. a line)
             filtered_part_masks = []
