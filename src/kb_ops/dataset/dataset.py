@@ -11,6 +11,7 @@ from model.concept import ConceptKB, ConceptExample
 from typing import Optional
 import logging
 from kb_ops.concurrency import load_pickle, PathToLockMapping
+from utils import open_image
 
 logger = logging.getLogger(__file__)
 
@@ -109,7 +110,7 @@ class ImageDataset(BaseDataset):
         self.img_paths = self.data
 
     def __getitem__(self, idx):
-        img = Image.open(self.img_paths[idx])
+        img = open_image(self.img_paths[idx])
         label = self.labels[idx]
         concepts_to_train = self.concepts_to_train_per_example[idx]
 
@@ -262,7 +263,7 @@ def preprocess_segmentations(img_dir: str, out_dir: str, loc_and_seg: LocalizerA
         # if os.path.exists(out_path) or ext not in ['.jpg', '.png']:
         #     continue
 
-        img = Image.open(in_path).convert('RGB')
+        img = open_image(in_path)
         segmentations = loc_and_seg.localize_and_segment(img)
         segmentations.input_image_path = in_path
 

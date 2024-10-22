@@ -7,8 +7,8 @@ from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 from typing import Literal, BinaryIO
 from model.concept import ConceptExample
 from pycocotools import mask as mask_utils
-from PIL.Image import open as open_image
 from PIL.Image import Image
+from utils import open_image
 import json
 import pickle
 import logging
@@ -55,7 +55,7 @@ class ConceptKBFeatureCacher:
         if example.image is not None:
             return example.image
 
-        return open_image(example.image_path).convert('RGB')
+        return open_image(example.image_path)
 
     def _get_examples(
         self,
@@ -121,7 +121,19 @@ class ConceptKBFeatureCacher:
                 rle_dict = json.load(f)
 
             array = mask_utils.decode(rle_dict)
-            return torch.from_numpy(array).bool()
+            object_mask = torch.from_numpy(array).bool()
+
+            # Validate that image dimensions match mask dimensions
+            with open_image(example.image_path) as img:
+                image_width, image_height = img.size
+
+            if object_mask.shape != (image_height, image_width):
+                raise RuntimeError(
+                    f'Object mask at {example.object_mask_rle_json_path} with dimensions {object_mask.shape} '
+                    + f'does not match image dimensions at {example.image_path} with dimensions {(image_height, image_width)}'
+                )
+
+            return
 
         return None
 
