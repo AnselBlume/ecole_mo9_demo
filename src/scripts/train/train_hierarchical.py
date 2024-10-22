@@ -29,12 +29,15 @@ if __name__ == '__main__':
         # ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_01-00:57:58-85pf2vzt-no_bp_no_cj_no_localize/concept_kb_epoch_50.pt
 
         # img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_and_guns_v4
-        img_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/images
-        object_mask_rle_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/masks
+        # img_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/images
+        img_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations/images
+
+        # object_mask_rle_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/masks
+        object_mask_rle_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations/masks
 
         train:
             # limit_global_negatives: 5
-            split: [1., 0., 0]
+            split: [.6, 0., .4]
             n_epochs: 500
             lr: 1e-3
 
@@ -53,6 +56,8 @@ if __name__ == '__main__':
             # Change this to true in order to run component detection with DesCo
             compute_component_concept_scores: false
 
+            use_zs_attr_scores: false
+
         loc_and_seg_config:
             do_localize: true
             do_segment: false
@@ -61,7 +66,8 @@ if __name__ == '__main__':
             use_descendants_as_positives: true
             use_containing_concepts_for_positives: false
 
-        hierarchy_config_path: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/graph.yaml
+        # hierarchy_config_path: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/graph.yaml
+        hierarchy_config_path: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations/graph.yaml
 
         # hierarchy_config:
         #     concepts:

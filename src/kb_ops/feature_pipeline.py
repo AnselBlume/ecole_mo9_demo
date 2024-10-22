@@ -11,6 +11,7 @@ from dataclasses import dataclass
 @dataclass
 class ConceptKBFeaturePipelineConfig:
     compute_component_concept_scores: bool = False
+    use_zs_attr_scores: bool = True
 
 class ConceptKBFeaturePipeline:
     def __init__(
@@ -103,6 +104,16 @@ class ConceptKBFeaturePipeline:
             region_crops = [image]
             region_masks = torch.ones(1, *image.size[::-1], dtype=torch.bool)
 
+        if not self.config.use_zs_attr_scores:
+            # Add dummy CLIP features that will be extracted from the cache instead of computing them
+            # since we only need CLIP features if computing zero-shot attribute scores
+            clip_feature_dim = self.feature_extractor.clip.config.projection_dim
+            if cached_features is None:
+                cached_features = CachedImageFeatures()
+
+            cached_features.clip_image_features = torch.zeros(1, clip_feature_dim)
+            cached_features.clip_region_features = torch.zeros(len(region_crops), clip_feature_dim)
+
         with torch.no_grad():
             features: ImageFeatures = self.feature_extractor(
                 image,
@@ -148,6 +159,13 @@ class ConceptKBFeaturePipeline:
                 (1, n_zs_attrs) for the zero-shot attribute scores for the image.
                 (n_regions, n_zs_attrs) for the zero-shot attribute scores for each region.
         '''
+        if not self.config.use_zs_attr_scores:
+            # Return dummy scores that the model will learn to be ignore
+            n_zs_attrs = len(concept.zs_attributes)
+            n_regions = len(cached_features.region_features)
+
+            return torch.zeros(1, n_zs_attrs), torch.zeros(n_regions, n_zs_attrs)
+
         if not recompute_scores and concept.name in cached_features.concept_to_zs_attr_img_scores and concept.name in cached_features.concept_to_zs_attr_region_scores:
             zs_attr_img_scores = cached_features.concept_to_zs_attr_img_scores[concept.name] # (1, n_zs_attrs)
             zs_attr_region_scores = cached_features.concept_to_zs_attr_region_scores[concept.name] # (n_regions, n_zs_attrs)
