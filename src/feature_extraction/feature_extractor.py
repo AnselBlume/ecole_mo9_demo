@@ -24,7 +24,7 @@ class FeatureExtractor(nn.Module):
         clip: CLIPModel,
         processor: CLIPProcessor,
         desco: GLIPDemo = None,
-        use_cls_features: bool = False,
+        use_cls_features: bool = False
     ):
         '''
             use_cls_features: Use DINO's CLS features for image and regions instead of pooled features over regions.
