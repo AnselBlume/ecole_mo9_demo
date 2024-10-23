@@ -101,6 +101,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument('--train.use_concepts_as_negatives', type=bool, default=False, help='Whether to use other concepts as negatives')
     parser.add_argument('--train.use_global_negatives', type=bool, default=True, help='Whether to use global negative examples during training')
     parser.add_argument('--train.limit_global_negatives', type=int, help='The number of global negative examples to use during training. If None, uses all')
+    parser.add_argument('--train.dataloader_kwargs', type=dict, default={}, help='Keyword arguments to pass to the DataLoader')
 
     parser.add_argument('--train.split', type=tuple[float,float,float], default=(.6, .2, .2), help='Train, val, test split ratios')
 
@@ -109,7 +110,12 @@ def get_parser() -> argparse.ArgumentParser:
 def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: ConceptKB = None):
     # %%
     if args.use_wandb:
-        run = wandb.init(project=args.wandb_project, config=args.as_flat(), dir=args.wandb_dir, reinit=True)
+        run = wandb.init(
+            project=args.wandb_project,
+            config=args.as_flat(),
+            dir=args.wandb_dir,
+            reinit=True
+        )
     else:
         run = None
 
@@ -172,6 +178,7 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     # features_dir = os.path.join(args.cache.root, args.cache.features)
     segmentations_dir = os.path.join(args.cache.root, args.cache.segmentations)
     set_feature_paths(concept_kb, segmentations_dir=segmentations_dir)
+    # set_feature_paths(concept_kb, features_dir=os.path.join(args.cache.root, args.cache.features)) # XXX Okay only if LLM is not used
 
     if args.train.use_global_negatives:
         neg_segmentations_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.segmentations)
@@ -236,7 +243,8 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
         lr=args.train.lr,
         batch_size=args.train.batch_size,
         ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
-        ckpt_dir=checkpoint_dir
+        ckpt_dir=checkpoint_dir,
+        dataloader_kwargs=args.train.dataloader_kwargs
     )
 
 # %%

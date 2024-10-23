@@ -40,6 +40,9 @@ if __name__ == '__main__':
             split: [.6, 0., .4]
             n_epochs: 500
             lr: 1e-3
+            dataloader_kwargs:
+                num_workers: 0
+                pin_memory: false
 
         extract_label_from: directory
 
