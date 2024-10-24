@@ -1,6 +1,6 @@
 # %%
 import os # Change DesCo CUDA device here
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '5'
 
 # Prepend to path so starts searching at src first
 import sys
@@ -29,21 +29,24 @@ if __name__ == '__main__':
         # ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_06_01-00:57:58-85pf2vzt-no_bp_no_cj_no_localize/concept_kb_epoch_50.pt
 
         # img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_and_guns_v4
-        # img_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/images
+
+        # Image directory on both network attached storage and hard disk
+        # img_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations/images
         img_dir: /scratch/blume5/merged_annotations/images
 
-        # object_mask_rle_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/masks
+        # Object mask directory on both network attached storage and hard disk
+        # object_mask_rle_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations/masks
         object_mask_rle_dir: /scratch/blume5/merged_annotations/masks
 
         train:
             # limit_global_negatives: 5
             split: [.6, 0., .4]
-            n_epochs: 50
+            n_epochs: 5
             lr: 1e-3
             dataloader_kwargs:
-                num_workers: 3
-                pin_memory: true
-                persistent_workers: true
+                num_workers: 0
+                pin_memory: false
+                persistent_workers: false
 
             do_minimal: true
 
