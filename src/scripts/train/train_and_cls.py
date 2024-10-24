@@ -102,6 +102,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument('--train.use_global_negatives', type=bool, default=True, help='Whether to use global negative examples during training')
     parser.add_argument('--train.limit_global_negatives', type=int, help='The number of global negative examples to use during training. If None, uses all')
     parser.add_argument('--train.dataloader_kwargs', type=dict, default={}, help='Keyword arguments to pass to the DataLoader')
+    parser.add_argument('--train.do_minimal', type=bool, default=False, help='Whether to train with minimal logging and checkpointing for max speed')
 
     parser.add_argument('--train.split', type=tuple[float,float,float], default=(.6, .2, .2), help='Train, val, test split ratios')
 
@@ -175,10 +176,10 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     # %% Set cached segmentation, feature paths if they are provided and exist
     # NOTE Must recompute features every time we train a new model, as the number of zero-shot attributes
     # is nondeterministic from the LLM
-    # features_dir = os.path.join(args.cache.root, args.cache.features)
+    features_dir = os.path.join(args.cache.root, args.cache.features)
     segmentations_dir = os.path.join(args.cache.root, args.cache.segmentations)
     set_feature_paths(concept_kb, segmentations_dir=segmentations_dir)
-    # set_feature_paths(concept_kb, features_dir=os.path.join(args.cache.root, args.cache.features)) # XXX Okay only if LLM is not used
+    # set_feature_paths(concept_kb, features_dir=features_dir) # XXX Okay only if LLM is not used
 
     if args.train.use_global_negatives:
         neg_segmentations_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.segmentations)
@@ -236,16 +237,29 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     parser.save(args, os.path.join(checkpoint_dir, 'args.yaml'))
 
     # Train
-    trainer.train_batched(
-        train_ds=train_ds,
-        val_ds=val_ds,
-        n_epochs=args.train.n_epochs,
-        lr=args.train.lr,
-        batch_size=args.train.batch_size,
-        ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
-        ckpt_dir=checkpoint_dir,
-        dataloader_kwargs=args.train.dataloader_kwargs
-    )
+    if args.train.do_minimal:
+        trainer.train_minimal(
+            train_ds=train_ds,
+            n_epochs=args.train.n_epochs,
+            lr=args.train.lr,
+            batch_size=args.train.batch_size,
+            dataloader_kwargs=args.train.dataloader_kwargs
+        )
+
+        checkpoint_path = trainer._get_ckpt_path(checkpoint_dir, 'concept_kb_epoch_{}.pt', args.train.n_epochs)
+        trainer.concept_kb.save(checkpoint_path)
+
+    else:
+        trainer.train_batched(
+            train_ds=train_ds,
+            val_ds=val_ds,
+            n_epochs=args.train.n_epochs,
+            lr=args.train.lr,
+            batch_size=args.train.batch_size,
+            ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
+            ckpt_dir=checkpoint_dir,
+            dataloader_kwargs=args.train.dataloader_kwargs
+        )
 
 # %%
 if __name__ == '__main__':

@@ -30,26 +30,30 @@ if __name__ == '__main__':
 
         # img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_and_guns_v4
         # img_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/images
-        img_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations/images
+        img_dir: /scratch/blume5/merged_annotations/images
 
         # object_mask_rle_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/masks
-        object_mask_rle_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations/masks
+        object_mask_rle_dir: /scratch/blume5/merged_annotations/masks
 
         train:
             # limit_global_negatives: 5
             split: [.6, 0., .4]
-            n_epochs: 500
+            n_epochs: 50
             lr: 1e-3
             dataloader_kwargs:
-                num_workers: 0
-                pin_memory: false
+                num_workers: 3
+                pin_memory: true
+                persistent_workers: true
+
+            do_minimal: true
 
         extract_label_from: directory
 
         cache:
             # XXX This MUST be changed to a directory which we don't care about to not overwrite checkpoints
             # root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_and_guns_v4/all_v1_localize_use_containing_concepts
-            root: /shared/nas2/blume5/fa23/ecole/cache/2024_december_1k/v1
+            # root: /shared/nas2/blume5/fa23/ecole/cache/2024_december_1k/v1
+            root: /scratch/blume5/cache/2024_december_1k/v1
 
             infer_localize_from_component: false
 
@@ -70,7 +74,7 @@ if __name__ == '__main__':
             use_containing_concepts_for_positives: false
 
         # hierarchy_config_path: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/graph.yaml
-        hierarchy_config_path: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations/graph.yaml
+        hierarchy_config_path: /scratch/blume5/merged_annotations/graph.yaml
 
         # hierarchy_config:
         #     concepts:

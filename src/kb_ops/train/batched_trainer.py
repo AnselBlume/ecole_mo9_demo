@@ -44,7 +44,7 @@ class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
             optimizer = torch.optim.Adam(concept.predictor.parameters(), lr=lr)
             train_dl = self._get_dataloader(concept, dataset, is_train=True, batch_size=batch_size, **dataloader_kwargs)
 
-            for epoch in range(1, n_epochs + 1):
+            for epoch in tqdm(range(1, n_epochs + 1), desc=f'Epoch'):
                 for batch in train_dl:
                     _ = self.batched_forward_pass(
                         batch['features'],
