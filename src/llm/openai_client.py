@@ -24,6 +24,16 @@ class LLMClient:
 
             See https://cookbook.openai.com/examples/how_to_stream_completions for more info on streaming.
         '''
+        # Uncomment for debugging
+        return '''Required:
+        - Yellow
+        - Black
+
+        Likely:
+        - Pepperoni
+        - Cheese
+        '''
+
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[

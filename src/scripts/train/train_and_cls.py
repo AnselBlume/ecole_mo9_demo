@@ -179,7 +179,7 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     features_dir = os.path.join(args.cache.root, args.cache.features)
     segmentations_dir = os.path.join(args.cache.root, args.cache.segmentations)
     set_feature_paths(concept_kb, segmentations_dir=segmentations_dir)
-    # set_feature_paths(concept_kb, features_dir=features_dir) # XXX Okay only if LLM is not used
+    set_feature_paths(concept_kb, features_dir=features_dir) # XXX Okay only if LLM is not used
 
     if args.train.use_global_negatives:
         neg_segmentations_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.segmentations)
