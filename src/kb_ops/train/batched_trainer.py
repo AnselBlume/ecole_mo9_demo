@@ -38,6 +38,7 @@ class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
         self.concept_kb.train()
 
         prog_bar = tqdm(concept_to_train_dataset.items())
+        count = 0
         for concept, dataset in prog_bar:
             prog_bar.set_description(f'Training concept "{concept.name}"')
 
@@ -55,6 +56,10 @@ class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
 
                     optimizer.step()
                     optimizer.zero_grad()
+
+            count += 1
+            if count == 3:
+                return
 
     def train_batched(
         self,
