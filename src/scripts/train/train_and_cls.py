@@ -238,15 +238,22 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
 
     # Train
     if args.train.do_minimal:
-        trainer.train_minimal(
+        trainer.train_in_memory(
             train_ds=train_ds,
             n_epochs=args.train.n_epochs,
             lr=args.train.lr,
-            batch_size=args.train.batch_size,
-            dataloader_kwargs=args.train.dataloader_kwargs
+            batch_size=args.train.batch_size
         )
 
-        checkpoint_path = trainer._get_ckpt_path(checkpoint_dir, 'concept_kb_epoch_{}.pt', args.train.n_epochs)
+        # trainer.train_minimal(
+        #     train_ds=train_ds,
+        #     n_epochs=args.train.n_epochs,
+        #     lr=args.train.lr,
+        #     batch_size=args.train.batch_size,
+        #     dataloader_kwargs=args.train.dataloader_kwargs
+        # )
+
+        checkpoint_path = trainer._get_ckpt_path(checkpoint_dir, 'concept_kb_epoch_{epoch}.pt', args.train.n_epochs)
         trainer.concept_kb.save(checkpoint_path)
 
     else:
