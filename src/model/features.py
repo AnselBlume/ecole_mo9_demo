@@ -24,7 +24,7 @@ class ImageFeatures(DeviceShiftable):
     # images in the batch, and this must be handled separately by splitting via n_regions_per_image
     region_features: Tensor = None # (..., n_regions, d_regions)
     clip_region_features: Tensor = None # (..., n_regions, d_regions)
-    region_weights: Tensor = None # (..., n_regions,); how much to weight each region in all calculations
+    region_weights: Tensor = None # (..., n_regions); how much to weight each region in all calculations
 
     trained_attr_img_scores: Tensor = None # (..., 1, n_trained_attrs)
     trained_attr_region_scores: Tensor = None # (..., n_regions, n_trained_attrs)
