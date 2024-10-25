@@ -75,8 +75,7 @@ class ImageFeatures(DeviceShiftable):
 
     def _validate_leading_dimension(self, tensor_attr_name: str, expected_shape: int):
         tensor: Optional[Tensor] = getattr(self, tensor_attr_name)
-        assert (
-            tensor is None or tensor.shape[0] == expected_shape,
+        assert tensor is None or tensor.shape[0] == expected_shape, (
             f'{tensor_attr_name} must have leading dimension of {expected_shape}'
         )
 
