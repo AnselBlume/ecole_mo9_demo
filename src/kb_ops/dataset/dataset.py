@@ -91,6 +91,13 @@ class BaseDataset(Dataset):
 
         return concepts_to_train_per_example
 
+    def get_metadata(self, index: int):
+        return {
+            'index': index,
+            'label': self.labels[index],
+            'concepts_to_train': self.concepts_to_train_per_example[index]
+        }
+
 class ImageDataset(BaseDataset):
     def __init__(
         self,
