@@ -1,6 +1,7 @@
 import os
 from model.concept import ConceptKB, Concept, ConceptExample
 from datetime import datetime
+import jsonargparse
 from typing import Union, Callable
 from itertools import chain
 from kb_ops.caching.cacher import ConceptKBFeatureCacher
@@ -60,3 +61,11 @@ def set_feature_paths(
     if features_dir and os.path.exists(features_dir):
         # Store pre-computed feature paths in concept examples
         set_paths_if_exists(examples, cacher._get_features_cache_path, 'image_features_path')
+
+def parse_args(parser: jsonargparse.ArgumentParser, cl_args: list[str] = None, config_str: str = None) -> jsonargparse.Namespace:
+    if config_str:
+        args = parser.parse_string(config_str)
+    else:
+        args = parser.parse_args(cl_args)
+
+    return args

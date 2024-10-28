@@ -23,17 +23,9 @@ from kb_ops.train import ConceptKBTrainer
 import wandb
 import jsonargparse as argparse
 from itertools import chain
-from scripts.utils import set_feature_paths, get_timestr
+from scripts.utils import set_feature_paths, get_timestr, parse_args
 
 logger = logging.getLogger(__name__)
-
-def parse_args(parser: argparse.ArgumentParser, cl_args: list[str] = None, config_str: str = None) -> argparse.Namespace:
-    if config_str:
-        args = parser.parse_string(config_str)
-    else:
-        args = parser.parse_args(cl_args)
-
-    return args
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
@@ -183,7 +175,9 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
 
     if args.train.use_global_negatives:
         neg_segmentations_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.segmentations)
+        neg_features_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.features)
         set_feature_paths(concept_kb.global_negatives, segmentations_dir=neg_segmentations_dir)
+        # set_feature_paths(concept_kb.global_negatives, features_dir=neg_features_dir) # XXX Okay only if LLM is not used
 
     if args.ckpt_path and args.use_cached_features_on_ckpt_load:
         features_dir = os.path.join(args.cache.root, args.cache.features)
@@ -238,7 +232,7 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
 
     # Train
     if args.train.do_minimal:
-        trainer.train_in_memory(
+        trainer.train_minimal_in_memory(
             train_ds=train_ds,
             n_epochs=args.train.n_epochs,
             lr=args.train.lr,
