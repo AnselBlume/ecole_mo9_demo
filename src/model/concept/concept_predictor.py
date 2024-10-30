@@ -1,8 +1,10 @@
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
-from model.features import ImageFeatures
-from dataclasses import dataclass
 from model.dataclass_base import DeviceShiftable
+from model.features import ImageFeatures
+
 
 @dataclass
 class ConceptPredictorFeatures(ImageFeatures):
@@ -135,6 +137,7 @@ class ConceptPredictor(nn.Module):
     def forward(self, features: ConceptPredictorFeatures) -> ConceptPredictorOutput:
         if features.all_scores is None: # If scores are not provided for feature_group-weighting, calculate them
             features.validate_dimensions()
+            features.to(self.device)
             batch_dims = features.image_features.shape[:-2] # All dims before (1, d_img)
 
             region_weights = features.region_weights.unsqueeze(-1) # (..., n_regions, 1)
@@ -183,7 +186,6 @@ class ConceptPredictor(nn.Module):
 
             # Component concept scores
             component_concept_scores = features.component_concept_scores # (1, n_component_concepts)
-
             # Concatenate all scores for layer norm
             all_scores = torch.cat([
                 img_score, # (1, 1)
