@@ -1,4 +1,5 @@
 from __future__ import annotations
+from torch import BoolTensor
 from dataclasses import dataclass, field
 from model.attribute import Attribute
 from .concept_predictor import ConceptPredictor
@@ -58,6 +59,16 @@ class ConceptExample:
     is_negative: bool = field(
         default=False,
         metadata={'description': 'Whether this example is a negative example for its containing concept'}
+    )
+
+    object_mask: BoolTensor = field(
+        default=None,
+        metadata={'description': 'Foreground mask for the main object in this image'}
+    )
+
+    object_mask_rle_json_path: dict = field(
+        default=None,
+        metadata={'description': 'Path to JSON of the Pycocotools run-length encoded object mask dictionary'}
     )
 
 @dataclass

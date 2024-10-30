@@ -108,7 +108,8 @@ class ConceptGraphParser:
     INSTANCE_GRAPH_KEY = 'instance_graph'
     COMPONENT_GRAPH_KEY = 'component_graph'
 
-    def parse_graph(self, path: str = None, string: str = None, config: dict = None) -> ConceptGraph:
+    @staticmethod
+    def parse_graph(path: str = None, string: str = None, config: dict = None) -> ConceptGraph:
         assert bool(path) + bool(string) + bool(config) == 1, 'Exactly one of path or string must be provided'
 
         if path:
@@ -125,9 +126,9 @@ class ConceptGraphParser:
         else:
             hierarchy_dict = config
 
-        concepts = hierarchy_dict.get(self.CONCEPTS_KEY, [])
-        instance_graph = hierarchy_dict.get(self.INSTANCE_GRAPH_KEY, {})
-        component_graph = hierarchy_dict.get(self.COMPONENT_GRAPH_KEY, {})
+        concepts = hierarchy_dict.get(ConceptGraphParser.CONCEPTS_KEY, [])
+        instance_graph = hierarchy_dict.get(ConceptGraphParser.INSTANCE_GRAPH_KEY, {})
+        component_graph = hierarchy_dict.get(ConceptGraphParser.COMPONENT_GRAPH_KEY, {})
 
         return ConceptGraph(concepts=concepts, instance_graph=instance_graph, component_graph=component_graph)
 

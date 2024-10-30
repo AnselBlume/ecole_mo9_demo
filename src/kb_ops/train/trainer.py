@@ -5,10 +5,12 @@ from typing import Union
 from .outputs import TrainOutput
 from .batched_trainer import ConceptKBBatchedTrainerMixin
 from .sgd_trainer import ConceptKBSGDTrainerMixin
+from .in_memory_trainer import ConceptKBInMemoryTrainerMixin
 
 class ConceptKBTrainer(
     ConceptKBSGDTrainerMixin,
-    ConceptKBBatchedTrainerMixin
+    ConceptKBBatchedTrainerMixin,
+    ConceptKBInMemoryTrainerMixin
 ):
     def train_concept(
         self,

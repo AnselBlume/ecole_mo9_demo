@@ -24,7 +24,7 @@ class ImageFeatures(DeviceShiftable):
     # images in the batch, and this must be handled separately by splitting via n_regions_per_image
     region_features: Tensor = None # (..., n_regions, d_regions)
     clip_region_features: Tensor = None # (..., n_regions, d_regions)
-    region_weights: Tensor = None # (..., n_regions,); how much to weight each region in all calculations
+    region_weights: Tensor = None # (..., n_regions); how much to weight each region in all calculations
 
     trained_attr_img_scores: Tensor = None # (..., 1, n_trained_attrs)
     trained_attr_region_scores: Tensor = None # (..., n_regions, n_trained_attrs)
@@ -75,8 +75,7 @@ class ImageFeatures(DeviceShiftable):
 
     def _validate_leading_dimension(self, tensor_attr_name: str, expected_shape: int):
         tensor: Optional[Tensor] = getattr(self, tensor_attr_name)
-        assert (
-            tensor is None or tensor.shape[0] == expected_shape,
+        assert tensor is None or tensor.shape[0] == expected_shape, (
             f'{tensor_attr_name} must have leading dimension of {expected_shape}'
         )
 

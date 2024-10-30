@@ -6,8 +6,10 @@ from model.concept import ConceptKB, Concept
 from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
 from typing import Literal, BinaryIO
 from model.concept import ConceptExample
-from PIL.Image import open as open_image
+from pycocotools import mask as mask_utils
 from PIL.Image import Image
+from utils import open_image
+import json
 import pickle
 import logging
 from .cached_image_features import CachedImageFeatures
@@ -53,7 +55,7 @@ class ConceptKBFeatureCacher:
         if example.image is not None:
             return example.image
 
-        return open_image(example.image_path).convert('RGB')
+        return open_image(example.image_path)
 
     def _get_examples(
         self,
@@ -110,8 +112,34 @@ class ConceptKBFeatureCacher:
     def _get_segmentation_cache_path(self, example: ConceptExample):
         return os.path.realpath(f'{self.cache_dir}/{self.segmentations_sub_dir}/{self._hash_str(example.image_path)}.pkl')
 
+    def _load_object_mask(self, example: ConceptExample) -> torch.BoolTensor:
+        if example.object_mask is not None:
+            return example.object_mask
+
+        elif example.object_mask_rle_json_path is not None:
+            with open(example.object_mask_rle_json_path, 'r') as f:
+                rle_dict = json.load(f)
+
+            array = mask_utils.decode(rle_dict)
+            object_mask = torch.from_numpy(array).bool()
+
+            # Validate that image dimensions match mask dimensions
+            with open_image(example.image_path) as img:
+                image_width, image_height = img.size
+
+            if object_mask.shape != (image_height, image_width):
+                raise RuntimeError(
+                    f'Object mask at {example.object_mask_rle_json_path} with dimensions {object_mask.shape} '
+                    + f'does not match image dimensions at {example.image_path} with dimensions {(image_height, image_width)}'
+                )
+
+            return
+
+        return None
+
     def _cache_segmentation(self, example: ConceptExample, prog_bar: tqdm = None, **loc_and_seg_kwargs):
         image = self._image_from_example(example)
+        object_mask = self._load_object_mask(example)
 
         if self.infer_localize_from_component:
             # Don't perform localization if it is a component concept. Otherwise, use the LocalizerAndSegmenter's default
@@ -119,7 +147,7 @@ class ConceptKBFeatureCacher:
             if example.concept_name and self.concept_kb[example.concept_name].containing_concepts:
                 loc_and_seg_kwargs['do_localize'] = False
 
-        segmentations = self.feature_pipeline.get_segmentations(image, **loc_and_seg_kwargs).cpu()
+        segmentations = self.feature_pipeline.get_segmentations(image, object_mask=object_mask, **loc_and_seg_kwargs).cpu()
         segmentations.input_image_path = example.image_path
 
         cache_path = self._get_segmentation_cache_path(example)
@@ -131,6 +159,8 @@ class ConceptKBFeatureCacher:
             pickle.dump(segmentations, f)
 
         example.image_segmentations_path = cache_path
+
+        return example.image_segmentations_path
 
     def cache_segmentations(self, concepts: list[Concept] = None, only_uncached_or_dirty=True, include_global_negatives: bool = True, **loc_and_seg_kwargs):
         '''

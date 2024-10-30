@@ -44,7 +44,7 @@ class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
             optimizer = torch.optim.Adam(concept.predictor.parameters(), lr=lr)
             train_dl = self._get_dataloader(concept, dataset, is_train=True, batch_size=batch_size, **dataloader_kwargs)
 
-            for epoch in range(1, n_epochs + 1):
+            for epoch in tqdm(range(1, n_epochs + 1), desc=f'Epoch'):
                 for batch in train_dl:
                     _ = self.batched_forward_pass(
                         batch['features'],
@@ -151,42 +151,6 @@ class ConceptKBBatchedTrainerMixin(ConceptKBTrainerBase):
         )
 
         return train_output
-
-    def _concepts_to_datasets(self, dataset: FeatureDataset, concepts: list[Concept] = None) -> dict[Concept, FeatureDataset]:
-        '''
-            For each concept in the intersection of the dataset's concepts_to_train and the global concepts,
-            creates a FeatureDataset with the examples corresponding to that concept.
-        '''
-        # Build mapping from intersected concepts to indices
-        global_concept_names = {c.name for c in concepts} if concepts else {c.name for c in self.concept_kb}
-        concept_name_to_indices: dict[str, list[int]] = {}
-
-        for i, concepts_to_train in enumerate(dataset.concepts_to_train_per_example):
-            if not concepts_to_train:
-                concepts_to_train = global_concept_names
-
-            for concept_name in concepts_to_train:
-                if not global_concept_names or concept_name in global_concept_names: # Intersect with global concepts
-                    concept_name_to_indices.setdefault(concept_name, []).append(i)
-
-        # Construct dataset for each concept in intersection
-        concepts_to_datasets: dict[Concept, FeatureDataset] = {}
-
-        for concept_name, indices in concept_name_to_indices.items():
-            feature_paths = [dataset.feature_paths[i] for i in indices]
-            labels = [dataset.labels[i] for i in indices]
-            concepts_to_train_per_example = [[concept_name] for _ in indices]
-
-            concept = self.concept_kb[concept_name]
-            concept_ds = FeatureDataset(feature_paths, labels, concepts_to_train_per_example, path_to_lock=dataset.path_to_lock)
-            concepts_to_datasets[concept] = concept_ds
-
-        concepts_to_datasets = { # Topological sort via component graph
-            concept : concepts_to_datasets[concept]
-            for concept in self.concept_kb.in_component_order(concepts_to_datasets.keys())
-        }
-
-        return concepts_to_datasets
 
     def _concepts_to_dataloaders(
         self,

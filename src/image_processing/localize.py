@@ -110,7 +110,7 @@ class Localizer:
         '''
         mask = self.rembg_mask(img) # (1, h, w)
 
-        logger.info('Obtaining bounding box from rembg mask')
+        logger.debug('Obtaining bounding box from rembg mask')
         bbox = bbox_from_mask(mask)[0] # (4,)
 
         # Attempt to widen bounding box since rembg segments the foreground without a bbox
@@ -131,7 +131,7 @@ class Localizer:
         '''
             Returns (1, h, w) boolean array.
         '''
-        logger.info('Obtaining rembg mask')
+        logger.debug('Obtaining rembg mask')
         mask = remove(img, session=self.rembg_session, post_process_mask=True, only_mask=True)
         mask = torch.from_numpy(np.array(mask)).bool()
 
@@ -149,7 +149,7 @@ class Localizer:
             bounding box IntTensor. If no bounding boxes detected, returns a tensor of shape (0, 4).
         '''
         # Get bounding box with DesCo
-        logger.info('Obtaining bounding box with DesCo')
+        logger.debug('Obtaining bounding box with DesCo')
 
         caption = caption.lower()
 
@@ -168,7 +168,7 @@ class Localizer:
             logger.warning(log_str)
             return torch.zeros(0, 4).int()
 
-        logger.info(f'Detected {len(bboxes)} bounding boxes')
+        logger.debug(f'Detected {len(bboxes)} bounding boxes')
         bboxes = bboxes.round().int() # (n_detected, 4); Desco returns fractional bbox predictions
 
         return bboxes
@@ -195,7 +195,7 @@ class Localizer:
 
             return masks
 
-        logger.info('Obtaining segmentation mask with SAM')
+        logger.debug('Obtaining segmentation mask with SAM')
         self.sam.set_image(np.array(img))
 
         grounded_masks = []
@@ -230,7 +230,7 @@ class Localizer:
 
         if caption:
             assert all(t in caption for t in tokens_to_ground)
-            logger.info(f'Localizing with DesCo to ground "{tokens_to_ground}" with caption "{caption}"')
+            logger.debug(f'Localizing with DesCo to ground "{tokens_to_ground}" with caption "{caption}"')
 
             if return_object_masks:
                 bboxes, masks = self.desco_mask(img, caption, tokens_to_ground, conf_thresh, return_bboxes=True)
@@ -239,7 +239,7 @@ class Localizer:
             bboxes = self.desco_ground(img, caption, tokens_to_ground, conf_thresh)
 
         else: # rembg
-            logger.info('Localizing with rembg')
+            logger.debug('Localizing with rembg')
             bboxes = self.rembg_ground(img, return_mask=return_object_masks)
 
             if return_object_masks:

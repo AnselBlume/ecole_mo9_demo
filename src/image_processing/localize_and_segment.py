@@ -69,6 +69,8 @@ class LocalizeAndSegmentOutput(DictDataClass, DeviceShiftable):
 @dataclass
 class LocalizerAndSegmenterConfig:
     do_localize: bool = True
+    do_segment: bool = False
+
     remove_background: bool = True
     return_crops: bool = True
     use_bbox_for_crops: bool = False
@@ -104,7 +106,9 @@ class LocalizerAndSegmenter:
         concept_name: str = '',
         concept_parts: list[str] = [],
         do_localize: bool = None,
+        do_segment: bool = None,
         remove_background: bool = None,
+        object_mask: torch.BoolTensor = None,
         return_crops: bool = None,
         use_bbox_for_crops: bool = None
     ) -> LocalizeAndSegmentOutput:
@@ -116,7 +120,9 @@ class LocalizerAndSegmenter:
                 concept_name (str): Name of concept to localize. If not provided, uses rembg to perform foreground segmentation
                 concept_parts (list[str]): List of part names to localize. If not provided, uses SAM to perform part segmentation
                 do_localize (bool): Whether to localize the concept in the image or use the whole image. If false, disables background removal.
+                do_segment (bool): Whether to segment the localized concept into parts. If false, doesn't run SAM and returns empty part masks.
                 remove_background (bool): Whether to remove the background from the localized concept.
+                object_mask (BoolTensor): Mask of the localized concept. If provided, overrides localization and remove_background foreground extraction.
                 return_crops (bool): If true, returns images of the cropped parts (possibly with background removed) under the key 'part_crops'.
                 use_bbox_for_crops (bool): If true, draws bounding boxes around the parts instead of using the part masks to crop the parts.
 
@@ -130,6 +136,7 @@ class LocalizerAndSegmenter:
                         if concept_parts is provided.
         '''
         do_localize = do_localize if do_localize is not None else self.config.do_localize
+        do_segment = do_segment if do_segment is not None else self.config.do_segment
         remove_background = remove_background if remove_background is not None else self.config.remove_background
         return_crops = return_crops if return_crops is not None else self.config.return_crops
         use_bbox_for_crops = use_bbox_for_crops if use_bbox_for_crops is not None else self.config.use_bbox_for_crops
@@ -138,7 +145,11 @@ class LocalizerAndSegmenter:
         caption = self._get_parts_caption(concept_name, concept_parts) if concept_parts else concept_name
 
         if do_localize:
-            bboxes, object_masks = self.localizer.localize(image, caption=caption, tokens_to_ground=[concept_name], return_object_masks=True)
+            if object_mask is None:
+                bboxes, object_masks = self.localizer.localize(image, caption=caption, tokens_to_ground=[concept_name], return_object_masks=True)
+            else:
+                bboxes = bbox_from_mask(object_mask.unsqueeze(0))
+                object_masks = object_mask[None,...]
         else:
             bboxes = torch.tensor([0, 0, image.size[0], image.size[1]], dtype=torch.int32)[None,...] # (x1, y1, x2, y2) = (0, 0, w, h)
             object_masks = torch.ones(1, image.size[1], image.size[0], dtype=torch.bool) # (1, h, w)
@@ -154,45 +165,50 @@ class LocalizerAndSegmenter:
                 raise RuntimeError(log_str)
 
         # Segment the concept parts
-        if concept_parts:
-        # if concept_name in self.concepts: # Use DesCo if we can retrieve the concept parts
-            logger.info(f'Localizing concept parts {concept_parts} with DesCo')
-            # concept = self.concepts.get_concept(concept_name)
-            # component_parts = list(concept.component_concepts.keys())
-            # TODO consider setting areas not in the bbox to zero instead of cropping the image to maintain scale
-            cropped_image = self.segmenter.crop(image, bboxes[0], remove_background=remove_background) # Crop around localized concept
-            part_masks = self.localizer.desco_mask(cropped_image, caption=caption, tokens_to_ground=concept_parts) # (n_detections, h, w)
+        if do_segment:
+            if concept_parts:
+            # if concept_name in self.concepts: # Use DesCo if we can retrieve the concept parts
+                logger.debug(f'Localizing concept parts {concept_parts} with DesCo')
+                # concept = self.concepts.get_concept(concept_name)
+                # component_parts = list(concept.component_concepts.keys())
+                # TODO consider setting areas not in the bbox to zero instead of cropping the image to maintain scale
+                cropped_image = self.segmenter.crop(image, bboxes[0], remove_background=remove_background) # Crop around localized concept
+                part_masks = self.localizer.desco_mask(cropped_image, caption=caption, tokens_to_ground=concept_parts) # (n_detections, h, w)
 
-            logger.info(f'Obtained {len(part_masks)} part masks with DesCo')
+                logger.debug(f'Obtained {len(part_masks)} part masks with DesCo')
 
-            if len(part_masks) == 0:
-                raise RuntimeError('Failed to localize concept parts with DesCo')
+                if len(part_masks) == 0:
+                    raise RuntimeError('Failed to localize concept parts with DesCo')
 
-            # Convert masks into full image size
-            full_part_masks = []
-            x1, y1, x2, y2 = bboxes[0]
+                # Convert masks into full image size
+                full_part_masks = []
+                x1, y1, x2, y2 = bboxes[0]
 
-            if remove_background: # Crop had background removed, so just extract mask
-                crop_foreground_mask = pil_to_tensor(cropped_image).bool().sum(dim=0).bool()
+                if remove_background: # Crop had background removed, so just extract mask
+                    crop_foreground_mask = pil_to_tensor(cropped_image).bool().sum(dim=0).bool()
 
-            else: # Don't remove background
-                crop_foreground_mask = torch.ones(cropped_image.size[1], cropped_image.size[0], dtype=torch.bool)
+                else: # Don't remove background
+                    crop_foreground_mask = torch.ones(cropped_image.size[1], cropped_image.size[0], dtype=torch.bool)
 
-            for i, part_mask in enumerate(part_masks):
-                full_part_mask = torch.zeros(image.size[1], image.size[0], dtype=torch.bool)
-                full_part_mask[y1:y2, x1:x2] = part_mask & crop_foreground_mask
+                for i, part_mask in enumerate(part_masks):
+                    full_part_mask = torch.zeros(image.size[1], image.size[0], dtype=torch.bool)
+                    full_part_mask[y1:y2, x1:x2] = part_mask & crop_foreground_mask
 
-                if full_part_mask.sum() == 0:
-                    logger.warning(f'Part mask {i} is empty after intersecting with foreground; skipping')
-                    continue
+                    if full_part_mask.sum() == 0:
+                        logger.warning(f'Part mask {i} is empty after intersecting with foreground; skipping')
+                        continue
 
-                full_part_masks.append(full_part_mask)
+                    full_part_masks.append(full_part_mask)
 
-            part_masks = torch.stack(full_part_masks)
+                part_masks = torch.stack(full_part_masks)
 
-        else: # Non part-based segmentation of localized concept
-            logger.info('Performing part segmentation with SAM')
-            part_masks = self.segmenter.segment(image, bboxes[0], remove_background=remove_background)
+            else: # Non part-based segmentation of localized concept
+                logger.debug('Performing part segmentation with SAM')
+                # Don't attempt to remove background if object mask is provided
+                remove_background_for_segmentation = remove_background if object_mask is None else False
+                part_masks = self.segmenter.segment(image, bboxes[0], remove_background=remove_background_for_segmentation)
+        else:
+            part_masks = torch.tensor([]) # No part masks
 
         # Construct return dictionary
         output = LocalizeAndSegmentOutput(
@@ -214,7 +230,7 @@ class LocalizerAndSegmenter:
             else:
                 part_crops = self.segmenter.crops_from_masks(image, part_masks, only_mask=remove_background)
 
-            logger.info(f'Generated {len(part_crops)} part crops from part masks')
+            logger.debug(f'Generated {len(part_crops)} part crops from part masks')
 
             # Ignore part masks where the crop has a zero-dimension (caused by part mask being one-dimensional, e.g. a line)
             filtered_part_masks = []

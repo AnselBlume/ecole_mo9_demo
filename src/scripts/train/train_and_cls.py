@@ -8,8 +8,8 @@ import sys
 sys.path = [os.path.join(os.path.dirname(__file__), '..')] + sys.path
 
 from llm import LLMClient
-from kb_ops import kb_from_img_dir, add_global_negatives
-from kb_ops.build_kb import label_from_path, label_from_directory
+from kb_ops import kb_from_img_dir, add_global_negatives, kb_from_img_and_mask_dirs
+from kb_ops.build_kb import label_from_path, label_from_directory, add_object_masks
 from model.concept import ConceptKBConfig
 from kb_ops.train_test_split import split
 from kb_ops.dataset import FeatureDataset, extend_with_global_negatives
@@ -23,17 +23,9 @@ from kb_ops.train import ConceptKBTrainer
 import wandb
 import jsonargparse as argparse
 from itertools import chain
-from scripts.utils import set_feature_paths, get_timestr
+from scripts.utils import set_feature_paths, get_timestr, parse_args
 
 logger = logging.getLogger(__name__)
-
-def parse_args(parser: argparse.ArgumentParser, cl_args: list[str] = None, config_str: str = None) -> argparse.Namespace:
-    if config_str:
-        args = parser.parse_string(config_str)
-    else:
-        args = parser.parse_args(cl_args)
-
-    return args
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
@@ -44,11 +36,19 @@ def get_parser() -> argparse.ArgumentParser:
                         default='/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/xiaomeng_augmented_data_v3',
                         help='Path to directory of images or preprocessed segmentations')
 
+    parser.add_argument('--object_mask_rle_dir', type=str,
+                        help='Path to directory of object masks in pycocotools RLE format. '
+                             +'Each file should have the same relative path as its corresponding image file')
+
     parser.add_argument('--extract_label_from', choices=['path', 'directory'], default='path',
                         help='Whether to extract concept labels from image paths or containing directories')
 
     parser.add_argument('--negatives_img_dir', type=str, default='/shared/nas2/blume5/fa23/ecole/data/imagenet/negatives_rand_1k',
                         help='Path to directory of negative example images')
+
+    parser.add_argument('--negatives_object_mask_rle_dir', type=str,
+                        help='Path to directory of negative example object masks in pycocotools RLE format. '
+                             +'Each file should have the same relative path as its corresponding image file')
 
     parser.add_argument('--ckpt_path', help='If provided, loads the ConceptKB from this pickle file instead of creating a new one.')
     parser.add_argument('--use_cached_features_on_ckpt_load', default=True, type=bool,
@@ -93,6 +93,8 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument('--train.use_concepts_as_negatives', type=bool, default=False, help='Whether to use other concepts as negatives')
     parser.add_argument('--train.use_global_negatives', type=bool, default=True, help='Whether to use global negative examples during training')
     parser.add_argument('--train.limit_global_negatives', type=int, help='The number of global negative examples to use during training. If None, uses all')
+    parser.add_argument('--train.dataloader_kwargs', type=dict, default={}, help='Keyword arguments to pass to the DataLoader')
+    parser.add_argument('--train.do_minimal', type=bool, default=False, help='Whether to train with minimal logging and checkpointing for max speed')
 
     parser.add_argument('--train.split', type=tuple[float,float,float], default=(.6, .2, .2), help='Train, val, test split ratios')
 
@@ -101,7 +103,12 @@ def get_parser() -> argparse.ArgumentParser:
 def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: ConceptKB = None):
     # %%
     if args.use_wandb:
-        run = wandb.init(project=args.wandb_project, config=args.as_flat(), dir=args.wandb_dir, reinit=True)
+        run = wandb.init(
+            project=args.wandb_project,
+            config=args.as_flat(),
+            dir=args.wandb_dir,
+            reinit=True
+        )
     else:
         run = None
 
@@ -132,10 +139,18 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
 
     else:
         label_extractor = label_from_path if args.extract_label_from == 'path' else label_from_directory
-        concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor) if concept_kb is None else concept_kb
+
+        if concept_kb is None: # Didn't load from checkpoint or pass as argument
+            if args.object_mask_rle_dir:
+                concept_kb = kb_from_img_and_mask_dirs(args.img_dir, args.object_mask_rle_dir, label_from_path_fn=label_extractor)
+            else: # No masks
+                concept_kb = kb_from_img_dir(args.img_dir, label_from_path_fn=label_extractor)
 
         if args.train.use_global_negatives:
             add_global_negatives(concept_kb, args.negatives_img_dir, limit=args.train.limit_global_negatives)
+
+        if args.negatives_object_mask_rle_dir:
+            add_object_masks(concept_kb.global_negatives, args.negatives_img_dir, args.negatives_object_mask_rle_dir)
 
         concept_kb.initialize(ConceptKBConfig(
             encode_class_in_zs_attr=args.predictor.encode_class_in_zs_attr,
@@ -153,13 +168,16 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     # %% Set cached segmentation, feature paths if they are provided and exist
     # NOTE Must recompute features every time we train a new model, as the number of zero-shot attributes
     # is nondeterministic from the LLM
-    # features_dir = os.path.join(args.cache.root, args.cache.features)
+    features_dir = os.path.join(args.cache.root, args.cache.features)
     segmentations_dir = os.path.join(args.cache.root, args.cache.segmentations)
     set_feature_paths(concept_kb, segmentations_dir=segmentations_dir)
+    # set_feature_paths(concept_kb, features_dir=features_dir) # XXX Okay only if LLM is not used
 
     if args.train.use_global_negatives:
         neg_segmentations_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.segmentations)
+        neg_features_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.features)
         set_feature_paths(concept_kb.global_negatives, segmentations_dir=neg_segmentations_dir)
+        # set_feature_paths(concept_kb.global_negatives, features_dir=neg_features_dir) # XXX Okay only if LLM is not used
 
     if args.ckpt_path and args.use_cached_features_on_ckpt_load:
         features_dir = os.path.join(args.cache.root, args.cache.features)
@@ -213,15 +231,36 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     parser.save(args, os.path.join(checkpoint_dir, 'args.yaml'))
 
     # Train
-    trainer.train_batched(
-        train_ds=train_ds,
-        val_ds=val_ds,
-        n_epochs=args.train.n_epochs,
-        lr=args.train.lr,
-        batch_size=args.train.batch_size,
-        ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
-        ckpt_dir=checkpoint_dir
-    )
+    if args.train.do_minimal:
+        trainer.train_minimal_in_memory(
+            train_ds=train_ds,
+            n_epochs=args.train.n_epochs,
+            lr=args.train.lr,
+            batch_size=args.train.batch_size
+        )
+
+        # trainer.train_minimal(
+        #     train_ds=train_ds,
+        #     n_epochs=args.train.n_epochs,
+        #     lr=args.train.lr,
+        #     batch_size=args.train.batch_size,
+        #     dataloader_kwargs=args.train.dataloader_kwargs
+        # )
+
+        checkpoint_path = trainer._get_ckpt_path(checkpoint_dir, 'concept_kb_epoch_{epoch}.pt', args.train.n_epochs)
+        trainer.concept_kb.save(checkpoint_path)
+
+    else:
+        trainer.train_batched(
+            train_ds=train_ds,
+            val_ds=val_ds,
+            n_epochs=args.train.n_epochs,
+            lr=args.train.lr,
+            batch_size=args.train.batch_size,
+            ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
+            ckpt_dir=checkpoint_dir,
+            dataloader_kwargs=args.train.dataloader_kwargs
+        )
 
 # %%
 if __name__ == '__main__':
