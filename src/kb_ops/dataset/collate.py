@@ -1,3 +1,4 @@
+from __future__ import annotations
 import torch
 from torch import Tensor
 from kb_ops.caching.cached_image_features import CachedImageFeatures
@@ -137,8 +138,6 @@ class BatchedCachedImageFeaturesIndexer:
 
         self.dataset_len = len(batched_features.image_features)
         self.rng = np.random.default_rng(random_seed)
-        self.batch_indices = self._get_batch_indices()
-        self.curr_batch_index = 0
 
         # Mapping from image index to the start index of its region features in the -2nd dimension of a regions tensor
         self.region_feature_start_inds = np.cumsum([0] + self.batched_features.n_regions_per_image)
@@ -157,23 +156,32 @@ class BatchedCachedImageFeaturesIndexer:
 
         return batch_indices
 
+    class _BatchedCachedImageFeaturesIterator:
+        def __init__(self, indexer: BatchedCachedImageFeaturesIndexer, batch_indices: np.ndarray[int]):
+            self.indexer = indexer
+            self.batch_indices = batch_indices
+            self.curr_batch_index = 0
+
+        def __len__(self):
+            return len(self.batch_indices)
+
+        def __next__(self):
+            if self.curr_batch_index >= len(self.batch_indices):
+                raise StopIteration
+
+            batch_indices = self.batch_indices[self.curr_batch_index]
+            self.curr_batch_index += 1
+
+            features = self.indexer._select_features_from_indices(batch_indices)
+            labels = self.indexer.labels[batch_indices].tolist()
+
+            return  {
+                'features': features,
+                'labels': labels
+            }
+
     def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self.curr_batch_index >= len(self.batch_indices):
-            raise StopIteration
-
-        batch_indices = self.batch_indices[self.curr_batch_index]
-        self.curr_batch_index += 1
-
-        features = self._select_features_from_indices(batch_indices)
-        labels = self.labels[batch_indices].tolist()
-
-        return  {
-            'features': features,
-            'labels': labels
-        }
+        return self._BatchedCachedImageFeaturesIterator(self, self._get_batch_indices())
 
     def __len__(self):
         return np.round(len(self.batched_features.image_features) / self.batch_size)

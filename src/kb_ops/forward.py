@@ -114,8 +114,9 @@ class ConceptKBForwardBase:
 
         n_concepts_for_loss_processed = 0 # How many concepts intended for loss computation have been processed
         for concept in concepts_for_forward:
+            device = concept.predictor.device
+
             if features_were_provided:
-                device = concept.predictor.img_features_predictor.weight.device
                 features = image_data.get_concept_predictor_features(concept.name).to(device)
 
             else: # Features not provided; compute from segmentations
@@ -124,7 +125,7 @@ class ConceptKBForwardBase:
                     segmentations,
                     concept,
                     cached_features=cached_features
-                )
+                ).to(device)
 
                 # Cache visual features and trained attribute scores
                 if cached_features is None:
