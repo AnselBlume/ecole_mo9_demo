@@ -259,6 +259,8 @@ class ConceptKBTrainerBase(ConceptKBForwardBase):
         '''
             For each concept in the intersection of the dataset's concepts_to_train and the global concepts,
             creates a FeatureDataset with the examples corresponding to that concept.
+
+            Returns the concepts in topological order.
         '''
         # Build mapping from intersected concepts to indices
         global_concept_names = {c.name for c in concepts} if concepts else {c.name for c in self.concept_kb}
