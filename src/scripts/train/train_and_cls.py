@@ -115,7 +115,7 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     # Import here so DesCo sees the CUDA device change
     from feature_extraction import (
         build_feature_extractor,
-        build_desco,
+        # build_desco,
         build_sam
     )
     from image_processing import build_localizer_and_segmenter
@@ -177,7 +177,7 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
         neg_segmentations_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.segmentations)
         neg_features_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.features)
         set_feature_paths(concept_kb.global_negatives, segmentations_dir=neg_segmentations_dir)
-        # set_feature_paths(concept_kb.global_negatives, features_dir=neg_features_dir) # XXX Okay only if LLM is not used
+        # set_feature_paths(concept_kb.global_negatives, features_dir=features_dir) # XXX Okay only if LLM is not used
 
     if args.ckpt_path and args.use_cached_features_on_ckpt_load:
         features_dir = os.path.join(args.cache.root, args.cache.features)
