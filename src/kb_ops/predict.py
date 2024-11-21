@@ -29,8 +29,10 @@ class PredictOutput(DictDataClass, DeviceShiftable):
 
     def to(self, device: torch.device):
         DeviceShiftable.to(self, device)
-        self.segmentations.to(device)
-        self.predicted_concept_outputs.to(device)
+        if self.segmentations is not None:
+            self.segmentations.to(device)
+        if self.predicted_concept_outputs is not None:
+            self.predicted_concept_outputs.to(device)
 
         return self
 
@@ -73,11 +75,12 @@ class ConceptKBPredictor(ConceptKBForwardBase):
                 pool = filter_component_concepts(pool)
 
             # Cache features to avoid resegmentation and recomputation of image features
-            forward_kwargs['return_segmentations'] = True
-            segmentations = None
+            is_image_data = isinstance(image_data, Image)
+            if is_image_data:
+                forward_kwargs['return_segmentations'] = True
 
             while pool: # While we can go deeper down the hierarchy
-                logger.info(f'Considering concept pool in hierarchical_predict: {[concept.name for concept in pool]}')
+                logger.debug(f'Considering concept pool in hierarchical_predict: {[concept.name for concept in pool]}')
 
                 prediction = self.predict(
                     image_data=image_data,
@@ -89,7 +92,7 @@ class ConceptKBPredictor(ConceptKBForwardBase):
                 )
                 prediction_path.append(prediction)
 
-                if segmentations is None:
+                if is_image_data: # Use segmentations for next iteration to avoid resegmenting
                     segmentations: LocalizeAndSegmentOutput = prediction['segmentations']
                     segmentations.input_image = image_data
                     image_data = segmentations
