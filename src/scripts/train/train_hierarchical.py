@@ -1,6 +1,6 @@
 # %%
 import os # Change DesCo CUDA device here
-os.environ['CUDA_VISIBLE_DEVICES'] = '5'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 # Prepend to path so starts searching at src first
 import sys
@@ -31,32 +31,38 @@ if __name__ == '__main__':
         # img_dir: /shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/june_demo_2024/airplanes_and_guns_v4
 
         # Image directory on both network attached storage and hard disk
-        # img_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations/images
-        img_dir: /scratch/blume5/merged_annotations/images
+        img_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-26/annotations/merged_annotations/images
+        # img_dir: /scratch/blume5/merged_annotations/images
 
         # Object mask directory on both network attached storage and hard disk
-        # object_mask_rle_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations/masks
-        object_mask_rle_dir: /scratch/blume5/merged_annotations/masks
+        object_mask_rle_dir: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-26/annotations/merged_annotations/masks
+        # object_mask_rle_dir: /scratch/blume5/merged_annotations/masks
 
         train:
             # limit_global_negatives: 5
-            split: [.6, 0., .4]
-            n_epochs: 5
+            split: [.8, 0, .2]
+            n_epochs: 50
             lr: 1e-3
             dataloader_kwargs:
                 num_workers: 0
                 pin_memory: false
                 persistent_workers: false
 
-            do_minimal: true
+            do_minimal: false
+            in_memory: true
 
         extract_label_from: directory
 
         cache:
             # XXX This MUST be changed to a directory which we don't care about to not overwrite checkpoints
             # root: /shared/nas2/blume5/fa23/ecole/cache/airplanes_and_guns_v4/all_v1_localize_use_containing_concepts
-            # root: /shared/nas2/blume5/fa23/ecole/cache/2024_december_1k/v1
-            root: /scratch/blume5/cache/2024_december_1k/v1
+            root: /shared/nas2/blume5/fa23/ecole/cache/2024_december_1k/v1_no_zs_attrs
+            # root: /scratch/blume5/cache/2024_december_1k/v1
+
+            # Comment this to use standard negatives cache with SAM region segmentations
+            negatives:
+                # root: /shared/nas2/blume5/fa23/ecole/cache/imagenet_rand_1k_no_sam_segmentations
+                root: /shared/nas2/blume5/fa23/ecole/cache/2024_december_1k/v1
 
             infer_localize_from_component: false
 
@@ -76,8 +82,9 @@ if __name__ == '__main__':
             use_descendants_as_positives: true
             use_containing_concepts_for_positives: false
 
-        # hierarchy_config_path: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-15/annotations/merged_annotations_subset/graph.yaml
-        hierarchy_config_path: /scratch/blume5/merged_annotations/graph.yaml
+        # hierarchy_config_path: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-22/annotations/merged_annotations/graph_small.yaml
+        hierarchy_config_path: /shared/nas2/blume5/fa24/concept_downloading/data/image_annotations/24-10-26/annotations/merged_annotations/graph.yaml
+        # hierarchy_config_path: /scratch/blume5/merged_annotations/graph.yaml
 
         # hierarchy_config:
         #     concepts:

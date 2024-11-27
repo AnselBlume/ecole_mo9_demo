@@ -89,6 +89,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument('--train.batch_size', type=int, default=32, help='Batch size of images for each concept')
     parser.add_argument('--train.ckpt_every_n_epochs', type=int, default=1, help='Number of epochs between checkpoints')
     parser.add_argument('--train.ckpt_dir', type=str, default='/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb', help='Directory to save model checkpoints')
+    parser.add_argument('--train.in_memory', type=bool, default=True, help='Whether to load all features into memory to reduce disk I/O')
 
     parser.add_argument('--train.use_concepts_as_negatives', type=bool, default=False, help='Whether to use other concepts as negatives')
     parser.add_argument('--train.use_global_negatives', type=bool, default=True, help='Whether to use global negative examples during training')
@@ -171,13 +172,13 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
     features_dir = os.path.join(args.cache.root, args.cache.features)
     segmentations_dir = os.path.join(args.cache.root, args.cache.segmentations)
     set_feature_paths(concept_kb, segmentations_dir=segmentations_dir)
-    # set_feature_paths(concept_kb, features_dir=features_dir) # XXX Okay only if LLM is not used
+    # set_feature_paths(concept_kb, features_dir=features_dir) # XXX Okay only if LLM is not used/outputs identical responses for same inputs
 
     if args.train.use_global_negatives:
         neg_segmentations_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.segmentations)
         neg_features_dir = os.path.join(args.cache.negatives.root, args.cache.negatives.features)
         set_feature_paths(concept_kb.global_negatives, segmentations_dir=neg_segmentations_dir)
-        # set_feature_paths(concept_kb.global_negatives, features_dir=features_dir) # XXX Okay only if LLM is not used
+        # set_feature_paths(concept_kb.global_negatives, features_dir=features_dir) # XXX Okay only if LLM is not used/outputs identical responses for same inputs
 
     if args.ckpt_path and args.use_cached_features_on_ckpt_load:
         features_dir = os.path.join(args.cache.root, args.cache.features)
@@ -232,35 +233,49 @@ def main(args: argparse.Namespace, parser: argparse.ArgumentParser, concept_kb: 
 
     # Train
     if args.train.do_minimal:
-        trainer.train_minimal_in_memory(
-            train_ds=train_ds,
-            n_epochs=args.train.n_epochs,
-            lr=args.train.lr,
-            batch_size=args.train.batch_size
-        )
+        if args.train.in_memory:
+            trainer.train_minimal_in_memory(
+                train_ds=train_ds,
+                n_epochs=args.train.n_epochs,
+                lr=args.train.lr,
+                batch_size=args.train.batch_size
+            )
 
-        # trainer.train_minimal(
-        #     train_ds=train_ds,
-        #     n_epochs=args.train.n_epochs,
-        #     lr=args.train.lr,
-        #     batch_size=args.train.batch_size,
-        #     dataloader_kwargs=args.train.dataloader_kwargs
-        # )
+        else:
+            trainer.train_minimal(
+                train_ds=train_ds,
+                n_epochs=args.train.n_epochs,
+                lr=args.train.lr,
+                batch_size=args.train.batch_size,
+                dataloader_kwargs=args.train.dataloader_kwargs
+            )
 
         checkpoint_path = trainer._get_ckpt_path(checkpoint_dir, 'concept_kb_epoch_{epoch}.pt', args.train.n_epochs)
         trainer.concept_kb.save(checkpoint_path)
 
     else:
-        trainer.train_batched(
-            train_ds=train_ds,
-            val_ds=val_ds,
-            n_epochs=args.train.n_epochs,
-            lr=args.train.lr,
-            batch_size=args.train.batch_size,
-            ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
-            ckpt_dir=checkpoint_dir,
-            dataloader_kwargs=args.train.dataloader_kwargs
-        )
+        if args.train.in_memory:
+            trainer.train_batched_in_memory(
+                train_ds=train_ds,
+                val_ds=val_ds,
+                n_epochs=args.train.n_epochs,
+                lr=args.train.lr,
+                batch_size=args.train.batch_size,
+                ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
+                ckpt_dir=checkpoint_dir
+            )
+
+        else:
+            trainer.train_batched(
+                train_ds=train_ds,
+                val_ds=val_ds,
+                n_epochs=args.train.n_epochs,
+                lr=args.train.lr,
+                batch_size=args.train.batch_size,
+                ckpt_every_n_epochs=args.train.ckpt_every_n_epochs,
+                ckpt_dir=checkpoint_dir,
+                dataloader_kwargs=args.train.dataloader_kwargs
+            )
 
 # %%
 if __name__ == '__main__':
