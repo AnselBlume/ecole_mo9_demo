@@ -22,7 +22,6 @@ from torch.utils.data import DataLoader
 import jsonargparse
 from utils import open_image
 from itertools import chain
-from torch.utils.data import DataLoader
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +130,10 @@ def main(args, parser: jsonargparse.ArgumentParser):
 
         if args.predict.test_images:
             # Gather features for images with no region annotations (including for parts)
-            all_images_and_features = [(ex.image_path, ex.image_features_path) for ex in test_exs if not ex.is_negative]
+            # all_images_and_features = [(ex.image_path, ex.image_features_path) for ex in test_exs if not ex.is_negative]
 
+            # Don't include images with regions as they may have been used in training since an example
+            # is an image-region pair
             images_with_regions = set()
             for ex in test_exs:
                 if ex.object_mask_rle_json_path:
@@ -140,12 +141,14 @@ def main(args, parser: jsonargparse.ArgumentParser):
 
             paths = []
             labels = []
-            for image_path, image_features_path in all_images_and_features:
-                if image_path not in images_with_regions:
-                    paths.append(image_features_path)
-                    labels.append(ex.concept_name)
+            positive_test_exs = [ex for ex in test_exs if not ex.is_negative]
+            for example in positive_test_exs:
+                if example.image_path not in images_with_regions:
+                    paths.append(example.image_features_path)
+                    labels.append(example.concept_name)
 
         elif args.predict.test_ground_truth_regions:
+            # TODO exclude components
             # Assume we have ground truth regions we want to classify
             paths = [ex.image_features_path for ex in test_exs]
             labels = test_labels
@@ -178,13 +181,15 @@ def main(args, parser: jsonargparse.ArgumentParser):
         outputs.append(output)
 
     predictions_path = os.path.join(args.output_dir, 'predictions.pkl')
-    with open(predictions_path, 'rb') as f:
+    with open(predictions_path, 'wb') as f:
         pickle.dump(outputs, f)
 
     # Validation evaluation
     # dataset = FeatureDataset(paths, labels)
     # dl = DataLoader(dataset, collate_fn=list_collate)
     # print(trainer.validate(dl))
+
+    logger.info('Done')
 
 # %%
 if __name__ == '__main__':
@@ -194,11 +199,11 @@ if __name__ == '__main__':
     args = parse_args(parser, config_str='''
         ckpt_path: /shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_11_15-03:04:28-f7fwkjz3/concept_kb_epoch_13.pt
         predict:
-            test_ground_truth_regions: true
-            # test_images: true
+            # test_ground_truth_regions: true
+            test_images: true
 
-        output_dir: /shared/nas2/blume5/fa23/ecole/test_gt_region_predictions
-        # output_dir: /shared/nas2/blume5/fa23/ecole/test_images_predictions
+        # output_dir: /shared/nas2/blume5/fa23/ecole/test_gt_region_predictions
+        output_dir: /shared/nas2/blume5/fa23/ecole/test_images_predictions
     ''')
 
     main(args, parser)
