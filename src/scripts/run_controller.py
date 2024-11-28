@@ -1,9 +1,11 @@
 # %%
 import logging
-
+import yaml
 import os
 import sys
 sys.path = [os.path.realpath(os.path.join(__file__, '../..'))] + sys.path
+from model.concept import ConceptKB
+from kb_ops import ConceptKBPredictor
 
 # Cannot use NFS with mp temp files as otherwise get "device or resource busy" errors
 tmp_dir = '/scratch/tmp'
@@ -13,6 +15,32 @@ os.environ['TMPDIR'] = tmp_dir
 from controller import Controller
 
 logger = logging.getLogger(__file__)
+
+def _build_predictor(concept_kb: ConceptKB, ckpt_config: dict) -> ConceptKBPredictor:
+    # Import here so DesCo sees the CUDA device change
+    from feature_extraction import build_feature_extractor, build_sam
+    from image_processing import build_localizer_and_segmenter
+
+    loc_and_seg = build_localizer_and_segmenter(build_sam(), None)
+    feature_extractor = build_feature_extractor()
+    feature_pipeline = ConceptKBFeaturePipeline(loc_and_seg, feature_extractor)
+
+    # Set some key attributes to match what the checkpoint was trained with
+    feature_pipeline.config.use_zs_attr_scores = ckpt_config.get('feature_pipeline_config', {}) \
+                                                            .get('use_zs_attr_scores', True)
+
+    feature_pipeline.loc_and_seg.config.do_localize = ckpt_config.get('loc_and_seg_config', {}) \
+                                                                 .get('do_localize', True)
+
+    feature_pipeline.loc_and_seg.config.do_segment = ckpt_config.get('loc_and_seg_config', {}) \
+                                                                .get('do_segment', False)
+
+    return ConceptKBPredictor(concept_kb, feature_pipeline)
+
+def _load_checkpoint_config(ckpt_path: str):
+    ckpt_dir = os.path.dirname(ckpt_path)
+    with open(os.path.join(ckpt_dir, 'args.yaml'), 'r') as f:
+        return yaml.safe_load(f)
 
 if __name__ == '__main__':
     import os
@@ -27,8 +55,23 @@ if __name__ == '__main__':
     from kb_ops.feature_pipeline import ConceptKBFeaturePipeline
     import sys
     from kb_ops.concurrency import LockType
+    from utils import open_image
 
     coloredlogs.install(level=logging.INFO)
+
+    #################################
+    # November 2024 Demo Checkpoint #
+    #################################
+    ckpt_path = '/shared/nas2/blume5/fa23/ecole/checkpoints/concept_kb/2024_10_30-12:13:39-667z0evw/concept_kb_epoch_500.pt'
+
+    kb = ConceptKB.load(ckpt_path)
+    predictor = _build_predictor(kb, _load_checkpoint_config(ckpt_path)) # Build predictor corresponding to checkpoint settings
+    controller = Controller(kb, predictor.feature_pipeline, predictor=predictor)
+
+    img_path = '/shared/nas2/blume5/fa23/ecole/src/mo9_demo/data/2024_december_demo/24-10-22/images/airplanes--agricultural/0efcede787a8fd36be19111e9867f7c7757fcef2cfcbcec27bb1c68eb016b839.jpg'
+    output = controller.predict_hierarchical(open_image(img_path))
+    print('hi')
+    pass
 
     # %%
     ###############################
